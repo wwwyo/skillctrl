@@ -68,6 +68,9 @@ func newCIStep(name string, run func(dir, directory string, plan lock.Plan) erro
 		Short: "CI phase: " + name,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			if err := rejectDryRun(command); err != nil {
+				return fail("", err)
+			}
 			dir, err := repository(command)
 			if err != nil {
 				return fail("", err)
@@ -86,8 +89,6 @@ func newCIStep(name string, run func(dir, directory string, plan lock.Plan) erro
 			return emit(map[string]any{"ok": true, "command": name})
 		},
 	}
-	step.Flags().String("toolchain-config", "",
-		"trusted-source path of the pinned toolchain configuration")
 	return step
 }
 
@@ -100,6 +101,9 @@ func newCIConfigureCommand() *cobra.Command {
 		Short: "Read the trusted tool pins from the selected source commit",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
+			if err := rejectDryRun(command); err != nil {
+				return fail("", err)
+			}
 			dir, err := repository(command)
 			if err != nil {
 				return fail("", err)
@@ -164,6 +168,11 @@ func newScheduleStep(name string, run func(dir, directory string, plan lock.Plan
 		Short: "Scheduled phase: " + name,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			// Refused before anything is created or read, so a rejected run leaves
+			// no artifact directory behind.
+			if err := rejectDryRun(command); err != nil {
+				return fail("", err)
+			}
 			dir, err := repository(command)
 			if err != nil {
 				return fail("", err)

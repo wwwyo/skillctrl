@@ -133,6 +133,34 @@ func TestSchemaDescribesTheContract(t *testing.T) {
 	}
 }
 
+// TestDryRunIsRefusedWhereItCannotBeHonored keeps a flag from implying a
+// guarantee the tool cannot make. The CI phases write the index, a lock, and a
+// remote pull request, so they refuse rather than silently doing the work.
+func TestDryRunIsRefusedWhereItCannotBeHonored(t *testing.T) {
+	for _, phase := range [][]string{
+		{"ci", "prepare", "/nonexistent-artifacts"}, {"ci", "export", "/nonexistent-artifacts"},
+		{"ci", "apply", "/nonexistent-artifacts"}, {"ci", "publish", "/nonexistent-artifacts"},
+		{"ci", "configure"}, {"schedule", "prepare", "/nonexistent-artifacts"},
+		{"schedule", "restore", "/nonexistent-artifacts"}, {"schedule", "publish", "/nonexistent-artifacts"},
+	} {
+		arguments := append([]string{"--dry-run"}, phase...)
+		stdout, stderr, code := runBinary(t, nil, arguments...)
+		if code != 1 {
+			t.Fatalf("%v exited %d want 1", phase, code)
+		}
+		if strings.TrimSpace(stdout) != "" {
+			t.Fatalf("%v wrote to stdout: %q", phase, stdout)
+		}
+		if !strings.Contains(stderr, "--dry-run applies to") {
+			t.Fatalf("%v did not explain the refusal: %q", phase, stderr)
+		}
+	}
+	// The installer commands keep the meaning the flag advertises.
+	if _, _, code := runBinary(t, nil, "--dry-run", "--repo", "/nonexistent", "update"); code != 1 {
+		t.Fatalf("a dry-run update outside a repository should fail cleanly, got %d", code)
+	}
+}
+
 // TestVersionReflectsTheInstalledModule pins the documented install path: a
 // binary installed with `go install module@version` must report that version
 // even though no linker flags were supplied.

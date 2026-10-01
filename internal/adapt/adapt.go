@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
@@ -38,6 +39,10 @@ const (
 	ResultFile = "result.json"
 )
 
+// commitish accepts only a full commit ID, so a plan carrying a ref name or an
+// empty value cannot be resolved to something other than what was reviewed.
+var commitish = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
 // Paths inside the trusted source tree. They are configurable so the tool is
 // not tied to one repository's layout, while the defaults keep working for
 // existing users.
@@ -48,6 +53,9 @@ const (
 
 // ValidateHead binds all edits to the immutable head selected before inference.
 func ValidateHead(dir string, plan lock.Plan) error {
+	if !commitish.MatchString(plan.Head) {
+		return fmt.Errorf("selected head is not a commit: %q", plan.Head)
+	}
 	head, err := gitx.Output(dir, "rev-parse", "HEAD")
 	if err != nil {
 		return err
@@ -283,6 +291,29 @@ func Apply(dir string, plan lock.Plan, directory string) error {
 			}
 		}
 	}
+	// The patch is already in the index by this point. A refusal below must not
+	// leave it there: a half-validated repair staged in the caller's index looks
+	// like accepted work. Only the paths this step touched are restored.
+	if err := validateAndRecord(dir, plan, directory); err != nil {
+		restoreIndex(dir, plan)
+		return err
+	}
+	return nil
+}
+
+// restoreIndex unstages exactly the paths this command staged.
+func restoreIndex(dir string, plan lock.Plan) {
+	paths := make([]string, 0, len(plan.Skills))
+	for _, name := range plan.Skills {
+		paths = append(paths, lock.Skills+name+"/")
+	}
+	if len(paths) == 0 {
+		return
+	}
+	_ = gitx.Run(dir, append([]string{"reset", "--quiet", "HEAD", "--"}, paths...)...)
+}
+
+func validateAndRecord(dir string, plan lock.Plan, directory string) error {
 	if err := ValidatePaths(dir, plan); err != nil {
 		return err
 	}

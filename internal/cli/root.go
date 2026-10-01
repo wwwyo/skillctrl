@@ -35,6 +35,22 @@ func BuildVersion() string {
 	return Version
 }
 
+// dryRunRejection explains why the CI phases refuse --dry-run. Those phases
+// write the Git index, a lock file, and a remote pull request; there is no
+// partial execution to offer, and silently ignoring the flag would let a caller
+// believe nothing was published.
+const dryRunRejection = "--dry-run applies to find, add, update, remove, and record; " +
+	"this phase writes the index, the lock, and the remote repository"
+
+// rejectDryRun refuses a phase that has no defined dry-run semantics before it
+// can perform any side effect.
+func rejectDryRun(command *cobra.Command) error {
+	if dry, _ := command.Flags().GetBool("dry-run"); dry {
+		return fmt.Errorf(dryRunRejection)
+	}
+	return nil
+}
+
 // ExitUnresolved reports adaptation that could not be completed. It is a
 // distinct exit code because the work is not lost: the change stays in the
 // worktree and the old hash is retained so the next run retries.
@@ -89,7 +105,8 @@ func New() *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 
 	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
-	root.PersistentFlags().Bool("dry-run", false, "report what would happen without changing anything")
+	root.PersistentFlags().Bool("dry-run", false,
+		"report what would happen without changing anything; applies to find, add, update, remove, and record")
 	root.PersistentFlags().String("worktree-provider", "",
 		"worktree isolation backend for add, update and remove: git or orca")
 

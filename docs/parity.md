@@ -71,6 +71,8 @@ throwaway Git repositories and fake upstreams reached through Git's
 | A version range is refused as a pin | `internal/toolchain.NodeVersion` | `TestToolchainRequiresExactPins` |
 | An incomplete trusted configuration is refused | `internal/toolchain.Trusted` | `TestToolchainRefusesAnIncompleteConfiguration` |
 | A moved head is refused | `internal/adapt.ValidateHead` | `TestPrepareRefusesHeadDrift`, `TestApplyRecordsFromTheIndexOnly` |
+| A plan or checker source that is not a commit is refused | `internal/adapt.ValidateHead`, `internal/toolchain.Trusted` | `TestTrustedSourceMustBeACommit`, `TestTrustedSourceMustBeACommit/plan_without_a_commit` |
+| A refused validation leaves no staged repair behind | `internal/adapt.restoreIndex` | `TestApplyLeavesNoHalfValidatedRepair` |
 | The accepted hash comes from the validated index, not the working tree | `internal/adapt.Apply` | `TestApplyRecordsFromTheIndexOnly` |
 | Edits to an intent, another skill, or a policy file are refused | `internal/adapt.ValidatePaths` | `TestApplyRefusesEditsOutsideTheSelection` |
 | The accepted/unresolved partition must be complete and exact | `internal/adapt.Accepted` | `TestAcceptedRequiresACompletePartition` |
@@ -116,6 +118,14 @@ accident.
 | An unresolved skill keeps the update unresolved | `internal/scheduled.Publish` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/an_unresolved...` |
 | An existing update is reused instead of duplicated | `internal/scheduled.OpenUpdate` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/an_unresolved...` |
 
+## The documented CI sequence
+
+`TestDocumentedPhaseSequence` in `internal/integration` runs docs/ci.md end to
+end through the built binary: select, review in a checkout with no write
+permission, validate in a separate checkout, publish against a stubbed `gh` and
+a bare remote, and gate on the recomputed state. `TestPublishRefusesDryRun`
+proves no phase reaches the remote repository under `--dry-run`.
+
 ## Isolation of the install target
 
 | Behavior | Go code | Test |
@@ -135,22 +145,31 @@ accident.
 | An argument or flag error exits non-zero with an explanation and a clean stdout | `internal/cli.Execute` | `TestArgumentErrorsAreReported` |
 | `schema` describes the commands, options, and exit codes | `internal/cli.newSchemaCommand` | `TestSchemaDescribesTheContract` |
 | A module installation reports its version without linker flags | `internal/cli.BuildVersion` | `TestVersionReflectsTheInstalledModule`, `TestInjectedVersionWins` |
+| `--dry-run` is refused where it cannot be honored | `internal/cli.rejectDryRun` | `TestDryRunIsRefusedWhereItCannotBeHonored`, `TestPublishRefusesDryRun` |
 | A failure is one JSON object on stderr | `internal/cli.fail` | `TestFailuresAreJSONOnStderr` |
 
 ## Gaps
 
 - **Live reviewer.** The reviewer is a stub in every test. Nothing here
   demonstrates that a real model produces a patch that passes the same
-  validation; the contract is verified on both sides of the boundary only.
-- **Live `skills.sh` response.** Search parsing runs against a fixed local
-  response. The real endpoint's current schema is not pinned by a test.
-- **Live `mise`.** The trusted toolchain resolution is exercised through a stub
-  that reports its working directory. The real `mise env --json` output shape is
-  trusted, not verified here.
-- **Orca worktree provider.** `--worktree-provider orca` is implemented and
-  documented but only the `git` provider is tested; the Orca path was not
-  exercised against a live Orca instance in this port.
+  validation; the contract is verified on both sides of the boundary only. The
+  real model, provider, and context window are unverified.
+- **Live `skills.sh`.** Search parsing runs against a fixed local response. The
+  public endpoint was exercised manually during this port (a real `find golang`
+  returned 20 usable entries), so the response shape matches today, but no test
+  pins it and it can change without notice.
+- **Live `mise`.** Trusted toolchain resolution is exercised through a stub that
+  reports its working directory and returns the environment. The real `mise env
+  --json` output shape is trusted, not verified here.
+- **Orca worktree provider.** `--worktree-provider orca` is implemented and was
+  exercised manually during this port: a `remove` in a disposable registered
+  repository created an isolated Orca worktree and left the original checkout and
+  its staging untouched. It is not covered by an automated test, so a regression
+  there would not be caught by `go test`.
 - **`gh-aw` engine.** The sandbox handoff is driven by a harness in
-  `internal/adapt/testdata/engine.cjs` that mirrors the gh-aw engine's
-  arguments and steps. A platform-specific sandbox may supply slightly
-  different steps; only the contract this tool defines is tested.
+  `internal/adapt/testdata/engine.cjs` that mirrors the gh-aw engine's arguments
+  and steps. The real gh-aw sandbox, its AWF policy, and its credential redaction
+  are unverified; only the contract this tool defines is tested.
+- **Live `gh`.** Publication is exercised against a stubbed `gh` and a local bare
+  remote. The real GitHub API responses, permissions model, and
+  `gh auth setup-git` behavior are unverified.

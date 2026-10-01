@@ -422,6 +422,54 @@ func TestWriteRepairArtifactRefusesCredentials(t *testing.T) {
 	})
 }
 
+// TestTrustedSourceMustBeACommit closes a hole where a missing configuration
+// variable would resolve the revision to the index - which the pull request
+// under review controls - and turn "no trusted source" into "trust the
+// incoming code".
+func TestTrustedSourceMustBeACommit(t *testing.T) {
+	for _, source := range []string{"", "HEAD", "main", "HEAD~1", "refs/heads/main", strings.Repeat("0", 39), strings.Repeat("0", 41)} {
+		t.Run("source "+source, func(t *testing.T) {
+			r := newRepo(t)
+			if _, err := toolchain.Trusted(r.dir, source, toolchain.DefaultConfig); err == nil {
+				t.Fatalf("source %q was accepted", source)
+			}
+			if _, err := toolchain.Models(r.dir, source, toolchain.DefaultModels); err == nil {
+				t.Fatalf("source %q was accepted for models", source)
+			}
+		})
+	}
+	t.Run("plan without a commit", func(t *testing.T) {
+		r := newRepo(t)
+		plan := r.plan()
+		plan.Head = "HEAD"
+		if err := adapt.ValidateHead(r.dir, plan); err == nil {
+			t.Fatal("a plan naming a ref instead of a commit was accepted")
+		}
+	})
+}
+
+// TestApplyLeavesNoHalfValidatedRepair keeps a refusal from looking like
+// accepted work: once a patch has been applied to the index and the validation
+// fails, the index must be back where it started.
+func TestApplyLeavesNoHalfValidatedRepair(t *testing.T) {
+	r := newRepo(t)
+	directory := t.TempDir()
+	plan := r.plan()
+	r.results(directory, nil, []string{"manual"}, "report")
+	r.patch(directory, r.stage(".agents/skills/manual/SKILL.md"))
+	r.reset()
+	before := r.git("diff", "--cached", "--name-only")
+	if err := adapt.Apply(r.dir, plan, directory); err == nil {
+		t.Fatal("an unresolved skill that changed was accepted")
+	}
+	if after := r.git("diff", "--cached", "--name-only"); after != before {
+		t.Fatalf("a refused validation left the repair staged:\nbefore %q\nafter %q", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, lock.Lock)); err == nil {
+		t.Fatal("a refused validation recorded a lock")
+	}
+}
+
 // TestReadReportBounds keeps model output from becoming an unbounded GitHub
 // comment and supplies an explicit note when no review happened.
 func TestReadReportBounds(t *testing.T) {

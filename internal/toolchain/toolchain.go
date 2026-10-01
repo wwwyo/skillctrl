@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -45,6 +46,10 @@ type Configuration struct {
 	Settings map[string]any
 }
 
+// commitish accepts only a full commit ID. Refs and short IDs are refused so a
+// caller cannot pass something that later resolves to something else.
+var commitish = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
 // ConfigPath returns the trusted configuration path, honoring the override.
 func ConfigPath() string { return pathFromEnv(ConfigEnv, DefaultConfig) }
 
@@ -59,7 +64,15 @@ func pathFromEnv(key, fallback string) string {
 }
 
 // Trusted reads and validates the pinned toolchain from a trusted commit.
+//
+// The source is validated rather than interpolated: an empty value would make
+// the revision parse as the index, which the pull request under review controls.
+// That would turn a missing configuration variable into "trust the incoming
+// code".
 func Trusted(dir, source, path string) (Configuration, error) {
+	if !commitish.MatchString(source) {
+		return Configuration{}, fmt.Errorf("trusted source is not a commit: %q", source)
+	}
 	data, err := gitx.Output(dir, "show", source+":"+path)
 	if err != nil {
 		return Configuration{}, fmt.Errorf("trusted toolchain configuration is unavailable: %s", path)
@@ -138,6 +151,9 @@ func literal(value any) string {
 // Models reads the trusted agent model definitions. These let the reviewer run
 // without credentials from the pull request's own configuration.
 func Models(dir, source, path string) ([]byte, error) {
+	if !commitish.MatchString(source) {
+		return nil, fmt.Errorf("trusted source is not a commit: %q", source)
+	}
 	data, err := gitx.Output(dir, "show", source+":"+path)
 	if err != nil {
 		return nil, fmt.Errorf("trusted agent model definitions are unavailable: %s", path)
