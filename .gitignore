@@ -11,4 +11,5 @@
 /.codex/langfuse.json
 /.pi/settings.json
 /.pi/npm/
+node_modules/
 /mise.local.toml

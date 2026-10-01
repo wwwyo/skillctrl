@@ -6,11 +6,12 @@ A Go CLI for managing agent skills while preserving locally recorded intent.
 
 - `docs/`: shared project requirements and documentation.
 - `internal/`: implementation and colocated tests.
+- `tools/release/`: the release archive and tap formula builder.
 - Root Go command: `go install github.com/wwwyo/skillctrl@<version>`.
 
 ## Development
 
-Manage tools with mise. Pin tool and dependency versions, respecting a seven-day release cooldown.
+The command tree is built with `github.com/spf13/cobra`: use it for commands, flags, help, and argument validation rather than parsing arguments by hand. Manage tools with mise. Pin tool and dependency versions, respecting a seven-day release cooldown.
 
 ```sh
 mise install
