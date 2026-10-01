@@ -129,11 +129,12 @@ func Parse(data []byte) (Entry, error) {
 			return Entry{}, fmt.Errorf("invalid accepted skill hashes")
 		}
 	}
-	value.Skills = sortedMap(value.Skills)
 	return value, nil
 }
 
-func sortedMap(input map[string]string) map[string]string {
+// copySkills detaches a map from the one it was decoded from. The encoder emits
+// keys in sorted order on its own, so the copy needs no ordering of its own.
+func copySkills(input map[string]string) map[string]string {
 	result := make(map[string]string, len(input))
 	for key, value := range input {
 		result[key] = value
@@ -249,7 +250,7 @@ func WorkingTree(dir string, paths ...string) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(directory)
-	env := append(os.Environ(), "GIT_INDEX_FILE="+filepath.Join(directory, "index"))
+	env := gitx.Environment("GIT_INDEX_FILE=" + filepath.Join(directory, "index"))
 	for _, arguments := range [][]string{
 		{"read-tree", "HEAD"},
 		append([]string{"add", "-A", "--"}, paths...),
@@ -268,7 +269,7 @@ func WorkingTree(dir string, paths ...string) (string, error) {
 // Record advances only explicitly accepted hashes and preserves every other
 // entry. A skill that disappeared from the tree has its entry removed.
 func Record(dir string, current, recorded Entry, names []string) (Entry, error) {
-	values := sortedMap(recorded.Skills)
+	values := copySkills(recorded.Skills)
 	for _, name := range names {
 		if hash, ok := current.Skills[name]; ok {
 			values[name] = hash
@@ -276,7 +277,7 @@ func Record(dir string, current, recorded Entry, names []string) (Entry, error) 
 			delete(values, name)
 		}
 	}
-	result := Entry{Version: Version, Skills: sortedMap(values)}
+	result := Entry{Version: Version, Skills: values}
 	path := filepath.Join(dir, filepath.FromSlash(Lock))
 	if _, err := os.Stat(path); err == nil {
 		existing, err := os.ReadFile(path)

@@ -290,6 +290,10 @@ func TestRejectedUpstreamContent(t *testing.T) {
 		setup  func(origin)
 		ignore string
 	}{
+		{name: "a case-folded gitignore", setup: func(o origin) {
+			o.write("skills/manual/SKILL.md", manifest("manual", "body"))
+			o.write("skills/manual/.GITIGNORE", "reference.md\n")
+		}},
 		{name: "symlink", setup: func(o origin) {
 			o.write("skills/manual/SKILL.md", manifest("manual", "body"))
 			if err := os.Symlink("/tmp", filepath.Join(o.dir, "skills/manual/escape")); err != nil {
@@ -329,12 +333,14 @@ func TestRejectedUpstreamContent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = repository.Export(destination, "manual",
-				filepath.Join(t.TempDir(), "exported"), map[string]any{})
+			target := filepath.Join(t.TempDir(), "exported")
+			_, err = repository.Export(destination, "manual", target, map[string]any{})
 			if err == nil {
 				t.Fatal("unsafe upstream content was imported")
 			}
-			if _, err := os.Stat(filepath.Join(t.TempDir(), "exported")); err == nil {
+			// The target is the directory Export would have written; checking a
+			// fresh temporary directory would pass no matter what Export did.
+			if _, err := os.Stat(target); err == nil {
 				t.Fatal("a rejected import left files behind")
 			}
 		})

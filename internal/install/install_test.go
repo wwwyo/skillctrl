@@ -48,8 +48,13 @@ func newRepo(t *testing.T) string {
 // point outside the skills directory never reaches the filesystem.
 func TestNamesRejectsEscapes(t *testing.T) {
 	accepted := []string{"a", "skill-1", "skill.name_2"}
-	if got, err := install.Names([]string{"b", "a", "a"}); err != nil || strings.Join(got, ",") != "a,b" {
+	if got, err := install.Names([]string{"b", "a", "b", "a"}); err != nil || strings.Join(got, ",") != "a,b" {
+		// Duplicates that are not adjacent must collapse too: deduplicating
+		// before sorting only ever collapsed neighbours.
 		t.Fatalf("names were not normalized: %v %v", got, err)
+	}
+	if got, _ := install.Names([]string{"a"}); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("a single name was altered: %v", got)
 	}
 	if _, err := install.Names(accepted); err != nil {
 		t.Fatal(err)

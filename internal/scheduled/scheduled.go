@@ -448,6 +448,10 @@ func Publish(dir, directory string, plan lock.Plan, environment map[string]strin
 	}
 	for _, test := range tests {
 		command := exec.Command("bash", test)
+		// The suites run from the repository under test. Running them from the
+		// process's own directory would verify whatever checkout happens to be
+		// current, not the update being published.
+		command.Dir = dir
 		command.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 		command.Stdout = os.Stderr
 		command.Stderr = os.Stderr

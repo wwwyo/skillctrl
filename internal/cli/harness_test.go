@@ -143,7 +143,6 @@ func newHarness(t *testing.T) *harness {
 		"XDG_STATE_HOME=/must-not-write",
 		"VIBE_HOME=/must-not-write",
 		"APPDATA=/must-not-write",
-		"FIXTURE_LOG="+filepath.Join(h.base, "pi.log"),
 		"HOME="+filepath.Join(base, "fake-home"),
 	)
 	return h
@@ -231,11 +230,14 @@ func (h *harness) installFakes() {
 	}
 	stub("npx", "#!/bin/sh\necho 'npx must never run' >&2\nexit 97\n")
 	stub("mise", "#!/bin/sh\necho \"{\\\"PATH\\\":\\\"$PATH\\\"}\"\n")
+	// The reviewer stub is given where to write its log; everything else it needs
+	// it reads from a file it sources, because the tool hands the reviewer a
+	// reduced environment on purpose.
 	stub("pi", `#!/usr/bin/env bash
 set -euo pipefail
-log="$FIXTURE_LOG"
-printf '%s\n' "$@" >> "$log"
-printf 'PI_CODING_AGENT_DIR=%s\n' "${PI_CODING_AGENT_DIR:-}" >> "$log"
+. `+h.base+`/reviewer.env
+printf '%s\n' "$@" >> "$SKILLCTRL_FIXTURE_LOG"
+printf 'PI_CODING_AGENT_DIR=%s\n' "${PI_CODING_AGENT_DIR:-}" >> "$SKILLCTRL_FIXTURE_LOG"
 [ -z "${FIXTURE_REVIEW_FAIL:-}" ] || exit 1
 body=".agents/skills/manual/SKILL.md"
 grep -q 'upstream v2' "$body"
@@ -254,6 +256,7 @@ else
 fi
 echo 'checked default browser'
 `)
+	h.knobs()
 }
 
 func (h *harness) log() string {
@@ -302,40 +305,22 @@ func (h *harness) try(args ...string) (string, string, int) {
 	return stdout.String(), stderr.String(), code
 }
 
-func (h *harness) withEnv(key, value string) func() {
+// knobs writes the reviewer stub's configuration. The stub sources that file
+// rather than reading variables, because the tool deliberately does not pass the
+// caller's environment to the reviewer.
+func (h *harness) knobs(values ...string) {
 	h.t.Helper()
-	previous := os.Getenv(key)
-	if value == "" {
-		os.Unsetenv(key)
-	} else {
-		os.Setenv(key, value)
-	}
-	h.env = replaceEnv(h.env, key, value)
-	return func() {
-		if previous == "" {
-			os.Unsetenv(key)
-		} else {
-			os.Setenv(key, previous)
-		}
-		h.env = replaceEnv(h.env, key, previous)
+	settings := append([]string{"SKILLCTRL_FIXTURE_LOG=" + filepath.Join(h.base, "pi.log")}, values...)
+	if err := os.WriteFile(filepath.Join(h.base, "reviewer.env"), []byte(strings.Join(settings, "\n")+"\n"), 0o644); err != nil {
+		h.t.Fatal(err)
 	}
 }
 
-func replaceEnv(env []string, key, value string) []string {
-	prefix := key + "="
-	for index, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			if value == "" {
-				return append(env[:index], env[index+1:]...)
-			}
-			env[index] = prefix + value
-			return env
-		}
-	}
-	if value == "" {
-		return env
-	}
-	return append(env, prefix+value)
+// withEnv sets a reviewer knob for the duration of a subtest.
+func (h *harness) withEnv(key, value string) func() {
+	h.t.Helper()
+	h.knobs(fmt.Sprintf("%s=%s", key, value))
+	return func() { h.knobs() }
 }
 
 func (h *harness) reset() {

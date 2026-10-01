@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -53,8 +54,9 @@ func run(dir string, env []string, stdin []byte, hardened bool, args []string) (
 	if dir != "" {
 		command.Dir = dir
 	}
-	if env != nil {
-		command.Env = env
+	command.Env = env
+	if env == nil {
+		command.Env = Environment()
 	}
 	if stdin != nil {
 		command.Stdin = bytes.NewReader(stdin)
@@ -72,6 +74,27 @@ func run(dir string, env []string, stdin []byte, hardened bool, args []string) (
 			Detail: strings.TrimSpace(stderr.String()), Err: err}
 	}
 	return stdout.Bytes(), nil
+}
+
+// Environment drops inherited repository context before applying intentional
+// overrides. Git hooks export this context, which otherwise takes precedence
+// over a command's working directory and can redirect writes to another index.
+func Environment(overrides ...string) []string {
+	var environment []string
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		switch name {
+		case "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+			"GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+			"GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR":
+			continue
+		}
+		if strings.HasPrefix(name, "GIT_CONFIG_KEY_") || strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, overrides...)
 }
 
 // Output returns raw stdout from a Git command run in dir.

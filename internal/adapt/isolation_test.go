@@ -44,15 +44,11 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 		}
 	}
 	t.Setenv("PATH", f.tools+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("FIXTURE_CALL_LOG", f.log)
 	// Temporary directories live behind a symlink on macOS; the shell reports the
 	// physical path, so the expectations must too.
 	f.artifacts = physical(t, f.artifacts)
 	f.caller = physical(t, f.caller)
 	r.dir = physical(t, r.dir)
-	t.Setenv("FIXTURE_TRUSTED_DIR", f.artifacts)
-	t.Setenv("FIXTURE_TARGET_DIR", r.dir)
-	t.Setenv("FIXTURE_TOOLS_DIR", f.tools)
 	return f
 }
 
@@ -61,11 +57,15 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 // caller. It refuses to run anywhere but the prepared directory.
 func (f *reviewFixture) mise(t *testing.T) {
 	t.Helper()
+	// The stubs carry their expectations inline. The reviewer inherits a reduced
+	// environment by design, so passing them as variables would test nothing.
 	writeScript(t, filepath.Join(f.tools, "mise"), `#!/usr/bin/env bash
 set -euo pipefail
-pwd >> "$FIXTURE_CALL_LOG"
-[ "$PWD" = "$FIXTURE_TRUSTED_DIR" ] || { echo "mise resolved in $PWD" >&2; exit 1; }
-printf '{"PATH":"%s","OPENCODE_API_KEY":"%s","TRUSTED_MARKER":"trusted"}' "$FIXTURE_TOOLS_DIR" "$FIXTURE_SECRET"
+pwd >> "`+f.log+`"
+[ "$PWD" = "`+f.artifacts+`" ] || { echo "mise resolved in $PWD" >&2; exit 1; }
+# An untrusted configuration could inject anything here; only what the tool
+# allows through should survive to the reviewer.
+printf '{"PATH":"`+f.tools+`","OPENCODE_API_KEY":"fixture-trusted-credential","INJECTED_RUNTIME":"tools/attacker"}'
 `)
 }
 
@@ -73,13 +73,14 @@ func (f *reviewFixture) reviewer(t *testing.T, body string) {
 	t.Helper()
 	writeScript(t, filepath.Join(f.tools, "pi"), `#!/usr/bin/env bash
 set -euo pipefail
-pwd >> "$FIXTURE_CALL_LOG"
-[ "$PWD" = "$FIXTURE_TARGET_DIR" ] || { echo "reviewer ran in $PWD" >&2; exit 1; }
-[ "${PATH:-}" = "$FIXTURE_TOOLS_DIR" ] || { echo "inherited PATH leaked into the reviewer: $PATH" >&2; exit 1; }
-[ "${TRUSTED_MARKER:-}" = trusted ] || { echo "trusted toolchain was not applied" >&2; exit 1; }
-case ":${PATH}:" in
-  *hostile-package*|*incoming-package*) echo "untrusted tools reached the reviewer" >&2; exit 1;;
-esac
+pwd >> "`+f.log+`"
+[ "$PWD" = "`+f.repo.dir+`" ] || { echo "reviewer ran in $PWD" >&2; exit 1; }
+[ "${PATH:-}" = "`+f.tools+`" ] || { echo "inherited PATH leaked into the reviewer: $PATH" >&2; exit 1; }
+[ "${OPENCODE_API_KEY:-}" = "fixture-trusted-credential" ] || { echo "the inference credential did not reach the reviewer" >&2; exit 1; }
+# Nothing outside the reduced allowlist may survive, whatever the resolver said.
+for variable in INJECTED_RUNTIME GH_TOKEN GITHUB_TOKEN MISE_AGE_KEY LANGFUSE_PUBLIC_KEY LANGFUSE_SECRET_KEY; do
+  if [ -n "${!variable:-}" ]; then echo "reviewer inherited $variable" >&2; exit 1; fi
+done
 case " $* " in
   *" --no-context-files "*) ;;
   *) echo 'reviewer ran with repository context files' >&2; exit 1;;
@@ -88,7 +89,7 @@ case "$*" in
   *"--model opencode-go/space-bunny-free"*) ;;
   *) echo 'reviewer ran with an unexpected model' >&2; exit 1;;
 esac
-printf '%s' "$PWD" > "$FIXTURE_CALL_LOG.reviewer"
+printf '%s' "$PWD" > "`+f.log+`.reviewer"
 `+body)
 }
 
@@ -134,7 +135,13 @@ printf 'repaired body\n' > "$body"
 result="${@: -1}"; result="${result##*Write completion JSON to: }"
 printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
 `)
-	t.Setenv("FIXTURE_SECRET", "fixture-trusted-credential")
+	// Credentials present in the caller's environment must not reach the reviewer,
+	// whether they come from the resolver or from the shell.
+	t.Setenv("GH_TOKEN", "fixture-write-token")
+	t.Setenv("GITHUB_TOKEN", "fixture-write-token")
+	t.Setenv("MISE_AGE_KEY", "fixture-age-key")
+	t.Setenv("LANGFUSE_SECRET_KEY", "fixture-tracing-secret")
+	t.Setenv("INJECTED_RUNTIME", "tools/attacker")
 
 	plan := f.repo.plan()
 	f.run(t, plan)
@@ -171,7 +178,6 @@ printf 'repaired body\n' > .agents/skills/manual/SKILL.md
 result="${@: -1}"; result="${result##*Write completion JSON to: }"
 printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
 `)
-	t.Setenv("FIXTURE_SECRET", "fixture-trusted-credential")
 	// The caller's PATH contains the tools this test itself needs, but no
 	// reviewer: only the trusted configuration can supply one.
 	callerTools := t.TempDir()
@@ -217,7 +223,6 @@ printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
 			}
 			f.reviewer(t, body)
 			const secret = "fixture-trusted-credential"
-			t.Setenv("FIXTURE_SECRET", secret)
 			// The caller holds no credential of its own.
 			t.Setenv("OPENCODE_API_KEY", "")
 			plan := f.repo.plan()

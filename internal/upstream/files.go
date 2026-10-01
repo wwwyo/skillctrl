@@ -1,6 +1,7 @@
 package upstream
 
 import (
+	"bytes"
 	"fmt"
 	"iter"
 	"os"
@@ -31,7 +32,10 @@ func readBlobs(repo string, identifiers []string) (map[string][]byte, error) {
 	result := map[string][]byte{}
 	offset := 0
 	for _, oid := range ordered {
-		end := strings.IndexByte(string(out[offset:]), '\n')
+		// bytes.IndexByte searches the buffer in place. Converting the remaining
+		// buffer to a string first would copy it for every object, turning a
+		// linear scan into a quadratic one on a large skill.
+		end := bytes.IndexByte(out[offset:], '\n')
 		if end < 0 {
 			return nil, fmt.Errorf("upstream object is not a blob")
 		}

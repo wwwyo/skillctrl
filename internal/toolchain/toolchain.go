@@ -9,7 +9,7 @@
 package toolchain
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
 	"os"
 	"regexp"
@@ -122,30 +122,35 @@ func exactVersion(value string) bool {
 	return true
 }
 
+// document is the minimal configuration the reviewer runs under.
+type document struct {
+	Tools    map[string]any `toml:"tools"`
+	Settings map[string]any `toml:"settings"`
+}
+
 // Render writes the minimal CI toolchain configuration.
-func Render(configuration Configuration) []byte {
-	lines := []string{"[tools]"}
+//
+// It goes through a TOML encoder rather than being formatted by hand: a pin can
+// be a table, as in `pi = { version = "1.2.3" }`, and rendering that as a JSON
+// literal would produce a file the resolver cannot read. Emitting a value the
+// resolver later rejects turns a pinned runtime into a broken one, so the
+// encoding has to be the real one.
+func Render(configuration Configuration) ([]byte, error) {
+	result := document{
+		Tools:    make(map[string]any, len(AgentTools)),
+		Settings: make(map[string]any, len(PolicySettings)),
+	}
 	for _, name := range AgentTools {
-		lines = append(lines, quote(name)+" = "+literal(configuration.Tools[name]))
+		result.Tools[name] = configuration.Tools[name]
 	}
-	lines = append(lines, "", "[settings]")
 	for _, name := range PolicySettings {
-		lines = append(lines, name+" = "+literal(configuration.Settings[name]))
+		result.Settings[name] = configuration.Settings[name]
 	}
-	return []byte(strings.Join(lines, "\n") + "\n")
-}
-
-func quote(value string) string {
-	encoded, _ := json.Marshal(value)
-	return string(encoded)
-}
-
-func literal(value any) string {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return "null"
+	var buffer bytes.Buffer
+	if err := toml.NewEncoder(&buffer).Encode(result); err != nil {
+		return nil, fmt.Errorf("trusted toolchain cannot be rendered: %w", err)
 	}
-	return string(encoded)
+	return buffer.Bytes(), nil
 }
 
 // Models reads the trusted agent model definitions. These let the reviewer run

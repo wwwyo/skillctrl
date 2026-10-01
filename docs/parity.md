@@ -33,6 +33,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | A reviewer that edits outside the selection is refused | `internal/adapt.ReviewLocal`, `internal/adapt.ValidatePaths` | `TestInstallerLifecycle/reviewer_scope_violation_is_refused` |
 | The reviewer runs isolated, and its output is exported | `internal/adapt.ReviewLocal` | `TestInstallerLifecycle/reviewer_is_isolated_and_its_output_is_exported` |
 | A skill without an intent is recorded without invoking the reviewer | `internal/install.Adapt` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
+| Repeated names collapse however they are ordered | `internal/install.Names` | `TestNamesRejectsEscapes` |
 | `remove` deletes the registration but keeps the intent file | `internal/install.Import` | `TestInstallerLifecycle/remove_keeps_the_intent_file` |
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | `record` accepts a manual edit without a worktree or staging change | `internal/cli.runRecord` | `TestInstallerLifecycle/record_preserves_staging_in_the_main_checkout`, `TestWorkingTreePreserveStaging` |
@@ -99,6 +100,9 @@ accident.
 | The reviewer executable is resolved from the trusted PATH | `internal/adapt.resolveCommand` | `TestReviewerIsNotInheritedFromTheCallerPath` |
 | A credential supplied by the trusted toolchain is screened | `internal/adapt.ReviewLocal` | `TestCredentialFromTheTrustedEnvironmentIsScreened` |
 | An untrusted configuration is never evaluated | `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
+| The reviewer inherits only process basics and the inference credential - no injected runtime, write token, age key, or tracing secret | `internal/adapt.reduced`, `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
+| The reviewer binary is resolved only from absolute entries of the trusted PATH | `internal/adapt.resolveCommand`, `internal/adapt.underTrustedPath` | `TestReviewerIsNotInheritedFromTheCallerPath` |
+| The trusted configuration decides which credential the reviewer gets | `internal/adapt.toolchainEnvironment` | `TestCredentialFromTheTrustedEnvironmentIsScreened` |
 | No review runs at all without a trusted toolchain | `internal/adapt.ReviewLocal` | `TestReviewLocalRequiresATrustedToolchain` |
 
 ## Scheduled updates
@@ -125,6 +129,13 @@ end through the built binary: select, review in a checkout with no write
 permission, validate in a separate checkout, publish against a stubbed `gh` and
 a bare remote, and gate on the recomputed state. `TestPublishRefusesDryRun`
 proves no phase reaches the remote repository under `--dry-run`.
+
+## Git plumbing
+
+| Behavior | Go code | Test |
+| --- | --- | --- |
+| A foreign `GIT_DIR`, `GIT_WORK_TREE`, or `GIT_INDEX_FILE` cannot redirect the selected repository or touch the caller's index | `internal/gitx.Environment` | `internal/gitx/gitx_test.go` |
+| A deliberately private index still works | `internal/lock.WorkingTree` | `TestWorkingTreePreserveStaging` |
 
 ## Isolation of the install target
 

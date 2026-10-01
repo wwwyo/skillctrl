@@ -80,7 +80,11 @@ func ReviewLocal(options Options) error {
 	}
 	// CI already ran Prepare, so this rewrite is a no-op there; writing it here
 	// keeps the direct local path self-contained.
-	if err := os.WriteFile(filepath.Join(options.Directory, "mise.toml"), toolchain.Render(configuration), 0o644); err != nil {
+	rendered, err := toolchain.Render(configuration)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(options.Directory, "mise.toml"), rendered, 0o644); err != nil {
 		return err
 	}
 	prompt := options.Prompt +
@@ -91,6 +95,8 @@ func ReviewLocal(options Options) error {
 	if err != nil {
 		return err
 	}
+	// The agent's own state directory is the only thing added on top of the
+	// reduced environment.
 	environment = append(environment, "PI_CODING_AGENT_DIR="+state)
 
 	command := os.Getenv(CommandEnv)
@@ -163,36 +169,90 @@ func ReviewLocal(options Options) error {
 		environmentValue(environment, "OPENCODE_API_KEY"))
 }
 
-// toolchainEnvironment resolves the trusted toolchain without evaluating the
-// incoming repository's configuration. It runs in the directory holding the
-// prepared trusted configuration, never in the caller's directory and never in
-// the checkout under review: resolving in either of those would load an
-// untrusted mise.toml and put whatever it names on the reviewer's PATH.
+// processEnvironment is the whole of what a reviewer inherits from the caller:
+// the variables a process needs to start at all, and nothing else.
 //
-// Resolved values replace inherited ones. Leaving an inherited PATH in place
-// would silently ignore the trusted pins and run the reviewer against whatever
-// the caller had installed.
+// A reviewer is the least trusted process in the tool. It runs against a
+// repository chosen by someone else, so anything carried in from the caller's
+// environment - an injected PATH entry, a write token, a session-tracing secret
+// - is an input the reviewer should not be handed. The toolchain it must run
+// comes from the trusted configuration, and the inference credential is passed
+// explicitly.
+var processEnvironment = []string{
+	"PATH", "HOME", "TMPDIR", "TMP", "TEMP", "SHELL", "USER", "LOGNAME",
+	"TERMINFO", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
+}
+
+// resolverEnvironment adds what the toolchain resolver itself needs. A global
+// mise configuration may be encrypted, and decrypting it requires the user's age
+// key. That key is for the resolver only: the reviewer never receives it, which
+// is why the two environments are built separately instead of one being derived
+// from the other by deleting keys.
+var resolverEnvironment = []string{"MISE_AGE_KEY"}
+
+// credentialName is the inference credential. It is the one secret a reviewer
+// needs, and the one whose bytes must not appear in anything the reviewer
+// produces.
+const credentialName = "OPENCODE_API_KEY"
+
+// toolchainEnvironment resolves the trusted toolchain and builds the reviewer's
+// environment from it.
+//
+// The resolver runs in the directory holding the prepared trusted configuration,
+// never in the caller's directory and never in the checkout under review:
+// resolving in either of those would load an untrusted mise.toml. Its own
+// environment is reduced first, so an untrusted configuration cannot inherit a
+// credential, and its output is reduced again, so what the configuration injects
+// does not reach the reviewer either.
 func toolchainEnvironment(directory string) ([]string, error) {
 	resolver := exec.Command("mise", "env", "--json")
 	resolver.Dir = directory
+	resolver.Env = renderEnvironment(reduced(os.Environ(), append(processEnvironment, resolverEnvironment...)))
 	out, err := resolver.Output()
 	if err != nil {
 		return nil, fmt.Errorf("trusted toolchain is unavailable: mise env failed")
 	}
-	var parsed map[string]string
-	if err := json.Unmarshal(out, &parsed); err != nil {
+	var resolved map[string]string
+	if err := json.Unmarshal(out, &resolved); err != nil {
 		return nil, fmt.Errorf("trusted toolchain is unavailable: mise env returned invalid JSON")
 	}
-	merged := map[string]string{}
-	for _, entry := range os.Environ() {
-		if key, value, ok := strings.Cut(entry, "="); ok {
-			merged[key] = value
+	environment := reduced(os.Environ(), processEnvironment)
+	// PATH comes from the trusted configuration and replaces the inherited one.
+	// Leaving the inherited value in place would run the reviewer against
+	// whatever the caller had installed, which is the opposite of pinning.
+	if path, ok := resolved["PATH"]; ok && path != "" {
+		environment["PATH"] = path
+	}
+	if environment["PATH"] == "" {
+		return nil, fmt.Errorf("trusted toolchain does not provide PATH")
+	}
+	// The trusted configuration decides which credential the reviewer gets. The
+	// caller's value is a fallback for CI, where the job holds the credential
+	// itself and the trusted configuration has none to offer.
+	if key := resolved[credentialName]; key != "" {
+		environment[credentialName] = key
+	} else if key := os.Getenv(credentialName); key != "" {
+		environment[credentialName] = key
+	}
+	return renderEnvironment(environment), nil
+}
+
+// reduced keeps only the named variables. The caller's environment is treated as
+// untrusted input even though the caller started the process: the point of the
+// boundary is that the reviewer sees the trusted toolchain and nothing else.
+func reduced(environment []string, allowed []string) map[string]string {
+	permitted := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		permitted[name] = true
+	}
+	result := make(map[string]string, len(allowed))
+	for _, entry := range environment {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && permitted[key] {
+			result[key] = value
 		}
 	}
-	for key, value := range parsed {
-		merged[key] = value
-	}
-	return renderEnvironment(merged), nil
+	return result
 }
 
 func renderEnvironment(values map[string]string) []string {
@@ -213,21 +273,77 @@ func environmentValue(environment []string, key string) string {
 	return ""
 }
 
+// environmentNames lists the variables an environment carries, for diagnostics
+// and for tests that assert what did not survive.
+func environmentNames(environment []string) map[string]bool {
+	names := make(map[string]bool, len(environment))
+	for _, entry := range environment {
+		if name, _, ok := strings.Cut(entry, "="); ok {
+			names[name] = true
+		}
+	}
+	return names
+}
+
 // resolveCommand finds an executable using the given environment's PATH.
+//
+// Only absolute PATH entries are searched. A relative entry would be resolved
+// against the reviewer's working directory - the repository under review - so a
+// name in such an entry would be looked up in files the pull request chose.
 func resolveCommand(environment []string, command string) (string, error) {
-	if strings.ContainsRune(command, os.PathSeparator) {
-		return command, nil
+	if command == "" {
+		return "", fmt.Errorf("no reviewer command is configured")
+	}
+	if strings.ContainsRune(command, os.PathSeparator) || command == "." || command == ".." {
+		// A path is only honored inside the trusted toolchain. Allowing an
+		// arbitrary absolute path would hand the reviewer whatever the caller's
+		// environment named, which is the boundary this package maintains.
+		resolved, err := executable(command)
+		if err != nil {
+			return "", err
+		}
+		if !underTrustedPath(resolved, environment) {
+			return "", fmt.Errorf("reviewer command is outside the trusted toolchain: %q", command)
+		}
+		return resolved, nil
 	}
 	for _, directory := range strings.Split(environmentValue(environment, "PATH"), string(os.PathListSeparator)) {
-		if directory == "" {
+		if directory == "" || !filepath.IsAbs(directory) {
 			continue
 		}
-		candidate := filepath.Join(directory, command)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0 {
+		candidate, err := executable(filepath.Join(directory, command))
+		if err == nil {
 			return candidate, nil
 		}
 	}
 	return "", fmt.Errorf("trusted toolchain does not provide %s", command)
+}
+
+// underTrustedPath reports whether a path lives inside one of the absolute
+// entries of the trusted PATH.
+func underTrustedPath(path string, environment []string) bool {
+	for _, directory := range strings.Split(environmentValue(environment, "PATH"), string(os.PathListSeparator)) {
+		if directory == "" || !filepath.IsAbs(directory) {
+			continue
+		}
+		prefix := strings.TrimSuffix(directory, string(os.PathSeparator)) + string(os.PathSeparator)
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func executable(path string) (string, error) {
+	resolved, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return "", fmt.Errorf("%s is not an executable file", path)
+	}
+	return resolved, nil
 }
 
 func mustJSON(value any) string {

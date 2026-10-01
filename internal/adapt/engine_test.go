@@ -52,7 +52,7 @@ case "$*" in
   *) echo 'reviewer ran with an unexpected model' >&2; exit 1;;
 esac
 body=".agents/skills/manual/SKILL.md"
-leak="${FIXTURE_LEAK:-}"
+leak="@LEAK@"
 case "$leak" in
   body) printf '%s\n' "$OPENCODE_API_KEY" > "$body";;
   binary) printf '\0%s' "$OPENCODE_API_KEY" > .agents/skills/manual/blob.bin;;
@@ -111,6 +111,7 @@ func TestEngineHandoffExportsOnlySelectedSkills(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := func(directory string, leak string) (string, error) {
+		reviewerWithLeak := strings.ReplaceAll(reviewer, "@LEAK@", leak)
 		planPath := filepath.Join(directory, "plan.json")
 		if err := os.WriteFile(planPath, mustMarshal(plan), 0o644); err != nil {
 			t.Fatal(err)
@@ -122,6 +123,9 @@ func TestEngineHandoffExportsOnlySelectedSkills(t *testing.T) {
 			[]byte(`{"trusted": true}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.WriteFile(reviewerPath, []byte(reviewerWithLeak), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		command := exec.Command(node, engine, directory, binaryPath(t), reviewerPath)
 		command.Dir = r.dir
 		command.Env = append(os.Environ(),
@@ -131,7 +135,6 @@ func TestEngineHandoffExportsOnlySelectedSkills(t *testing.T) {
 			"REVIEW_DIR="+r.dir,
 			"PI_CODING_AGENT_DIR="+filepath.Join(directory, "agent"),
 			"OPENCODE_API_KEY=fixture-inference-credential-never-publish",
-			"FIXTURE_LEAK="+leak,
 			"SKILL_PLAN="+string(mustMarshal(plan)),
 		)
 		out, err := command.CombinedOutput()

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -66,11 +67,21 @@ func ValidateHead(dir string, plan lock.Plan) error {
 	return nil
 }
 
-// ValidatePaths accepts staged edits only within selected skill directories.
-// Anything else - an intent file, a lock, a workflow, an unrelated skill - is a
-// scope violation by the reviewer, not a change to reconcile.
+// ValidatePaths accepts staged edits only within selected skill directories, and
+// only as ordinary tracked content.
+//
+// A path outside the selection - an intent file, a lock, a workflow, an
+// unrelated skill - is a scope violation by the reviewer, not a change to
+// reconcile. Inside the selection the object type matters too: a symlink or a
+// gitlink staged by a reviewer would let a later read or write escape the skill
+// directory, and Git rules staged alongside would change what the accepted hash
+// is computed over. Both are refused.
+//
+// Only paths the reviewer actually staged are examined. An untouched file that
+// happens to live inside a skill directory is not the reviewer's doing and is
+// left alone.
 func ValidatePaths(dir string, plan lock.Plan) error {
-	out, err := gitx.Output(dir, "diff", "--cached", "--name-only", "-z", "--no-renames")
+	out, err := gitx.Output(dir, "diff", "--cached", "--raw", "-z", "--no-renames")
 	if err != nil {
 		return err
 	}
@@ -78,15 +89,84 @@ func ValidatePaths(dir string, plan lock.Plan) error {
 	for _, name := range plan.Skills {
 		prefixes = append(prefixes, lock.Skills+name+"/")
 	}
-	for _, raw := range strings.Split(string(out), "\x00") {
-		if raw == "" {
+	fields := strings.Split(string(out), "\x00")
+	for index := 0; index+1 < len(fields); index += 2 {
+		header, path := fields[index], fields[index+1]
+		if path == "" {
 			continue
 		}
-		if !hasPrefix(raw, prefixes) {
-			return fmt.Errorf("repair changed a path outside selected skills: %s", raw)
+		if !hasPrefix(path, prefixes) {
+			return fmt.Errorf("repair changed a path outside selected skills: %s", path)
+		}
+		if err := checkEntry(header, path); err != nil {
+			return err
 		}
 	}
 	return gitx.Run(dir, "diff", "--cached", "--check")
+}
+
+// readBounded reads at most limit bytes and reports one byte more. Reading a
+// model artifact whole would let a runaway output cost memory before anything
+// checks it; the extra byte is what distinguishes "at the limit" from "over it".
+func readBounded(path string, limit int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > limit {
+		return data, errTooLarge
+	}
+	return data, nil
+}
+
+// errTooLarge marks a bounded read that hit its limit.
+var errTooLarge = errors.New("artifact exceeds its size limit")
+
+// checkEntry refuses a staged object that is not ordinary file content. The raw
+// header is ":<old mode> <new mode> <old id> <new id> <status>".
+func checkEntry(header, path string) error {
+	fields := strings.Fields(strings.TrimPrefix(header, ":"))
+	if len(fields) < 2 {
+		return fmt.Errorf("unreadable staged entry: %s", path)
+	}
+	switch mode := fields[1]; mode {
+	case "100644", "100755":
+		// A removal reports no new object. Refusing it would make deleting a
+		// reference inside a reviewed skill impossible.
+	case "000000":
+	default:
+		return fmt.Errorf("repair staged a non-regular entry inside a skill: %s", path)
+	}
+	if isGitControlName(pathBase(path)) {
+		return fmt.Errorf("repair staged Git rules inside a skill: %s", path)
+	}
+	return nil
+}
+
+// isGitControlName reports whether a file name is one Git treats specially. The
+// comparison folds case because a case-insensitive filesystem accepts
+// ".GITIGNORE" as ".gitignore" and would let the same rules through under a
+// different spelling.
+func isGitControlName(name string) bool {
+	for _, control := range []string{".git", ".gitignore", ".gitattributes"} {
+		if strings.EqualFold(name, control) {
+			return true
+		}
+	}
+	return false
+}
+
+// pathBase is the file name of a slash-separated Git path.
+func pathBase(path string) string {
+	if index := strings.LastIndex(path, "/"); index >= 0 {
+		return path[index+1:]
+	}
+	return path
 }
 
 func hasPrefix(value string, prefixes []string) bool {
@@ -116,10 +196,14 @@ func PrepareWithPaths(dir string, plan lock.Plan, source, output, configPath str
 	if err != nil {
 		return err
 	}
+	rendered, err := toolchain.Render(configuration)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(output, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(output, "mise.toml"), toolchain.Render(configuration), 0o644)
+	return os.WriteFile(filepath.Join(output, "mise.toml"), rendered, 0o644)
 }
 
 // ValidateSecret rejects credential bytes in reports, results, patches, and
@@ -130,11 +214,18 @@ func ValidateSecret(dir, directory string, patch []byte, secret string) error {
 		return fmt.Errorf("missing inference credential")
 	}
 	key := []byte(secret)
+	limits := map[string]int{ReportFile: MaxReportBytes, ResultFile: MaxPatchBytes}
 	for _, name := range []string{ReportFile, ResultFile} {
-		data, err := os.ReadFile(filepath.Join(directory, name))
+		// Bounded reads: the credential check must not be the thing that loads a
+		// runaway artifact into memory, and it must run on exactly what would be
+		// exported rather than on a re-read of something else.
+		data, err := readBounded(filepath.Join(directory, name), limits[name])
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
+			}
+			if errors.Is(err, errTooLarge) {
+				return fmt.Errorf("%s exceeds its size limit; artifact export refused", name)
 			}
 			return err
 		}
@@ -175,7 +266,7 @@ func contains(data, key []byte) bool {
 // before any hash advances. A reviewer that marks everything accepted without
 // evidence, or that silently omits a skill, is rejected.
 func Accepted(dir string, plan lock.Plan, directory string) ([]string, error) {
-	data, err := os.ReadFile(filepath.Join(directory, ResultFile))
+	data, err := readBounded(filepath.Join(directory, ResultFile), MaxPatchBytes)
 	if err != nil {
 		return nil, fmt.Errorf("invalid adaptation result")
 	}
@@ -256,10 +347,52 @@ func WriteRepairArtifact(dir string, plan lock.Plan, directory, secret string) e
 	if err != nil {
 		return err
 	}
+	// Every artifact is bounded before it is examined or written. The checks are
+	// independent of the credential check and never replace it: a size refusal
+	// must not become a way to skip screening.
+	if err := checkArtifactBounds(directory, patch); err != nil {
+		return err
+	}
 	if err := ValidateSecret(dir, directory, patch, secret); err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(directory, PatchFile), patch, 0o644)
+}
+
+// checkArtifactBounds refuses model output that is too large to process or to
+// publish. The completion result is given the generous patch limit because the
+// reviewer answers with one entry per selected skill, not with content.
+func checkArtifactBounds(directory string, patch []byte) error {
+	if len(patch) > MaxPatchBytes {
+		return fmt.Errorf("repair patch exceeds 5 MB")
+	}
+	limits := map[string]int{
+		ReportFile: MaxReportBytes,
+		ResultFile: MaxPatchBytes,
+	}
+	for _, name := range []string{ReportFile, ResultFile} {
+		file, err := os.Open(filepath.Join(directory, name))
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return err
+		}
+		// One byte beyond the limit is what distinguishes "at the limit" from
+		// "over it"; the file itself is never fully read.
+		size, err := io.Copy(io.Discard, io.LimitReader(file, int64(limits[name])+1))
+		file.Close()
+		if err != nil {
+			return err
+		}
+		if size > int64(limits[name]) {
+			if name == ResultFile {
+				return fmt.Errorf("adaptation result exceeds 5 MB")
+			}
+			return fmt.Errorf("review report exceeds 40 KB")
+		}
+	}
+	return nil
 }
 
 // Apply validates the artifact, then advances only the resolved and intent-free
@@ -272,7 +405,7 @@ func Apply(dir string, plan lock.Plan, directory string) error {
 		return err
 	}
 	patchPath := filepath.Join(directory, PatchFile)
-	patch, patchErr := os.ReadFile(patchPath)
+	patch, patchErr := readBounded(patchPath, MaxPatchBytes)
 	if plan.NeedsReview {
 		if patchErr != nil {
 			return fmt.Errorf("review artifact is incomplete")
@@ -281,8 +414,17 @@ func Apply(dir string, plan lock.Plan, directory string) error {
 			return fmt.Errorf("review artifact is incomplete")
 		}
 	}
-	if patchErr == nil && len(patch) > MaxPatchBytes {
+	if !plan.NeedsReview && patchErr == nil && len(patch) > 0 {
+		// Nothing was reviewed, so there is nothing a patch could legitimately
+		// repair. Applying one anyway would let a stale artifact from an earlier
+		// run change skills this run never selected.
+		return fmt.Errorf("repair patch was supplied for a run with no review")
+	}
+	if errors.Is(patchErr, errTooLarge) {
 		return fmt.Errorf("repair patch exceeds 5 MB")
+	}
+	if patchErr != nil && !errors.Is(patchErr, os.ErrNotExist) {
+		return patchErr
 	}
 	// A refused repair must not leave anything staged. A patch is untrusted input
 	// and may touch any path, so the whole index is saved before applying it and
@@ -292,15 +434,15 @@ func Apply(dir string, plan lock.Plan, directory string) error {
 	if err != nil {
 		return err
 	}
+	// The saved copy is needed only while this call can refuse.
+	defer os.Remove(saved)
 	if patchErr == nil && len(patch) > 0 {
 		if err := gitx.Run(dir, "apply", "--cached", "--binary", patchPath); err != nil {
-			restoreIndex(dir, saved)
-			return err
+			return errors.Join(err, restoreIndex(dir, saved))
 		}
 	}
 	if err := validateAndRecord(dir, plan, directory); err != nil {
-		restoreIndex(dir, saved)
-		return err
+		return errors.Join(err, restoreIndex(dir, saved))
 	}
 	return nil
 }
@@ -332,15 +474,16 @@ func saveIndex(dir string) (string, error) {
 	return saved.Name(), nil
 }
 
-// restoreIndex puts the saved index back exactly as it was.
-func restoreIndex(dir string, saved string) {
+// restoreIndex puts the saved index back exactly as it was. A failed rollback is
+// reported: silently leaving a rejected patch staged would be the one outcome
+// worse than the refusal that caused it.
+func restoreIndex(dir string, saved string) error {
 	if saved == "" {
-		return
+		return nil
 	}
-	defer os.Remove(saved)
 	out, err := gitx.Output(dir, "rev-parse", "--git-path", "index")
 	if err != nil {
-		return
+		return err
 	}
 	path := gitx.Trimmed(out)
 	if !filepath.IsAbs(path) {
@@ -348,9 +491,9 @@ func restoreIndex(dir string, saved string) {
 	}
 	data, err := os.ReadFile(saved)
 	if err != nil {
-		return
+		return err
 	}
-	_ = os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func validateAndRecord(dir string, plan lock.Plan, directory string) error {
@@ -365,14 +508,9 @@ func validateAndRecord(dir string, plan lock.Plan, directory string) error {
 	for _, name := range plan.Skills {
 		names[name] = true
 	}
-	deleteAll := map[string]bool{}
+	// A reviewed skill only advances if the reviewer accepted it.
 	for _, name := range plan.ReviewSkills {
-		deleteAll[name] = true
-	}
-	for name := range names {
-		if deleteAll[name] {
-			delete(names, name)
-		}
+		delete(names, name)
 	}
 	if plan.NeedsReview {
 		accepted, err := Accepted(dir, plan, directory)
@@ -438,18 +576,15 @@ func Export(dir string, plan lock.Plan, directory, secret string) error {
 // GitHub, and supplies an explicit note when no review happened.
 func ReadReport(directory string) (string, error) {
 	var text string
-	data, err := os.ReadFile(filepath.Join(directory, ReportFile))
+	data, err := readBounded(filepath.Join(directory, ReportFile), MaxReportBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		text = "Recorded skill hashes for skills without a saved intent."
 	} else if err != nil {
 		return "", err
 	} else {
-		if len(data) > MaxReportBytes+1 {
-			return "", fmt.Errorf("review report exceeds 40 KB")
-		}
 		text = string(data)
 	}
-	if strings.TrimSpace(text) == "" || len(text) > MaxReportBytes {
+	if strings.TrimSpace(text) == "" {
 		return "", fmt.Errorf("missing or oversized review report")
 	}
 	return text, nil

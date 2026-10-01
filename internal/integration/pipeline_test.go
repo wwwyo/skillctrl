@@ -151,7 +151,7 @@ func writeScript(t *testing.T, path, body string) {
 
 // phaseRepository builds the repository an adopter would have: one skill with an
 // intent, one without, and a trusted toolchain on the base commit.
-func phaseRepository(t *testing.T) (string, string, *env) {
+func phaseRepository(t *testing.T) (string, string, string, *env) {
 	t.Helper()
 	base := t.TempDir()
 	repo := filepath.Join(base, "repo")
@@ -186,15 +186,17 @@ func phaseRepository(t *testing.T) (string, string, *env) {
 	// The trusted resolver refuses to run anywhere except the prepared
 	// directory, which is how the reviewed job proves it did not evaluate the
 	// caller's or the reviewed repository's configuration.
+	// The stubs carry their expectations inline: the reviewer inherits a reduced
+	// environment by design, so passing them as variables would test nothing.
 	writeScript(t, filepath.Join(tools, "mise"), `#!/usr/bin/env bash
 set -euo pipefail
-[ "$PWD" = "$FIXTURE_ARTIFACTS" ] || { echo "mise resolved in $PWD" >&2; exit 1; }
-printf '{"PATH":"%s","OPENCODE_API_KEY":"%s"}' "$FIXTURE_TOOLS" "$FIXTURE_CREDENTIAL"
+[ "$PWD" = "`+artifactsFor(tools)+`" ] || { echo "mise resolved in $PWD" >&2; exit 1; }
+printf '{"PATH":"`+tools+`","OPENCODE_API_KEY":"`+credential+`"}'
 `)
 	writeScript(t, filepath.Join(tools, "pi"), `#!/usr/bin/env bash
 set -euo pipefail
-[ "$PWD" = "$FIXTURE_REPO" ] || { echo "reviewer ran in $PWD" >&2; exit 1; }
-[ "${PATH:-}" = "$FIXTURE_TOOLS" ] || { echo "reviewer PATH is not the trusted one" >&2; exit 1; }
+[ "$PWD" = "`+repo+`" ] || { echo "reviewer ran in $PWD" >&2; exit 1; }
+[ "${PATH:-}" = "`+tools+`" ] || { echo "reviewer PATH is not the trusted one" >&2; exit 1; }
 case " $* " in
   *" --no-context-files "*) ;;
   *) echo 'reviewer ran without isolation flags' >&2; exit 1;;
@@ -206,20 +208,17 @@ echo 'the default browser criterion is preserved'
 `)
 	environment := newEnv(
 		"PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"FIXTURE_TOOLS", tools,
-		"FIXTURE_REPO", repo,
-		"FIXTURE_CREDENTIAL", credential,
 		// The caller holds no credential of its own.
 		"OPENCODE_API_KEY", "",
 	)
-	return repo, caller, environment
+	return repo, caller, tools, environment
 }
 
 // TestDocumentedPhaseSequence runs docs/ci.md end to end: select, review in a
 // job with no write token, validate in a job that recomputes the plan, then
 // gate on the recomputed state.
 func TestDocumentedPhaseSequence(t *testing.T) {
-	repo, caller, environment := phaseRepository(t)
+	repo, caller, tools, environment := phaseRepository(t)
 	head := git(t, repo, "rev-parse", "HEAD")
 	artifacts := filepath.Join(caller, "artifacts")
 	if err := os.MkdirAll(artifacts, 0o755); err != nil {
@@ -254,21 +253,20 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	job := environment.with(
 		"SKILL_PLAN", plan,
 		"CHECKER_SOURCE", head,
-		"FIXTURE_ARTIFACTS", artifacts,
 		// The reviewing job holds the inference credential, and ci export
 		// screens artifacts against the credential that job was given.
 		"OPENCODE_API_KEY", credential,
 	)
 
 	t.Run("prepare refuses without a trusted source", func(t *testing.T) {
-		without := environment.with("SKILL_PLAN", plan, "FIXTURE_ARTIFACTS", artifacts)
+		without := environment.with("SKILL_PLAN", plan)
 		run(t, repo, caller, without, 1, "ci", "prepare", artifacts)
 	})
 
 	t.Run("review", func(t *testing.T) {
 		run(t, repo, caller, job, 0, "ci", "prepare", artifacts)
 		config := readFile(t, filepath.Join(artifacts, "mise.toml"))
-		for _, want := range []string{`"node" = "22.11.0"`, `"npm:@earendil-works/pi-coding-agent" = "0.55.1"`,
+		for _, want := range []string{`node = "22.11.0"`, `"npm:@earendil-works/pi-coding-agent" = "0.55.1"`,
 			"pin = true", `minimum_release_age = "7d"`} {
 			if !strings.Contains(config, want) {
 				t.Fatalf("prepared toolchain is missing %s:\n%s", want, config)
@@ -276,7 +274,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 		}
 		// The reviewing job runs the agent under the prepared toolchain with the
 		// contract this binary embeds, then exports what it produced.
-		runReviewer(t, repo, artifacts, job, plan)
+		runReviewer(t, repo, artifacts, tools, job, plan)
 		run(t, repo, repo, job, 0, "ci", "export", artifacts)
 		patch, err := os.ReadFile(filepath.Join(artifacts, "repair.patch"))
 		if err != nil {
@@ -413,7 +411,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 
 // runReviewer executes the reviewing agent the way docs/ci.md specifies and
 // fails the test if the agent could have been run without the trusted setup.
-func runReviewer(t *testing.T, repo, artifacts string, environment *env, plan string) {
+func runReviewer(t *testing.T, repo, artifacts, trustedTools string, environment *env, plan string) {
 	t.Helper()
 	prompt := filepath.Join(artifacts, "ci-prompt.md")
 	write(t, prompt, run(t, repo, repo, environment, 0, "prompt"))
@@ -422,7 +420,7 @@ func runReviewer(t *testing.T, repo, artifacts string, environment *env, plan st
 		t.Fatal(err)
 	}
 	defer report.Close()
-	agent := exec.Command(filepath.Join(environment.values["FIXTURE_TOOLS"], "pi"),
+	agent := exec.Command(filepath.Join(trustedTools, "pi"),
 		"--thinking", "high", "--no-session", "--no-context-files", "--no-skills",
 		"--no-extensions", "--no-prompt-templates", "--no-approve",
 		"--model", "opencode-go/space-bunny-free", "-p",
@@ -433,7 +431,7 @@ func runReviewer(t *testing.T, repo, artifacts string, environment *env, plan st
 	// The reviewing job installs the toolchain that ci prepare pinned and runs
 	// the agent under it, so the agent sees that PATH and nothing else.
 	agent.Env = environment.with(
-		"PATH", environment.values["FIXTURE_TOOLS"],
+		"PATH", trustedTools,
 		"PI_CODING_AGENT_DIR", filepath.Join(artifacts, "agent"),
 	).list()
 	if err := os.MkdirAll(filepath.Join(artifacts, "agent"), 0o755); err != nil {
@@ -461,6 +459,11 @@ func cloneAt(t *testing.T, repo, commit, target string) string {
 	git(t, target, "fetch", "--quiet", repo, commit)
 	git(t, target, "checkout", "--quiet", "--detach", commit)
 	return physical(t, target)
+}
+
+// artifactsFor names the directory the reviewing job prepares its toolchain in.
+func artifactsFor(tools string) string {
+	return filepath.Join(filepath.Dir(tools), "artifacts")
 }
 
 func physical(t *testing.T, path string) string {
@@ -541,12 +544,13 @@ esac
 // misleading: --dry-run is accepted by the installer commands and must never be
 // silently ignored by a phase that writes a remote repository.
 func TestPublishRefusesDryRun(t *testing.T) {
-	repo, caller, environment := phaseRepository(t)
+	repo, caller, tools, environment := phaseRepository(t)
 	head := git(t, repo, "rev-parse", "HEAD")
 	artifacts := filepath.Join(caller, "artifacts")
 	if err := os.MkdirAll(artifacts, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	_ = tools
 	ghDir := filepath.Join(caller, "gh")
 	if err := os.MkdirAll(ghDir, 0o755); err != nil {
 		t.Fatal(err)

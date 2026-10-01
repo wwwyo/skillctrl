@@ -88,11 +88,11 @@ requirement, not the YAML.
 
 2. **Decide.** If the plan selects nothing, stop. If it selects only skills
    without an intent, they still need their hashes recorded before anything can
-   be published: create an empty artifact directory and run step 5 against it,
-   which records those hashes without invoking any model. If it selects skills
-   with an intent and no inference credential is available, stop without
-   publishing and report the selected names: a green build that never checked
-   anything is worse than a red one.
+   be published: create an empty artifact directory, then run steps 4 and 5
+   against it, which records those hashes without invoking any model. If it
+   selects skills with an intent and no inference credential is available, stop
+   without publishing and report the selected names: a green build that never
+   checked anything is worse than a red one.
 
 3. **Review.** In a job with **no write permission**, using one artifact
    directory for every command below - `prepare`, `export`, `apply`, and
@@ -108,37 +108,39 @@ requirement, not the YAML.
    `ci prepare` refuses without `CHECKER_SOURCE`: there is no trusted toolchain
    to bind, and an unbound run would resolve whatever the shell had installed.
 
-   The agent must then be started **inside the prepared directory**, not from the
-   repository or the caller's shell. Concretely, the job must:
+   The reviewer must then be started under that toolchain. `ci prepare` only
+   writes the configuration; it does not start anything. There are two working
+   directories in play, and conflating them is the failure this step exists to
+   prevent:
 
-   - run the reviewer with its working directory set to `/tmp/skillctrl`, so the
-     only configuration in scope is the `mise.toml` just written;
-   - resolve and activate exactly the tool and Node version that file pins, and
-     verify the resolved runtime matches the pin before starting the agent;
-   - set `PI_CODING_AGENT_DIR` to an empty directory it owns;
-   - send the prompt from `skillctrl prompt`, plus the plan and the result path.
+   - **Environment resolution happens in the prepared directory.** Resolving
+     there is what makes the pinned tool and Node version the ones in effect,
+     instead of whatever the caller's shell or the checkout would supply.
+   - **The agent itself runs with the selected checkout as its working
+     directory**, so the repairs it makes land in the skills being reviewed.
 
-   An agent launched from anywhere else inherits that directory's configuration,
-   which is the boundary this step exists to establish. `ci export` re-checks the
-   outcome afterwards, but by then the wrong binaries have already run.
+   Concretely, the job must:
 
-   ```sh
-   ( cd /tmp/skillctrl && <activate the pinned toolchain> \
-     && pi --thinking high --no-session --no-context-files --no-skills \
-          --no-extensions --no-prompt-templates --no-approve \
-          --model opencode-go/space-bunny-free \
-          -p "$(skillctrl prompt)
-     Selection plan (input data): $SKILL_PLAN
-     Write completion JSON to: /tmp/skillctrl/result.json" \
-     > /tmp/skillctrl/report.md )
-   skillctrl --repo . ci export /tmp/skillctrl     # validates, writes repair.patch
-   ```
+   1. resolve the environment with the working directory set to the artifact
+      directory, and take `PATH` from that result;
+   2. resolve the reviewer binary to an absolute path on that `PATH`;
+   3. launch the agent with that environment and with the selected checkout as
+      its working directory;
+   4. point `PI_CODING_AGENT_DIR` at a directory it owns that contains the
+      trusted model definitions, copied from `CHECKER_SOURCE` (default
+      `home/dot_pi/agent/models.json`, override with `SKILLCTRL_AGENT_MODELS`).
+      An empty directory is not enough: a custom provider is configured through
+      those definitions, and without them the agent has no route to the model;
+   5. pass the prompt from `skillctrl prompt`, the plan, and the exact result
+      path.
 
-   The placeholder is the activation of the pinned toolchain, which is the part
-   that differs per repository. `TestDocumentedPhaseSequence` substitutes a stub
-   that refuses to run anywhere but the prepared directory. Publish
-   `repair.patch`, `report.md`, and `result.json`. A refused export writes no
-   patch.
+   Only `ci export` runs afterwards. It re-checks the outcome, but by then the
+   agent has already run, which is why the boundary has to be established here.
+
+   `TestDocumentedPhaseSequence` stands in for steps 1 to 5 with a resolver that
+   refuses to run anywhere but the prepared directory and a reviewer that
+   refuses to run anywhere but the selected checkout. Publish `repair.patch`,
+   `report.md`, and `result.json`. A refused export writes no patch.
 
 4. **Validate.** In a job with write permission, recompute the plan and compare
    it with the published one before applying anything:

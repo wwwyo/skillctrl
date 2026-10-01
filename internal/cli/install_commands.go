@@ -286,22 +286,7 @@ func newRecordCommand() *cobra.Command {
 		Short: "Accept deliberate manual skill edits without creating a worktree",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			repo, err := repository(command)
-			if err != nil {
-				return fail("", err)
-			}
-			if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
-				return fail(repo, fmt.Errorf("--repo must point to a repository containing %s", install.SkillsDir))
-			}
-			values, err := install.Names(args)
-			if err != nil {
-				return fail(repo, err)
-			}
-			if dry, _ := command.Flags().GetBool("dry-run"); dry {
-				return emit(map[string]any{"dry_run": true, "repo": repo, "command": "record",
-					"source": "", "skills": values})
-			}
-			return runRecord(repo, values)
+			return runInstall(command, "record", "", args)
 		},
 	}
 }

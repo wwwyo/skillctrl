@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -291,12 +292,6 @@ func sortedKeys(values map[string]string) []string {
 	for key := range values {
 		keys = append(keys, key)
 	}
-	for i := range keys {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[j] < keys[i] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
+	slices.Sort(keys)
 	return keys
 }

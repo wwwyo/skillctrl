@@ -39,7 +39,11 @@ func Names(values []string) ([]string, error) {
 			return nil, fmt.Errorf("skill names must be plain directory names")
 		}
 	}
-	return slices.Sorted(slices.Values(slices.Compact(values))), nil
+	// Deduplicating before sorting only collapses neighbours, so a repeated name
+	// such as "add a b a" would survive and be processed twice.
+	ordered := slices.Clone(values)
+	slices.Sort(ordered)
+	return slices.Compact(ordered), nil
 }
 
 // CheckSkills rejects symlinks before the importer can write through them or

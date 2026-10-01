@@ -37,6 +37,11 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.MkdirAll(filepath.Join(f.dir, ".agents/skills/manual"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Temporary directories sit behind a symlink on macOS and the shell reports
+	// the physical path, so the suite asserts against that.
+	if resolved, err := filepath.EvalSymlinks(f.dir); err == nil {
+		f.dir = resolved
+	}
 	f.write(".agents/skills/manual/SKILL.md", "Original v1 with default browser customization.\n")
 	if err := os.MkdirAll(filepath.Join(f.dir, ".claude/skills"), 0o755); err != nil {
 		t.Fatal(err)
@@ -58,7 +63,13 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f.write(".agents/.skill-lock.json", string(registration))
-	f.write("tests/fixture.test.sh", "test \"${FIXTURE_TEST_FAILURE:-0}\" = 0\n")
+	// The suite asserts it runs in the repository being published, so a run from
+	// the wrong working directory cannot pass.
+	f.write("tests/fixture.test.sh",
+		"set -eu\n"+
+			"test \"$(pwd -P)\" = \""+f.dir+"\" || { echo \"suite ran in $(pwd -P)\" >&2; exit 1; }\n"+
+			"grep -q 'Original v2 with default browser customization' .agents/skills/manual/SKILL.md\n"+
+			"test \"${FIXTURE_TEST_FAILURE:-0}\" = 0\n")
 	f.git("init", "-q", "-b", "main")
 	f.git("config", "user.name", "Fixture")
 	f.git("config", "user.email", "fixture@example.invalid")

@@ -116,7 +116,11 @@ func newCIConfigureCommand() *cobra.Command {
 			if err != nil {
 				return fail(dir, err)
 			}
-			return emit(map[string]any{"node": node, "mise": string(toolchain.Render(configuration))})
+			rendered, err := toolchain.Render(configuration)
+			if err != nil {
+				return fail(dir, err)
+			}
+			return emit(map[string]any{"node": node, "mise": string(rendered)})
 		},
 	}
 }

@@ -113,6 +113,18 @@ type treeFile struct {
 	oid  string
 }
 
+// gitControlName reports whether a path component is one Git treats specially.
+// The comparison folds case: a case-insensitive filesystem accepts ".GITIGNORE"
+// as ".gitignore", so spelling alone must not decide whether the import is safe.
+func gitControlName(name string) bool {
+	for _, control := range []string{".git", ".gitignore", ".gitattributes"} {
+		if strings.EqualFold(name, control) {
+			return true
+		}
+	}
+	return false
+}
+
 // Repository inspects one shallow clone and exports selected skill directories.
 type Repository struct {
 	source string
@@ -130,7 +142,7 @@ func New(identifier, directory string) (*Repository, error) {
 	if err != nil {
 		return nil, err
 	}
-	env := removeEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), "OPENCODE_API_KEY")
+	env := removeEnv(gitx.Environment("GIT_TERMINAL_PROMPT=0"), "OPENCODE_API_KEY")
 	if err := gitx.SafeEnv("", env, "clone", "--quiet", "--depth", "1", "--no-checkout", "--",
 		"https://github.com/"+source+".git", directory); err != nil {
 		return nil, err
@@ -191,7 +203,6 @@ func (r *Repository) indexSkills() error {
 		return err
 	}
 	r.skills = map[string][]string{}
-	declared := map[string]string{}
 	for name, oid := range manifests {
 		text := strings.ReplaceAll(string(blobs[oid]), "\r\n", "\n")
 		if !strings.HasPrefix(text, "---\n") {
@@ -208,7 +219,6 @@ func (r *Repository) indexSkills() error {
 				break
 			}
 		}
-		declared[name] = label
 		if Name(label) {
 			r.skills[label] = append(r.skills[label], name)
 		}
@@ -275,11 +285,11 @@ func (r *Repository) Export(destination, name, target string, previous map[strin
 			return nil, fmt.Errorf("unsafe upstream file path")
 		}
 		for _, part := range strings.Split(name, "/") {
-			if part == ".." || part == ".git" {
+			if part == ".." || gitControlName(part) {
 				return nil, fmt.Errorf("unsafe upstream file path")
 			}
 		}
-		if path.Base(name) == ".gitignore" || path.Base(name) == ".gitattributes" {
+		if gitControlName(path.Base(name)) {
 			return nil, fmt.Errorf("upstream skill contains Git rules that could alter accepted content: %s", name)
 		}
 		if entry.kind != "blob" || (entry.mode != "100644" && entry.mode != "100755") {
