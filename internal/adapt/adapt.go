@@ -163,14 +163,6 @@ func isGitControlName(name string) bool {
 	return false
 }
 
-// pathBase is the file name of a slash-separated Git path.
-func pathBase(path string) string {
-	if index := strings.LastIndex(path, "/"); index >= 0 {
-		return path[index+1:]
-	}
-	return path
-}
-
 func hasPrefix(value string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(value, prefix) {

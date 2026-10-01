@@ -127,20 +127,17 @@ func Safe(dir string, args ...string) ([]byte, error) {
 
 // SafeEnv is Safe with an explicit environment.
 func SafeEnv(dir string, env []string, args ...string) error {
-	_, err := run(dir, env, nil, true, args)
-	return err
+	return runTo(dir, env, nil, true, args, io.Discard)
 }
 
 // Run executes a Git command whose failure only needs a status code.
 func Run(dir string, args ...string) error {
-	_, err := run(dir, nil, nil, false, args)
-	return err
+	return runTo(dir, nil, nil, false, args, io.Discard)
 }
 
 // RunEnv executes a Git command with an explicit environment, discarding output.
 func RunEnv(dir string, env []string, args ...string) error {
-	_, err := run(dir, env, nil, false, args)
-	return err
+	return runTo(dir, env, nil, false, args, io.Discard)
 }
 
 // OutputErr runs a Git command with stdin and tolerates the small set of
@@ -164,8 +161,7 @@ func OutputErr(dir string, args []string, stdin []byte, tolerated ...int) ([]byt
 
 // SafeRun executes a hardened Git command, discarding output.
 func SafeRun(dir string, args ...string) error {
-	_, err := run(dir, nil, nil, true, args)
-	return err
+	return runTo(dir, nil, nil, true, args, io.Discard)
 }
 
 // SafeStdin runs a hardened Git command with the given stdin.

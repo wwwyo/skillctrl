@@ -286,11 +286,9 @@ func TestApplyRefusesEditsOutsideTheSelection(t *testing.T) {
 	}
 }
 
-// TestValidatePathsRefusesNonRegularAndRuleEntries covers what a reviewer may
-// stage inside a selected skill. A symlink or a gitlink would let a later read
-// or write escape the skill directory, and Git rules would change what the
-// accepted hash is computed over. A deletion is ordinary work and must stay
-// possible.
+// TestWriteRepairArtifactBoundsGitOutput verifies refusal and artifact cleanup
+// for an oversized real Git patch. The streaming cap itself is covered by the
+// cappedOutput unit tests.
 func TestWriteRepairArtifactBoundsGitOutput(t *testing.T) {
 	r := newRepo(t)
 	plan := r.plan()
@@ -305,6 +303,8 @@ func TestWriteRepairArtifactBoundsGitOutput(t *testing.T) {
 	}
 }
 
+// TestValidatePathsRefusesNonRegularAndRuleEntries covers the regular entries,
+// deletions, and Git rules allowed inside a selected skill.
 func TestValidatePathsRefusesNonRegularAndRuleEntries(t *testing.T) {
 	cases := []struct {
 		name  string
