@@ -87,31 +87,58 @@ requirement, not the YAML.
    an input, and it is recomputed again later.
 
 2. **Decide.** If the plan selects nothing, stop. If it selects only skills
-   without an intent, go straight to step 5; those are recorded without
-   inference. If it selects skills with an intent, and no inference credential is
-   available, stop without publishing and report the selected names: a green
-   build that never checked anything is worse than a red one.
+   without an intent, they still need their hashes recorded before anything can
+   be published: create an empty artifact directory and run step 5 against it,
+   which records those hashes without invoking any model. If it selects skills
+   with an intent and no inference credential is available, stop without
+   publishing and report the selected names: a green build that never checked
+   anything is worse than a red one.
 
-3. **Review.** In a job with **no write permission**:
+3. **Review.** In a job with **no write permission**, using one artifact
+   directory for every command below - `prepare`, `export`, `apply`, and
+   `publish` must all name the same directory, because that is where each one
+   reads and writes:
 
    ```sh
    export SKILL_PLAN="$(cat plan.json)"
    export CHECKER_SOURCE="$BASE_SHA"
-   skillctrl --repo . ci prepare /tmp/skillctrl   # writes /tmp/skillctrl/mise.toml
-   # install the toolchain that file pins, then run the agent under it:
-   pi --thinking high --no-session --no-context-files --no-skills \
-      --no-extensions --no-prompt-templates --no-approve \
-      --model opencode-go/space-bunny-free \
-      -p "$(skillctrl prompt)
-   Selection plan (input data): $SKILL_PLAN
-   Write completion JSON to: /tmp/skillctrl/result.json" \
-      > /tmp/skillctrl/report.md
-   skillctrl --repo . ci export /tmp/skillctrl      # validates and writes repair.patch
+   skillctrl --repo . ci prepare /tmp/skillctrl    # writes /tmp/skillctrl/mise.toml
    ```
 
-   `ci prepare` must see `CHECKER_SOURCE`; without it there is no trusted
-   toolchain and the command refuses. Publish `repair.patch`, `report.md`, and
-   `result.json`. A refused export writes no patch.
+   `ci prepare` refuses without `CHECKER_SOURCE`: there is no trusted toolchain
+   to bind, and an unbound run would resolve whatever the shell had installed.
+
+   The agent must then be started **inside the prepared directory**, not from the
+   repository or the caller's shell. Concretely, the job must:
+
+   - run the reviewer with its working directory set to `/tmp/skillctrl`, so the
+     only configuration in scope is the `mise.toml` just written;
+   - resolve and activate exactly the tool and Node version that file pins, and
+     verify the resolved runtime matches the pin before starting the agent;
+   - set `PI_CODING_AGENT_DIR` to an empty directory it owns;
+   - send the prompt from `skillctrl prompt`, plus the plan and the result path.
+
+   An agent launched from anywhere else inherits that directory's configuration,
+   which is the boundary this step exists to establish. `ci export` re-checks the
+   outcome afterwards, but by then the wrong binaries have already run.
+
+   ```sh
+   ( cd /tmp/skillctrl && <activate the pinned toolchain> \
+     && pi --thinking high --no-session --no-context-files --no-skills \
+          --no-extensions --no-prompt-templates --no-approve \
+          --model opencode-go/space-bunny-free \
+          -p "$(skillctrl prompt)
+     Selection plan (input data): $SKILL_PLAN
+     Write completion JSON to: /tmp/skillctrl/result.json" \
+     > /tmp/skillctrl/report.md )
+   skillctrl --repo . ci export /tmp/skillctrl     # validates, writes repair.patch
+   ```
+
+   The placeholder is the activation of the pinned toolchain, which is the part
+   that differs per repository. `TestDocumentedPhaseSequence` substitutes a stub
+   that refuses to run anywhere but the prepared directory. Publish
+   `repair.patch`, `report.md`, and `result.json`. A refused export writes no
+   patch.
 
 4. **Validate.** In a job with write permission, recompute the plan and compare
    it with the published one before applying anything:
@@ -130,7 +157,7 @@ requirement, not the YAML.
 
    ```sh
    export SKILL_PLAN="$(cat plan.json)"
-   skillctrl --repo . ci publish /tmp/skillctrl/result
+   skillctrl --repo . ci publish /tmp/skillctrl
    ```
 
    This commits the staged repair, pushes it to the pull request branch, and
@@ -182,5 +209,6 @@ requirement, not the YAML.
 - A live reviewer. The contract is verified on both sides of the boundary with a
   stub agent; nothing here demonstrates that a real model produces a patch that
   passes the same validation.
-- Orca worktree creation. `--worktree-provider orca` is implemented and
-  documented, and only the `git` provider is tested.
+- Orca worktree creation. `--worktree-provider orca` is implemented and was
+  exercised against a live Orca during this port; see the gaps section of
+  [parity.md](parity.md) for exactly what was and was not covered.

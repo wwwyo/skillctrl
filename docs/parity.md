@@ -72,7 +72,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | An incomplete trusted configuration is refused | `internal/toolchain.Trusted` | `TestToolchainRefusesAnIncompleteConfiguration` |
 | A moved head is refused | `internal/adapt.ValidateHead` | `TestPrepareRefusesHeadDrift`, `TestApplyRecordsFromTheIndexOnly` |
 | A plan or checker source that is not a commit is refused | `internal/adapt.ValidateHead`, `internal/toolchain.Trusted` | `TestTrustedSourceMustBeACommit`, `TestTrustedSourceMustBeACommit/plan_without_a_commit` |
-| A refused validation leaves no staged repair behind | `internal/adapt.restoreIndex` | `TestApplyLeavesNoHalfValidatedRepair` |
+| A refused validation restores the caller's index exactly, including its own staged changes | `internal/adapt.saveIndex`, `internal/adapt.restoreIndex` | `TestApplyLeavesNoHalfValidatedRepair` |
 | The accepted hash comes from the validated index, not the working tree | `internal/adapt.Apply` | `TestApplyRecordsFromTheIndexOnly` |
 | Edits to an intent, another skill, or a policy file are refused | `internal/adapt.ValidatePaths` | `TestApplyRefusesEditsOutsideTheSelection` |
 | The accepted/unresolved partition must be complete and exact | `internal/adapt.Accepted` | `TestAcceptedRequiresACompletePartition` |

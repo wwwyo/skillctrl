@@ -449,25 +449,63 @@ func TestTrustedSourceMustBeACommit(t *testing.T) {
 }
 
 // TestApplyLeavesNoHalfValidatedRepair keeps a refusal from looking like
-// accepted work: once a patch has been applied to the index and the validation
-// fails, the index must be back where it started.
+// accepted work. The patch is untrusted and may touch any path, so the whole
+// index is restored, not only the paths the plan named.
 func TestApplyLeavesNoHalfValidatedRepair(t *testing.T) {
-	r := newRepo(t)
-	directory := t.TempDir()
-	plan := r.plan()
-	r.results(directory, nil, []string{"manual"}, "report")
-	r.patch(directory, r.stage(".agents/skills/manual/SKILL.md"))
-	r.reset()
-	before := r.git("diff", "--cached", "--name-only")
-	if err := adapt.Apply(r.dir, plan, directory); err == nil {
-		t.Fatal("an unresolved skill that changed was accepted")
-	}
-	if after := r.git("diff", "--cached", "--name-only"); after != before {
-		t.Fatalf("a refused validation left the repair staged:\nbefore %q\nafter %q", before, after)
-	}
-	if _, err := os.Stat(filepath.Join(r.dir, lock.Lock)); err == nil {
-		t.Fatal("a refused validation recorded a lock")
-	}
+	t.Run("a changed unresolved skill", func(t *testing.T) {
+		r := newRepo(t)
+		directory := t.TempDir()
+		plan := r.plan()
+		r.results(directory, nil, []string{"manual"}, "report")
+		r.patch(directory, r.stage(".agents/skills/manual/SKILL.md"))
+		r.reset()
+		before := r.git("diff", "--cached", "--name-only")
+		if err := adapt.Apply(r.dir, plan, directory); err == nil {
+			t.Fatal("an unresolved skill that changed was accepted")
+		}
+		if after := r.git("diff", "--cached", "--name-only"); after != before {
+			t.Fatalf("a refused validation left the repair staged:\nbefore %q\nafter %q", before, after)
+		}
+		if _, err := os.Stat(filepath.Join(r.dir, lock.Lock)); err == nil {
+			t.Fatal("a refused validation recorded a lock")
+		}
+	})
+	t.Run("a patch that touches paths the plan never named", func(t *testing.T) {
+		r := newRepo(t)
+		directory := t.TempDir()
+		plan := r.plan()
+		r.results(directory, []string{"manual"}, nil, "report")
+		// A patch that edits the selected skill and, at the same time, the lock
+		// and an unrelated file. Only the skill edit is permitted.
+		r.patch(directory, r.stage(".agents/skills/manual/SKILL.md",
+			".agents/skillctrl/intents/lock.json", "AGENTS.md"))
+		r.reset()
+		before := r.git("status", "--porcelain")
+		if err := adapt.Apply(r.dir, plan, directory); err == nil {
+			t.Fatal("a patch outside the selection was accepted")
+		}
+		if after := r.git("status", "--porcelain"); after != before {
+			t.Fatalf("a refused validation left changes behind:\nbefore %q\nafter %q", before, after)
+		}
+	})
+	t.Run("a pre-existing staged change survives a refusal", func(t *testing.T) {
+		r := newRepo(t)
+		directory := t.TempDir()
+		plan := r.plan()
+		r.results(directory, nil, []string{"manual"}, "report")
+		r.patch(directory, r.stage(".agents/skills/manual/SKILL.md"))
+		r.reset()
+		// The caller had staged something of its own before running the tool.
+		r.write("AGENTS.md", "staged by the caller\n")
+		r.git("add", "--", "AGENTS.md")
+		before := r.git("diff", "--cached", "--binary")
+		if err := adapt.Apply(r.dir, plan, directory); err == nil {
+			t.Fatal("an unresolved skill that changed was accepted")
+		}
+		if after := r.git("diff", "--cached", "--binary"); after != before {
+			t.Fatal("a refusal discarded the caller's own staged change")
+		}
+	})
 }
 
 // TestReadReportBounds keeps model output from becoming an unbounded GitHub

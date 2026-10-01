@@ -281,36 +281,76 @@ func Apply(dir string, plan lock.Plan, directory string) error {
 			return fmt.Errorf("review artifact is incomplete")
 		}
 	}
-	if patchErr == nil {
-		if len(patch) > MaxPatchBytes {
-			return fmt.Errorf("repair patch exceeds 5 MB")
-		}
-		if len(patch) > 0 {
-			if err := gitx.Run(dir, "apply", "--cached", "--binary", patchPath); err != nil {
-				return err
-			}
+	if patchErr == nil && len(patch) > MaxPatchBytes {
+		return fmt.Errorf("repair patch exceeds 5 MB")
+	}
+	// A refused repair must not leave anything staged. A patch is untrusted input
+	// and may touch any path, so the whole index is saved before applying it and
+	// restored on refusal: guessing which paths a rejected patch staged would be
+	// exactly the assumption that makes this check worthless.
+	saved, err := saveIndex(dir)
+	if err != nil {
+		return err
+	}
+	if patchErr == nil && len(patch) > 0 {
+		if err := gitx.Run(dir, "apply", "--cached", "--binary", patchPath); err != nil {
+			restoreIndex(dir, saved)
+			return err
 		}
 	}
-	// The patch is already in the index by this point. A refusal below must not
-	// leave it there: a half-validated repair staged in the caller's index looks
-	// like accepted work. Only the paths this step touched are restored.
 	if err := validateAndRecord(dir, plan, directory); err != nil {
-		restoreIndex(dir, plan)
+		restoreIndex(dir, saved)
 		return err
 	}
 	return nil
 }
 
-// restoreIndex unstages exactly the paths this command staged.
-func restoreIndex(dir string, plan lock.Plan) {
-	paths := make([]string, 0, len(plan.Skills))
-	for _, name := range plan.Skills {
-		paths = append(paths, lock.Skills+name+"/")
+// saveIndex copies the caller's index file aside.
+func saveIndex(dir string) (string, error) {
+	out, err := gitx.Output(dir, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return "", err
 	}
-	if len(paths) == 0 {
+	path := gitx.Trimmed(out)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// An unborn or freshly initialized repository may have no index yet; the
+		// absence is itself the state to restore.
+		return "", err
+	}
+	saved, err := os.CreateTemp("", "skillctrl-index-")
+	if err != nil {
+		return "", err
+	}
+	defer saved.Close()
+	if _, err := saved.Write(data); err != nil {
+		return "", err
+	}
+	return saved.Name(), nil
+}
+
+// restoreIndex puts the saved index back exactly as it was.
+func restoreIndex(dir string, saved string) {
+	if saved == "" {
 		return
 	}
-	_ = gitx.Run(dir, append([]string{"reset", "--quiet", "HEAD", "--"}, paths...)...)
+	defer os.Remove(saved)
+	out, err := gitx.Output(dir, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return
+	}
+	path := gitx.Trimmed(out)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(dir, path)
+	}
+	data, err := os.ReadFile(saved)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0o644)
 }
 
 func validateAndRecord(dir string, plan lock.Plan, directory string) error {
