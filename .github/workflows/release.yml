@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: [v*]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a commit on main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: 2026.9.12
+      - name: Validate and build
+        run: |
+          test -z "$(mise exec -- gofmt -l .)"
+          mise exec -- go test -race ./...
+          mise exec -- go vet ./...
+          mise exec -- go run ./tools/release "$RELEASE_TAG" dist
+          mkdir smoke
+          tar -xzf "dist/skillctrl_${RELEASE_TAG#v}_linux_amd64.tar.gz" -C smoke
+          test "$(smoke/skillctrl --version)" = "skillctrl version $RELEASE_TAG"
+          smoke/skillctrl schema
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/* --draft --verify-tag --title "$RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false --latest

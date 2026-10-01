@@ -1,19 +1,22 @@
+![skillctrl](docs/wordmark.svg)
+
 # skillctrl
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[日本語](docs/README.ja.md) · [Requirements](docs/requirements.md) · [CI integration](docs/ci.md) · [Parity](docs/parity.md)
+
 Manage agent skills in a Git repository without losing the intent behind your
 local adaptations.
 
-An agent skill is usually installed from somewhere else, then edited to fit your
+A skill is usually installed from somewhere else, then edited to fit your
 machine. The next update overwrites those edits, and there is no record of what
 they were for. `skillctrl` keeps the reason next to the skill: when an upstream
 release changes a skill you have edited, the change is re-applied to your
 version instead of replacing it, and the hashes of what you have actually
 accepted are recorded in Git.
 
-English is the default for output, documentation, and review reports. A
-[Japanese README](docs/README.ja.md) is available.
+English is the default for output, documentation, and review reports.
 
 ## Install
 
@@ -111,9 +114,9 @@ point it at:
 - a linked worktree is reused as-is;
 - otherwise `--worktree-provider git` (the default) creates a detached Git
   worktree in a temporary directory;
-- `--worktree-provider orca` delegates to an [Orca](https://github.com/) worktree
-  for callers that manage worktrees that way. Set `SKILLCTRL_WORKTREE_PROVIDER`
-  to choose without a flag.
+- `--worktree-provider orca` delegates to an Orca worktree for callers that
+  manage worktrees that way. Set `SKILLCTRL_WORKTREE_PROVIDER` to choose
+  without a flag.
 
 Intent review runs in an isolated agent process with no session, no context
 files, no skills, no extensions, no prompt templates, and no auto-approval, in a
@@ -148,8 +151,8 @@ skillctrl schedule prepare|restore|publish <directory>
 skillctrl prompt            # the review contract, embedded in this binary
 ```
 
-See [docs/ci.md](docs/ci.md) for a complete workflow and
-[docs/parity.md](docs/parity.md) for the behavior-to-test map.
+[docs/ci.md](docs/ci.md) has a complete workflow, and
+[docs/parity.md](docs/parity.md) maps every behavior to the test that pins it.
 
 ## Development
 
@@ -160,6 +163,7 @@ mise exec -- go vet ./...
 mise exec -- go build .
 ```
 
-Read [docs/requirements.md](docs/requirements.md) before changing behavior.
+Read [docs/requirements.md](docs/requirements.md) before changing behavior, and
+[docs/releasing.md](docs/releasing.md) before cutting a release.
 
 Licensed under the [MIT license](LICENSE).
