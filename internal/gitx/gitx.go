@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -42,6 +43,12 @@ func (e *ExitError) Unwrap() error { return e.Err }
 // run executes Git in dir and returns stdout. Stdin is supplied separately from
 // the environment so callers can stage a private index without racing.
 func run(dir string, env []string, stdin []byte, hardened bool, args []string) ([]byte, error) {
+	var stdout bytes.Buffer
+	err := runTo(dir, env, stdin, hardened, args, &stdout)
+	return stdout.Bytes(), err
+}
+
+func runTo(dir string, env []string, stdin []byte, hardened bool, args []string, stdout io.Writer) error {
 	full := []string{"git"}
 	if hardened {
 		// A fresh object write must not run hooks or consult the fsmonitor
@@ -60,8 +67,8 @@ func run(dir string, env []string, stdin []byte, hardened bool, args []string) (
 	if stdin != nil {
 		command.Stdin = bytes.NewReader(stdin)
 	}
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
+	var stderr bytes.Buffer
+	command.Stdout = stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
 		code := 1
@@ -69,10 +76,16 @@ func run(dir string, env []string, stdin []byte, hardened bool, args []string) (
 		if errors.As(err, &exit) {
 			code = exit.ExitCode()
 		}
-		return stdout.Bytes(), &ExitError{Args: full, Code: code,
+		return &ExitError{Args: full, Code: code,
 			Detail: strings.TrimSpace(stderr.String()), Err: err}
 	}
-	return stdout.Bytes(), nil
+	return nil
+}
+
+// Stream writes Git output incrementally so callers can bound or inspect large
+// blobs without first retaining their complete contents.
+func Stream(dir string, output io.Writer, args ...string) error {
+	return runTo(dir, nil, nil, false, args, output)
 }
 
 // Environment drops inherited repository context before applying intentional

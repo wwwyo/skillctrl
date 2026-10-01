@@ -142,8 +142,10 @@ func checkEntry(header, path string) error {
 	default:
 		return fmt.Errorf("repair staged a non-regular entry inside a skill: %s", path)
 	}
-	if isGitControlName(pathBase(path)) {
-		return fmt.Errorf("repair staged Git rules inside a skill: %s", path)
+	for _, component := range strings.Split(path, "/") {
+		if isGitControlName(component) {
+			return fmt.Errorf("repair staged Git rules inside a skill: %s", path)
+		}
 	}
 	return nil
 }
@@ -244,11 +246,11 @@ func ValidateSecret(dir, directory string, patch []byte, secret string) error {
 		if raw == "" {
 			continue
 		}
-		content, err := gitx.Output(dir, "show", ":"+raw)
-		if err != nil {
+		scanner := secretScanner{key: key}
+		if err := gitx.Stream(dir, &scanner, "show", ":"+raw); err != nil {
 			return err
 		}
-		if contains(content, key) {
+		if scanner.found {
 			return fmt.Errorf("inference credential found in staged content; artifact export refused")
 		}
 	}
@@ -343,10 +345,15 @@ func WriteRepairArtifact(dir string, plan lock.Plan, directory, secret string) e
 	if _, err := Accepted(dir, plan, directory); err != nil {
 		return err
 	}
-	patch, err := gitx.Output(dir, "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-renames")
+	output := cappedOutput{remaining: MaxPatchBytes}
+	err := gitx.Stream(dir, &output, "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-renames")
+	if output.exceeded {
+		return fmt.Errorf("repair patch exceeds 5 MB")
+	}
 	if err != nil {
 		return err
 	}
+	patch := output.buffer.Bytes()
 	// Every artifact is bounded before it is examined or written. The checks are
 	// independent of the credential check and never replace it: a size refusal
 	// must not become a way to skip screening.

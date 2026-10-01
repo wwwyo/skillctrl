@@ -291,6 +291,20 @@ func TestApplyRefusesEditsOutsideTheSelection(t *testing.T) {
 // or write escape the skill directory, and Git rules would change what the
 // accepted hash is computed over. A deletion is ordinary work and must stay
 // possible.
+func TestWriteRepairArtifactBoundsGitOutput(t *testing.T) {
+	r := newRepo(t)
+	plan := r.plan()
+	directory := t.TempDir()
+	r.write(".agents/skills/manual/SKILL.md", strings.Repeat("x", adapt.MaxPatchBytes+100))
+	r.results(directory, []string{"manual"}, nil, "review report")
+	if err := adapt.WriteRepairArtifact(r.dir, plan, directory, "fixture-secret"); err == nil || !strings.Contains(err.Error(), "exceeds 5 MB") {
+		t.Fatalf("oversized Git patch was exported: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, adapt.PatchFile)); !os.IsNotExist(err) {
+		t.Fatalf("a partial oversized artifact survived: %v", err)
+	}
+}
+
 func TestValidatePathsRefusesNonRegularAndRuleEntries(t *testing.T) {
 	cases := []struct {
 		name  string
