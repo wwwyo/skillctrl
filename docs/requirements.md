@@ -23,7 +23,7 @@ The existing implementation is in the dotfiles checkout used to start this task:
 ## Distribution
 
 - Public repository `wwwyo/skillctrl`, module `github.com/wwwyo/skillctrl`, MIT copyright 2026 wwwyo.
-- Root main package so `go install github.com/wwwyo/skillctrl@v0.1.0` works. Prefer the standard library; external dependencies must be exact and older than seven days at installation.
+- Root main package so `go install github.com/wwwyo/skillctrl@v0.1.0` works. Use `github.com/spf13/cobra` for the CLI command tree, flags, help, and argument validation (explicit user request). Pin the newest stable release published at least seven days before installation; v1.10.2 currently meets that condition. Prefer the standard library for other functionality; external dependencies must be exact and older than seven days at installation.
 - Release assets and checksums for macOS/Linux amd64/arm64, with truthful platform documentation. Use a tagged reproducible release workflow and meaningful CI.
 - Verify `mise` GitHub backend can install the published archive and run its binary. Research actual archive selection and checksums against official docs.
 - Publish a functional custom Homebrew tap (`wwwyo/homebrew-tap` if available, or another explicit project-specific tap), checksummed formula and a smoke test. Do not claim Homebrew core inclusion or bare `brew install skillctrl` unless actually achieved. No plaintext cross-repository publishing token; manual tap updates are acceptable for the initial release.
