@@ -2,7 +2,7 @@
 
 # skillctrl
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [日本語](docs/README.ja.md) · [Requirements](docs/requirements.md) · [CI integration](docs/ci.md) · [Parity](docs/parity.md)
 
@@ -76,9 +76,11 @@ skillctrl remove agent-browser
 ```
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `2` means
-adaptation finished with unresolved skills, exit `1` means failure. Either way
-the work stays in the working directory, and skillctrl never commits, pushes, or
-opens a pull request for you.
+adaptation finished with unresolved skills, exit `1` means failure. These local
+commands leave the work in the working directory and never commit, push, or open
+a pull request. The `ci` and `schedule` phases are the deliberate exception: they
+exist to commit a validated repair, push it, and report on the pull request, and
+they are documented separately in [docs/ci.md](docs/ci.md).
 
 ## What it will and will not do
 
