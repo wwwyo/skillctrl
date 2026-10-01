@@ -1,5 +1,4 @@
-// Package gitx runs Git plumbing without letting hooks, filters, or user
-// configuration reinterpret repository data.
+// Package gitx runs Git plumbing in an explicitly selected repository.
 //
 // Two entry points exist because the original design treats trust levels
 // differently. Run is plain Git for operations on the caller's own checkout

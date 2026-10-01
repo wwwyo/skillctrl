@@ -2,7 +2,7 @@
 
 # skillctrl
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
+[![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](../go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 
 [English](../README.md) · [移植・公開の要件](requirements.md) · [CI での使い方](ci.md) · [対応表](parity.md)
 
@@ -29,9 +29,9 @@ brew tap wwwyo/tap
 brew install wwwyo/tap/skillctrl
 ```
 
-3 つの経路は同じコマンドと 提供する版を入れます（`go install` ビルドと
-release archive はバイナリ列バイトが一致するとは限りません）。
-`skillctrl --version` が版を表示します。
+3 つの経路で同じバージョンのコマンドをインストールできます。
+`go install` でビルドしたバイナリと release archive のバイナリは、同一の
+バイト列になるとは限りません。バージョンは `skillctrl --version` で確認できます。
 
 ## リポジトリ側の準備
 
@@ -72,8 +72,9 @@ skillctrl remove agent-browser
 ```
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 2 は再適応の一部が
-未確定、exit 1 は失敗です。作業内容は作業ディレクトリに残るため、commit・push・
-PR 作成は skillctrl 側では行いません。
+未確定、exit 1 は失敗です。上記のローカルコマンドは作業内容を作業ディレクトリに
+残し、commit・push・PR 作成は行いません。`ci` / `schedule` の公開コマンドは
+検証した変更を commit・push するためのもので、[CI の文書](ci.md)に手順を記載しています。
 
 ## 安全の根拠
 
