@@ -1,4 +1,8 @@
+![skillctrl](docs/wordmark.svg)
+
 # skillctrl
+
+[日本語](docs/README.ja.md) · [Requirements](docs/requirements.md)
 
 Manage agent skills without losing the local intent behind your adaptations.
 
