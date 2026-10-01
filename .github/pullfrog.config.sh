@@ -39,7 +39,7 @@ pf_set review.own-prs 'false'
 pf_set review.status-check 'true'
 pf_set review.approval-check 'true'
 pf_set issue.mode 'none'
-pf_set issue.non-collaborators 'true'
+pf_set issue.non-collaborators 'false'
 pf_set label.enabled 'false'
 pf_set address-reviews.enabled 'true'
 pf_set fix-ci.own-prs 'true'
@@ -60,7 +60,7 @@ ln -sf "$HOME"/.local/share/mise/shims/* "$HOME"/.local/bin/ 2>/dev/null || true
 PULLFROG_HOOK_SETUP
 
 # explicit unsets — keep the backend converged on this file
-# `instructions` stays unset so the org default applies (see pullfrog.org.config.sh)
+# `instructions` stays unset so the organization defaults apply.
 pf_unset instructions
 pf_unset env-allowlist
 pf_unset hooks.post-checkout

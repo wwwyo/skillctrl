@@ -1,2 +1,2 @@
 scripts:
-  setup: '[ ! -x "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh" ] || "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh"'
+  setup: 'setup_helper="${SKILLCTRL_WORKTREE_SETUP_HELPER:-$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh}"; [ ! -x "$setup_helper" ] || "$setup_helper"'

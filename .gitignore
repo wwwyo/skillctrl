@@ -7,3 +7,8 @@
 /dist/
 /vendor/
 *.local.*
+/.claude/settings.local.json
+/.codex/langfuse.json
+/.pi/settings.json
+/.pi/npm/
+/mise.local.toml
