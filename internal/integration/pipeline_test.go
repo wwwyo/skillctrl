@@ -166,6 +166,7 @@ func phaseRepository(t *testing.T) (string, string, string, *env) {
 	// the physical path, so every expectation uses it too.
 	repo = physical(t, repo)
 	caller = physical(t, caller)
+	tools = physical(t, tools)
 	write(t, filepath.Join(repo, ".agents/skills/manual/SKILL.md"), "original v1\n")
 	write(t, filepath.Join(repo, ".agents/skills/plain/SKILL.md"), "original v1\n")
 	write(t, filepath.Join(repo, ".agents/skillctrl/intents/manual.md"), "keep the default browser\n")
@@ -197,6 +198,8 @@ printf '{"PATH":"`+tools+`","OPENCODE_API_KEY":"`+credential+`"}'
 set -euo pipefail
 [ "$PWD" = "`+repo+`" ] || { echo "reviewer ran in $PWD" >&2; exit 1; }
 [ "${PATH:-}" = "`+tools+`" ] || { echo "reviewer PATH is not the trusted one" >&2; exit 1; }
+[ "${OPENCODE_API_KEY:-}" = "`+credential+`" ] || { echo "reviewer credential is not the resolved one" >&2; exit 1; }
+[ -f "${PI_CODING_AGENT_DIR}/models.json" ] || { echo "trusted models are missing" >&2; exit 1; }
 case " $* " in
   *" --no-context-files "*) ;;
   *) echo 'reviewer ran without isolation flags' >&2; exit 1;;
@@ -420,7 +423,18 @@ func runReviewer(t *testing.T, repo, artifacts, trustedTools string, environment
 		t.Fatal(err)
 	}
 	defer report.Close()
-	agent := exec.Command(filepath.Join(trustedTools, "pi"),
+	resolver := exec.Command(filepath.Join(trustedTools, "mise"), "env", "--json")
+	resolver.Dir = artifacts
+	resolver.Env = environment.list()
+	resolved, err := resolver.Output()
+	if err != nil {
+		t.Fatalf("resolve the prepared toolchain: %v", err)
+	}
+	var toolchain map[string]string
+	if err := json.Unmarshal(resolved, &toolchain); err != nil {
+		t.Fatal(err)
+	}
+	agent := exec.Command(filepath.Join(toolchain["PATH"], "pi"),
 		"--thinking", "high", "--no-session", "--no-context-files", "--no-skills",
 		"--no-extensions", "--no-prompt-templates", "--no-approve",
 		"--model", "opencode-go/space-bunny-free", "-p",
@@ -431,12 +445,15 @@ func runReviewer(t *testing.T, repo, artifacts, trustedTools string, environment
 	// The reviewing job installs the toolchain that ci prepare pinned and runs
 	// the agent under it, so the agent sees that PATH and nothing else.
 	agent.Env = environment.with(
-		"PATH", trustedTools,
+		"PATH", toolchain["PATH"],
+		"OPENCODE_API_KEY", toolchain["OPENCODE_API_KEY"],
 		"PI_CODING_AGENT_DIR", filepath.Join(artifacts, "agent"),
 	).list()
 	if err := os.MkdirAll(filepath.Join(artifacts, "agent"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	write(t, filepath.Join(artifacts, "agent", "models.json"),
+		git(t, repo, "show", environment.values["CHECKER_SOURCE"]+":home/dot_pi/agent/models.json"))
 	agent.Stdout = report
 	agent.Stderr = os.Stderr
 	if err := agent.Run(); err != nil {
@@ -463,7 +480,7 @@ func cloneAt(t *testing.T, repo, commit, target string) string {
 
 // artifactsFor names the directory the reviewing job prepares its toolchain in.
 func artifactsFor(tools string) string {
-	return filepath.Join(filepath.Dir(tools), "artifacts")
+	return filepath.Join(filepath.Dir(tools), "caller", "artifacts")
 }
 
 func physical(t *testing.T, path string) string {
