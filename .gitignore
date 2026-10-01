@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.local
+*.log
+.agent/
+/skillctrl
+/dist/
+/vendor/
+*.local.*
