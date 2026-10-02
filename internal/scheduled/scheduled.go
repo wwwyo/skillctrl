@@ -121,6 +121,14 @@ func ValidateImport(dir, base, tree string) error {
 	for _, name := range registered {
 		entry, _ := after.Skills[name].(map[string]any)
 		original, _ := before.Skills[name].(map[string]any)
+		_, merged := entry["sources"]
+		_, wasMerged := original["sources"]
+		if merged || wasMerged {
+			if err := upstream.ValidateMergedImport(dir, base, tree, name, original, entry); err != nil {
+				return err
+			}
+			continue
+		}
 		if field(entry, "source") != field(original, "source") || field(entry, "sourceType") != "github" {
 			return fmt.Errorf("scheduled update changed upstream identity: %s", name)
 		}

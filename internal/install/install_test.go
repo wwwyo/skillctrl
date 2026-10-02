@@ -44,6 +44,29 @@ func newRepo(t *testing.T) string {
 	return dir
 }
 
+func TestPrepareSkillsRefusesSymlinkedAncestorsWithoutWritingOutside(t *testing.T) {
+	for _, relative := range []string{".agents", ".agents/skills"} {
+		t.Run(relative, func(t *testing.T) {
+			dir, outside := t.TempDir(), t.TempDir()
+			if relative == ".agents/skills" {
+				if err := os.Mkdir(filepath.Join(dir, ".agents"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Symlink(outside, filepath.Join(dir, filepath.FromSlash(relative))); err != nil {
+				t.Fatal(err)
+			}
+			if err := install.PrepareSkills(dir); err == nil {
+				t.Fatal("symlinked ancestor was accepted")
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil || len(entries) != 0 {
+				t.Fatal("directory preparation wrote through a symlink")
+			}
+		})
+	}
+}
+
 // TestNamesRejectsEscapes is the first line of defense: a skill name that could
 // point outside the skills directory never reaches the filesystem.
 func TestNamesRejectsEscapes(t *testing.T) {

@@ -87,6 +87,7 @@ func newSchemaCommand() *cobra.Command {
 			return emit(map[string]any{
 				"commands": map[string]string{
 					"add":      "source --skill name [--skill name]",
+					"merge":    "name --from owner/repo:skill [--from owner/repo:skill]",
 					"update":   "[names...]",
 					"remove":   "names...",
 					"record":   "names...",
@@ -99,6 +100,11 @@ func newSchemaCommand() *cobra.Command {
 				"sources": "GitHub owner/repo or HTTPS repository URL",
 				"options": []string{"--repo", "--dry-run", "--worktree-provider"},
 				"output":  "JSON; logs on stderr; exit 2 means unresolved adaptation",
+				"merge": map[string]any{
+					"requires":  "non-empty .agents/skillctrl/intents/<name>.md",
+					"sources":   "repeatable --from; replaces the target's sources array",
+					"originals": upstream.SourceDirectory + "/<index>/ inside the target skill; immutable during review",
+				},
 			})
 		},
 	}
@@ -152,6 +158,28 @@ func newUpdateCommand() *cobra.Command {
 	}
 }
 
+func newMergeCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "merge name",
+		Short: "Merge tracked upstream skills using saved intent",
+		Long: "Merge named GitHub skills into one repository-local skill. Save the integration\n" +
+			"policy in .agents/skillctrl/intents/<name>.md first. --from is repeatable and\n" +
+			"replaces the target's sources array; update subsequently refreshes every source.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			values, _ := command.Flags().GetStringArray("from")
+			inputs, err := upstream.ParseInputs(values)
+			if err != nil {
+				return fail("", err)
+			}
+			return runInstall(command, "merge", "", args, inputs...)
+		},
+	}
+	command.Flags().StringArray("from", nil, "upstream owner/repo:skill; repeatable and required")
+	_ = command.MarkFlagRequired("from")
+	return command
+}
+
 func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove names...",
@@ -163,8 +191,8 @@ func newRemoveCommand() *cobra.Command {
 	}
 }
 
-// runInstall performs the shared add, update, and remove flow.
-func runInstall(command *cobra.Command, kind, source string, requested []string) error {
+// runInstall performs the shared add, merge, update, remove, and record flow.
+func runInstall(command *cobra.Command, kind, source string, requested []string, inputs ...upstream.Input) error {
 	repo, err := repository(command)
 	if err != nil {
 		return fail("", err)
@@ -185,8 +213,12 @@ func runInstall(command *cobra.Command, kind, source string, requested []string)
 	}
 	dry, _ := command.Flags().GetBool("dry-run")
 	if dry {
-		return emit(map[string]any{"dry_run": true, "repo": repo, "command": kind,
-			"source": source, "skills": values})
+		result := map[string]any{"dry_run": true, "repo": repo, "command": kind,
+			"source": source, "skills": values}
+		if kind == "merge" {
+			result["sources"] = inputs
+		}
+		return emit(result)
 	}
 	if kind == "record" {
 		return runRecord(repo, values)
@@ -212,10 +244,20 @@ func runInstall(command *cobra.Command, kind, source string, requested []string)
 		return fail(worktree, err)
 	}
 	defer os.RemoveAll(isolated)
+	// An empty skills directory in the main checkout has no Git tree entry, so
+	// a freshly isolated checkout needs it recreated before its first import.
+	if err := install.PrepareSkills(worktree); err != nil {
+		return fail(worktree, err)
+	}
 	if err := install.CheckSkills(filepath.Join(worktree, filepath.FromSlash(install.SkillsDir))); err != nil {
 		return fail(worktree, err)
 	}
-	target, upstreamLock, err := upstream.Install(worktree, kind, values, identifier, isolated)
+	var target, upstreamLock string
+	if kind == "merge" {
+		target, upstreamLock, err = upstream.Merge(worktree, values[0], inputs, isolated)
+	} else {
+		target, upstreamLock, err = upstream.Install(worktree, kind, values, identifier, isolated)
+	}
 	if err != nil {
 		return fail(worktree, err)
 	}

@@ -38,6 +38,25 @@ throwaway Git repositories and fake upstreams reached through Git's
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | `record` accepts a manual edit without a worktree or staging change | `internal/cli.runRecord` | `TestInstallerLifecycle/record_preserves_staging_in_the_main_checkout`, `TestWorkingTreePreserveStaging` |
 
+## Multiple upstream inputs
+
+These behaviors extend the previous single-source implementation.
+
+| Behavior | Go code | Test |
+| --- | --- | --- |
+| All inputs are recorded in order; changing the second input updates the merged body | `internal/upstream.Merge`, `internal/install.Adapt` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
+| Unchanged originals preserve output; intent-only edits do not trigger integration | `internal/upstream.mergeSkill`, `internal/lock.Select` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
+| Unresolved integration retains the accepted hash and can retry against the same originals | `internal/install.Adapt` | `TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries` |
+| Editing immutable originals cannot advance acceptance or leave staging behind | `internal/adapt.Accepted` | `TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging` |
+| Dry run and failure in a later input do not write partial results; saved intent is required | `internal/cli.runInstall`, `internal/upstream.mergeSkill` | `TestMergeDryRunAndPreparationFailureDoNotWrite` |
+| An ignored merged entrypoint is refused; the first merge in a main checkout creates its empty skills directory in the isolated worktree | `internal/upstream.mergeSkill`, `internal/install.PrepareSkills` | `TestMergeDryRunAndPreparationFailureDoNotWrite`, `TestFirstMergeInMainCheckoutRecreatesTheEmptySkillsDirectory` |
+| Malformed or duplicate source registrations are refused; legacy records are preserved | `internal/upstream.Load`, `internal/upstream.sources` | `TestSourcesArrayRejectsInvalidIdentitiesAndPreservesLegacyRecords` |
+| Inputs from separate repositories follow relocation and retain executable modes; snapshot manifests are not independently discovered | `internal/upstream.mergeSkill`, `internal/upstream.indexSkills` | `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
+| Scheduled preparation validates every original and preserves output until review | `internal/upstream.ValidateMergedImport` | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
+
+Integration inference uses the same stubbed reviewer as local adaptation. Live
+multi-source synthesis and hosted scheduled publication are unverified.
+
 ## Accepted hashes and selection
 
 | Behavior | Go code | Test |

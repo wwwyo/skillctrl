@@ -10,6 +10,7 @@
 package adapt
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/lock"
 	"github.com/wwwyo/skillctrl/internal/toolchain"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 // Bounds on untrusted model output. A report or patch larger than this is not
@@ -288,6 +290,23 @@ func Accepted(dir string, plan lock.Plan, directory string) ([]string, error) {
 	current, err := lock.Snapshot(dir, gitx.Trimmed(tree))
 	if err != nil {
 		return nil, err
+	}
+	for _, name := range plan.ReviewSkills {
+		before, after := plan.InputTrees[name], current.Skills[name]
+		if before == "" || after == "" {
+			continue
+		}
+		original, err := gitx.Output(dir, "ls-tree", before, "--", upstream.SourceDirectory)
+		if err != nil {
+			return nil, err
+		}
+		candidate, err := gitx.Output(dir, "ls-tree", after, "--", upstream.SourceDirectory)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(original, candidate) {
+			return nil, fmt.Errorf("repair changed immutable upstream originals: %s", name)
+		}
 	}
 	for _, name := range result.Accepted {
 		if _, ok := plan.InputTrees[name]; !ok {

@@ -82,6 +82,60 @@ a pull request. The `ci` and `schedule` phases are the deliberate exception: the
 exist to commit a validated repair, push it, and report on the pull request, and
 they are documented separately in [docs/ci.md](docs/ci.md).
 
+## Agent skill
+
+The distributable [skillctrl skill](skills/skillctrl/SKILL.md) guides agents through
+discovery, named imports, customization, updates, and removal. It includes an
+on-demand authoring guide for creating and improving skills, without requiring
+separate `find-skills` or `skill-creator` installations.
+
+Once this package is published in the repository, import it into your chosen
+skills repository:
+
+```sh
+skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl --skill skillctrl
+```
+
+The CLI must already be installed and the target must contain `.agents/skills/`.
+Inspect the working copy returned in the command's JSON output before integrating
+the result. The source package lives in `skills/`; installed skills live in the
+target's `.agents/skills/`. The skill and CLI are separate artifacts.
+
+## Merge upstream skills
+
+One managed skill can track multiple upstream inputs in a `sources` array.
+First save the integration policy in
+`.agents/skillctrl/intents/combined.md` and prepare a clean checkout through your
+repository's normal workflow. Then select the inputs explicitly:
+
+```sh
+skillctrl merge combined \
+  --from owner/discovery:find-skills \
+  --from owner/authoring:skill-creator
+
+# Checks every registered original and adapts the merged skill when needed
+skillctrl update combined
+```
+
+The repositories above are placeholders. `merge` requires a build containing
+this feature; until a release includes it, build from this source checkout.
+The full input list replaces the target's previous registrations. Each input
+records its own source, skill name, commit, path, and original tree hash. Existing
+single-source registrations retain their format.
+
+Originals live in `.agents/skills/combined/.skillctrl-sources/<index>/` so resource
+names cannot collide and review can use the complete inputs. The reviewer keeps
+those originals intact and integrates their behavior into the current entrypoint
+according to the intent. Conflicts remain unresolved with the old accepted hash.
+Changing an intent alone does not re-run integration; deliberately edit and verify
+the merged skill when applying a new policy to unchanged originals.
+
+Use the `repo` returned by `merge` or `update` for subsequent inspection. The
+result is one repository-local skill, and can be distributed as that directory.
+Its snapshot manifests are excluded from skillctrl's discovery. Older binaries
+cannot manage multi-source lock entries. The optional reviewer toolchain and
+models must be configured as described in [CI integration](docs/ci.md).
+
 ## What it will and will not do
 
 - **Originals are read from Git, not installed.** Tracked files come straight

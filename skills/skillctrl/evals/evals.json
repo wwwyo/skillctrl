@@ -1,0 +1,41 @@
+{
+  "skill_name": "skillctrl",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want a browser automation skill for /tmp/project. I have not selected one yet. Explain the commands and review steps you would use; this is a read-only planning exercise, so do not search the network, install anything, or execute commands.",
+      "expected_output": "A discovery and source-inspection plan, with repository-local named import only after selection and installation authorization.",
+      "files": [],
+      "expectations": [
+        "Uses skillctrl find with specific task keywords.",
+        "Inspects the candidate skill body and relevant scripts; does not rely only on popularity.",
+        "Does not treat the discovery request as authorization to install.",
+        "Uses --repo /tmp/project for a proposed import and does not use --global."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I ran an update from /tmp/project. It exited 2 and stdout reported {\"repo\":\"/tmp/skillctrl-worktree-123/worktree\",\"skills\":[\"browser\"],\"unresolved\":[\"browser\"],\"report\":\"/tmp/skillctrl-123/review.md\"}. I only changed the intent document before the update. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
+      "expected_output": "Investigates the returned worktree and report, preserves unresolved accepted hashes, and explains that an intent-only edit does not itself trigger adaptation.",
+      "files": [],
+      "expectations": [
+        "Uses the returned /tmp/skillctrl-worktree-123/worktree path for follow-up inspection.",
+        "Treats exit 2 as unresolved adaptation and inspects the report.",
+        "Does not propose record merely to clear the unresolved state.",
+        "Explains that changing intent alone does not trigger adaptation."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Turn our repeated release checklist into a public skill named release-check in a repository whose distributable packages live in skills/. It must work when copied to another machine. Outline the files, checks, and acceptance steps; do not write files or execute commands in this planning exercise.",
+      "expected_output": "A portable skill package and realistic evaluation plan, distinguishing the distribution source from an installed repository-local skill.",
+      "files": [],
+      "expectations": [
+        "Places the distribution entrypoint at skills/release-check/SKILL.md with matching frontmatter name.",
+        "Defines task-specific triggers and observable completion criteria.",
+        "Checks portability and includes realistic evaluation cases.",
+        "Does not record the distribution source as if it were already installed in .agents/skills."
+      ]
+    }
+  ]
+}
