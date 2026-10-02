@@ -16,7 +16,8 @@ a skill you have edited, the change is re-applied to your version instead of
 replacing it, and the hashes of what you have actually accepted are recorded in
 Git.
 
-English is the default for output, documentation, and review reports.
+English is the default for output, code comments, documentation, and review reports.
+The linked Japanese README provides a translated introduction.
 
 ## Install
 
