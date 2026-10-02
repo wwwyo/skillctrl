@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="312" height="88" viewBox="0 0 312 88" role="img" aria-labelledby="title">
+  <title id="title">skillctrl</title>
+  <desc>Two distinct l letters join below the baseline, representing multiple upstream inputs becoming one managed skill.</desc>
+  <g fill="none" stroke="#24292f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M38 35 C33 31 18 30 16 39 C13 49 37 47 38 57 C39 68 22 71 15 64" />
+    <path d="M52 20 V68 M75 34 L52 51 L75 68" transform="translate(-2 0)" />
+    <path d="M89 35 H97 V68 M88 68 H106" transform="translate(-3 0)" />
+    <path d="M126 20 H133 V59 Q133 68 143 68" stroke="#087f8c" transform="translate(-14 0)" />
+    <path d="M162 20 H169 V59 Q169 68 179 68" stroke="#087f8c" transform="translate(-24 0)" />
+    <path d="M129 68 V72 Q129 78 135 78 H149 Q155 78 155 72 V68" stroke-width="3" stroke="#087f8c" />
+    <path d="M218 37 C204 25 191 35 191 51 C191 67 205 75 218 63" transform="translate(-27 0)" />
+    <path d="M233 35 H256 M243 23 V58 Q243 70 256 66" transform="translate(-31 0)" />
+    <path d="M270 68 V35 M270 47 Q277 31 291 35" transform="translate(-31 0)" />
+    <path d="M306 20 H313 V59 Q313 68 323 68" transform="translate(-36 0)" />
+    <path d="M97 21 V22" stroke-width="7.5" transform="translate(-3 0)" />
+  </g>
+</svg>
