@@ -18,7 +18,7 @@ The existing implementation is in the dotfiles checkout used to start this task:
 - Preserve clean-checkout requirements, isolated worktree mutation, atomic preparation, and no implicit commit/push/PR by ordinary installer commands. Preserve the Orca worktree integration for current users. Remove hardcoded dotfiles ownership/toolchain assumptions so other Git repositories can use the tool; document and test the chosen portable isolation path instead of silently weakening safety.
 - Preserve pi/OpenCode Go adaptation compatibility and its existing model exception. External adaptation dependencies are optional for find/status/record and skills without intent. Isolate the agent, enforce target-skill-only changes, reject secret leakage in exported artifacts, and retain unresolved work/report on failure. Do not implement a Go wrapper which merely invokes the old Python code.
 - Preserve CI plan, trusted checker/input separation, accepted/unresolved partition checks, head-drift rejection, upstream fixed-input verification, scheduled update preparation, final lock status, and safe draft publication behavior. Provide reusable Go commands and documented CI integration. Do not publish a trimmed installer as a full requirements-preserving rewrite.
-- Keep prompts, help, errors, public docs and release notes English by default. An accompanying concise Japanese README may be provided.
+- Keep code comments, prompts, help, errors, public docs, PR descriptions, review reports and release notes English by default. An accompanying concise Japanese README may be provided, with English comments in its code examples.
 
 ## Multiple upstream inputs
 
@@ -42,6 +42,8 @@ The existing implementation is in the dotfiles checkout used to start this task:
 Port meaningful existing fixtures, including adversarial inputs, stage-preservation, no-write dry runs, adaptation rejection and independent CI validation. Run formatting, tests, race tests where appropriate, vet and cross-build checks. Record a source-behavior-to-Go-test parity table in docs; name actual gaps rather than hiding them.
 
 Follow project-setup: pinned mise tools, English AGENTS/README and linked Japanese README, CLAUDE redirect, public MIT repo, auto-delete merged branches. Enable personal Langfuse opt-in for all four agents and configure Pullfrog for this public repository (explicit user request). Keep telemetry opt-in and credentials in ignored local files. No unapproved skill installation. Create the mandatory personal project wiki entry through the wiki/delegate workflow, including index, log, project-focus and lint registration; keep personal project records outside this public repository.
+
+Configure repository-level Pullfrog instructions for English public output while retaining P0–P3 review severity labels. Verify an actual English review rather than relying on the language of the configuration file. Enable public-repository security features and weekly Dependabot updates for Go modules and GitHub Actions with a seven-day cooldown; exclude Pullfrog's vendor-managed action from version updates.
 
 Do not modify or replace dotfiles' deployed implementation in this task. The source checkout is read-only. Commit/push/create public repo, release/tag and custom Homebrew tap are authorized for this new project, as requested by the user. If using a PR, complete the pr skill workflow before considering it ready; publishing the initial release requires verified code on the default branch.
 

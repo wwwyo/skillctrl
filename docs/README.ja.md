@@ -15,6 +15,9 @@ skill はどこか別の場所から導入したあと、その環境に合わ�
 が変わっても、原本で置き換えるのではなく自分の版に再適用し、実際に受け入れた
 内容の hash を Git に記録します。
 
+出力・コードコメント・公開文書・レビューは英語を標準とし、この README は
+日本語で概要を案内します。
+
 ## インストール
 
 ```sh
@@ -38,8 +41,8 @@ brew install wwwyo/tap/skillctrl
 `skillctrl` は Git リポジトリを前提に動作します。次の 2 つを用意します。
 
 ```
-.agents/skills/<name>/                  導入・適応する skill
-.agents/skillctrl/intents/<name>.md     維持したいカスタマイズの意図
+.agents/skills/<name>/                  imported and adapted skills
+.agents/skillctrl/intents/<name>.md     what your customization must keep doing
 ```
 
 lock ファイルはツールが作成します。上流の記録は
@@ -49,25 +52,25 @@ lock ファイルはツールが作成します。上流の記録は
 ## 手順
 
 ```sh
-# 公開 index を検索する（導入はしない）
+# Search the public index without installing anything
 skillctrl find browser --owner vercel-labs
 
-# 導入する
+# Import a skill
 skillctrl add vercel-labs/agent-browser --skill agent-browser
 
-# 導入した skill の意図を書く
+# Write the intent for the imported skill
 $EDITOR .agents/skillctrl/intents/agent-browser.md
 
-# 更新する。意図に適合させて skill 本体を書き直す
+# Update the skill body to satisfy the saved intent
 skillctrl update agent-browser
 
-# 差分を確認する
+# Check differences from the accepted hashes
 skillctrl status
 
-# 意図的な手動編集を確定する
+# Accept a deliberate manual edit
 skillctrl record agent-browser
 
-# upstream 登録を削除する（意図ファイルは残る）
+# Remove the upstream registration while keeping the intent file
 skillctrl remove agent-browser
 ```
 

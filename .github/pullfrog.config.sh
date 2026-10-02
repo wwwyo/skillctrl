@@ -45,6 +45,21 @@ pf_set address-reviews.enabled 'true'
 pf_set fix-ci.own-prs 'true'
 pf_set fix-ci.reviewed-prs 'false'
 
+# Organization instructions default to Japanese, so override the language here
+# while retaining the shared review severity labels.
+"${PF[@]}" config set instructions --repo "$REPO" --yes --file - <<'PULLFROG_INSTRUCTIONS'
+Write all responses, progress comments, PR descriptions, and reviews in English.
+Write code comments, CLI messages, help, adaptation prompts, and public documentation
+in English. Keep the prose in docs/README.ja.md in Japanese, with English comments
+in its code examples.
+
+Label each review finding with its severity:
+- P0: Critical; blocks a release.
+- P1: High; requires urgent attention.
+- P2: Normal; should be addressed.
+- P3: Low; minor impact.
+PULLFROG_INSTRUCTIONS
+
 "${PF[@]}" config set hooks.setup --repo "$REPO" --yes --file - <<'PULLFROG_HOOK_SETUP'
 # mise toolchain: install mise if absent, install repo tools, expose shims on PATH
 # NB: set -e is intentionally AFTER the file guard — `ls` exits non-zero when
@@ -60,8 +75,6 @@ ln -sf "$HOME"/.local/share/mise/shims/* "$HOME"/.local/bin/ 2>/dev/null || true
 PULLFROG_HOOK_SETUP
 
 # explicit unsets — keep the backend converged on this file
-# `instructions` stays unset so the organization defaults apply.
-pf_unset instructions
 pf_unset env-allowlist
 pf_unset hooks.post-checkout
 pf_unset hooks.pre-push
