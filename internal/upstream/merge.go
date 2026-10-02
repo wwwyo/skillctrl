@@ -130,7 +130,7 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 			if skill == "" {
 				skill = name
 			}
-			if field(value, "source") == input.Source && skill == input.Skill {
+			if strings.EqualFold(field(value, "source"), input.Source) && skill == input.Skill {
 				prior = value
 				break
 			}

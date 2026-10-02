@@ -59,6 +59,61 @@ func TestSourcesArrayRejectsInvalidIdentitiesAndPreservesLegacyRecords(t *testin
 	}
 }
 
+func TestMergePreservesRegistrationWhenSourceCasingChanges(t *testing.T) {
+	o := newOrigin(t)
+	o.write("skills/first/SKILL.md", manifest("first", "original"))
+	o.commit("original")
+	o.withRepository("fixture/repo", o.dir)
+	withGitConfig(t, o.gitConfig)
+	dir := newDestination(t, "")
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/skillctrl/intents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".agents/skillctrl/intents/combined.md"), []byte("Integrate the workflow."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inputs := []Input{{Source: "fixture/repo", Skill: "first"}}
+	_, registration, err := Merge(dir, "combined", inputs, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record Record
+	if err := json.Unmarshal(data, &record); err != nil {
+		t.Fatal(err)
+	}
+	prior := record.Skills["combined"].(map[string]any)["sources"].([]any)[0].(map[string]any)
+	prior["source"] = "Fixture/Repo"
+	prior["installedAt"] = "2020-01-01T00:00:00Z"
+	prior["extension"] = "retained"
+	data, err = json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, Lock), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, registration, err = Merge(dir, "combined", inputs, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var current Record
+	if err := json.Unmarshal(data, &current); err != nil {
+		t.Fatal(err)
+	}
+	actual := current.Skills["combined"].(map[string]any)["sources"].([]any)[0]
+	if !reflect.DeepEqual(actual, prior) {
+		t.Fatalf("source casing change lost prior registration: got %v, want %v", actual, prior)
+	}
+}
+
 func TestMergedSourcesFromDifferentRepositoriesFollowRelocations(t *testing.T) {
 	o := newOrigin(t)
 	o.write("skills/first/SKILL.md", manifest("first", "first original"))
