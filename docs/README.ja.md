@@ -1,4 +1,7 @@
-![skillctrl](wordmark.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/wordmark-dark.svg">
+  <img src="../assets/wordmark.svg" alt="skillctrl" width="312" height="88">
+</picture>
 
 # skillctrl
 
