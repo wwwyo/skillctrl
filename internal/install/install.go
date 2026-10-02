@@ -32,6 +32,25 @@ const (
 // ProviderEnv selects the worktree isolation backend.
 const ProviderEnv = "SKILLCTRL_WORKTREE_PROVIDER"
 
+// PrepareSkills recreates empty skill directories in an isolated checkout and
+// refuses symlinked directory ancestors.
+func PrepareSkills(repo string) error {
+	for _, relative := range []string{".agents", SkillsDir} {
+		path := filepath.Join(repo, filepath.FromSlash(relative))
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(path, 0o755); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		} else if !info.IsDir() {
+			return fmt.Errorf("skills require a real directory: %s", relative)
+		}
+	}
+	return nil
+}
+
 // Names rejects directory escapes and malformed skill identifiers.
 func Names(values []string) ([]string, error) {
 	for _, name := range values {

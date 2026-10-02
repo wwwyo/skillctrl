@@ -39,7 +39,7 @@ func BuildVersion() string {
 // write the Git index, a lock file, and a remote pull request; there is no
 // partial execution to offer, and silently ignoring the flag would let a caller
 // believe nothing was published.
-const dryRunRejection = "--dry-run applies to find, add, update, remove, and record; " +
+const dryRunRejection = "--dry-run applies to find, add, merge, update, remove, and record; " +
 	"this phase writes the index, the lock, and the remote repository"
 
 // rejectDryRun refuses a phase that has no defined dry-run semantics before it
@@ -106,15 +106,16 @@ func New() *cobra.Command {
 
 	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
 	root.PersistentFlags().Bool("dry-run", false,
-		"report what would happen without changing anything; applies to find, add, update, remove, and record")
+		"report what would happen without changing anything; applies to find, add, merge, update, remove, and record")
 	root.PersistentFlags().String("worktree-provider", "",
-		"worktree isolation backend for add, update and remove: git or orca")
+		"worktree isolation backend for add, merge, update and remove: git or orca")
 
 	root.AddCommand(
 		newStatusCommand(),
 		newSchemaCommand(),
 		newFindCommand(),
 		newAddCommand(),
+		newMergeCommand(),
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),

@@ -76,6 +76,51 @@ skillctrl remove agent-browser
 残し、commit・push・PR 作成は行いません。`ci` / `schedule` の公開コマンドは
 検証した変更を commit・push するためのもので、[CI の文書](ci.md)に手順を記載しています。
 
+## agent 向け skill
+
+配布用の [skillctrl skill](../skills/skillctrl/SKILL.md) に、検索・導入・調整・
+更新・削除の手順をまとめています。新規作成・改善のガイドは必要なときに読む
+別ファイルに置き、`find-skills` や `skill-creator` の別途導入は不要にしています。
+
+このパッケージがリポジトリで公開されたら、対象を指定して導入できます。
+
+```sh
+skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl --skill skillctrl
+```
+
+CLI の事前導入と、対象リポジトリの `.agents/skills/` が必要です。結果の JSON に
+含まれる作業先を確認してから変更を統合します。配布元は `skills/`、導入先は
+対象リポジトリの `.agents/skills/` です。skill と CLI は別の配布物です。
+
+## 複数の原本を統合する
+
+1つの skill の更新元を `sources` 配列で管理できます。まず
+`.agents/skillctrl/intents/combined.md` に統合方針を保存し、リポジトリの
+通常の手順で clean な checkout を用意します。
+
+```sh
+skillctrl merge combined \
+  --from owner/discovery:find-skills \
+  --from owner/authoring:skill-creator
+
+skillctrl update combined
+```
+
+上記の取得元は説明用の仮名です。`merge` がリリースに含まれるまでは、
+このソースからビルドした CLI を使います。`--from` の一覧は既存の更新元を
+置き換えます。各原本の取得元・skill 名・commit・配置先・tree hash を個別に記録し、
+既存の単一 source の記録は従来の形式で保持します。
+
+原本は統合先 skill 内の `.skillctrl-sources/<index>/` に分けて保存します。
+agent は原本を変更せず、保存した意図に従って統合後の本文を更新します。
+原本が変わらなければ再統合しません。意図だけを変えたときは、本文を手で修正・
+検証して受理します。統合が未解決なら受理済み hash は保持します。
+
+結果の `repo` が実際の作業先です。統合結果は1つのローカル skill で、
+そのディレクトリを配布できます。原本の manifest は skillctrl の検索対象から
+除外します。旧 CLI は複数 source の記録に対応しません。統合には
+[reviewer の設定](ci.md)が必要です。
+
 ## 安全の根拠
 
 意図の再適応は、外部からの入力に対してモデルがコードを書き換える処理です。

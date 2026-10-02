@@ -20,6 +20,14 @@ The existing implementation is in the dotfiles checkout used to start this task:
 - Preserve CI plan, trusted checker/input separation, accepted/unresolved partition checks, head-drift rejection, upstream fixed-input verification, scheduled update preparation, final lock status, and safe draft publication behavior. Provide reusable Go commands and documented CI integration. Do not publish a trimmed installer as a full requirements-preserving rewrite.
 - Keep prompts, help, errors, public docs and release notes English by default. An accompanying concise Japanese README may be provided.
 
+## Multiple upstream inputs
+
+- Provide `merge name --from owner/repo:skill` with repeatable `--from`. Store the ordered input registrations in a `sources` array on the existing upstream lock entry, with an independent source identity, named skill, source commit, path, and original tree hash for each input. Read existing version-3 single-source records unchanged and preserve unknown record fields. Older binaries do not understand entries with this extension.
+- Require a non-empty saved intent before merging or updating a merged skill. Prepare every original before importing any result. Keep the current merged output while replacing input snapshots in `.skillctrl-sources/<index>/` inside the skill; use the existing intent review and accepted/unresolved partition to integrate changes.
+- `update` checks all input registrations, including inputs from different repositories and relocated skills. Unchanged originals preserve the merged output and do not trigger another review; changed intent alone keeps its existing non-trigger semantics. Removing a merged skill removes its registrations and body while preserving its intent.
+- Keep originals immutable during agent review and bind them to the immutable input trees. Source snapshots must not be independently discoverable as skills. Scheduled input verification checks each original hash and source identity and refuses changes to the merged output before review.
+- Preserve local default targeting, clean-checkout and worktree isolation, JSON output, dry-run behavior, source validation, secret screening, and no implicit commit/push/PR. A dry run reports inputs without network fetches or adaptation. Cover second-input changes, same-original skips, unresolved retries, malformed registrations, partial preparation failure, executable modes, relocation, and rejected source tampering.
+
 ## Distribution
 
 - Public repository `wwwyo/skillctrl`, module `github.com/wwwyo/skillctrl`, MIT copyright 2026 wwwyo.

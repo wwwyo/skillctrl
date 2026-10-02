@@ -89,11 +89,7 @@ func Load(dir string) (*Record, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid upstream skill record")
 		}
-		if object["sourceType"] != "github" {
-			return nil, fmt.Errorf("only GitHub upstream sources are supported: %s", name)
-		}
-		identifier, _ := object["source"].(string)
-		if _, err := Source(identifier); err != nil {
+		if _, err := sources(object, name); err != nil {
 			return nil, err
 		}
 	}
@@ -190,6 +186,9 @@ func (r *Repository) Path() string { return r.path }
 func (r *Repository) indexSkills() error {
 	manifests := map[string]string{}
 	for name, entry := range r.files {
+		if containsSourceDirectory(name) {
+			continue
+		}
 		if path.Base(name) != "SKILL.md" || entry.kind != "blob" {
 			continue
 		}
@@ -249,6 +248,10 @@ func (r *Repository) Select(name, previous string) (string, error) {
 
 // Export copies tracked files only, rejecting links and filesystem escapes.
 func (r *Repository) Export(destination, name, target string, previous map[string]any) (map[string]any, error) {
+	return r.export(destination, name, name, target, previous)
+}
+
+func (r *Repository) export(destination, name, destinationName, target string, previous map[string]any) (map[string]any, error) {
 	manifest, err := r.Select(name, field(previous, "skillPath"))
 	if err != nil {
 		return nil, err
@@ -296,7 +299,7 @@ func (r *Repository) Export(destination, name, target string, previous map[strin
 			return nil, fmt.Errorf("upstream skill contains a symlink or submodule: %s", name)
 		}
 	}
-	if err := r.rejectIgnored(destination, name, files); err != nil {
+	if err := rejectIgnored(destination, destinationName, files); err != nil {
 		return nil, err
 	}
 	contents, err := readBlobs(r.path, values(files))
@@ -355,7 +358,7 @@ func values(files map[string]treeFile) []string {
 // which would otherwise produce a skill whose accepted hash cannot be recorded.
 // The rules are read from the destination repository, not from the clone: it is
 // the destination's ignore rules that would later hide the imported file.
-func (r *Repository) rejectIgnored(destination, name string, files map[string]treeFile) error {
+func rejectIgnored(destination, name string, files map[string]treeFile) error {
 	var request strings.Builder
 	for path := range files {
 		request.WriteString(".agents/skills/" + name + "/" + path + "\x00")
@@ -376,6 +379,18 @@ func (r *Repository) rejectIgnored(destination, name string, files map[string]tr
 // result to the caller's worktree. A failure anywhere leaves the caller's
 // checkout untouched.
 func Install(dir, command string, selected []string, identifier, directory string) (target, lock string, err error) {
+	return install(dir, command, selected, identifier, directory, nil)
+}
+
+// Merge prepares a skill whose upstream registrations are stored as an array.
+func Merge(dir, name string, inputs []Input, directory string) (target, lock string, err error) {
+	if err := validateInputs(inputs); err != nil {
+		return "", "", err
+	}
+	return install(dir, "merge", []string{name}, "", directory, inputs)
+}
+
+func install(dir, command string, selected []string, identifier, directory string, inputs []Input) (target, lock string, err error) {
 	value, err := Load(dir)
 	if err != nil {
 		return "", "", err
@@ -396,6 +411,15 @@ func Install(dir, command string, selected []string, identifier, directory strin
 		if previous == nil {
 			previous = map[string]any{}
 		}
+		_, multiple := previous["sources"]
+		if command == "merge" || command == "update" && multiple {
+			exported, mergeErr := mergeSkill(dir, name, filepath.Join(target, name), previous, inputs, repositories, directory)
+			if mergeErr != nil {
+				return "", "", mergeErr
+			}
+			value.Skills[name] = exported
+			continue
+		}
 		switch command {
 		case "remove":
 			if info, statErr := os.Stat(filepath.Join(target, name)); statErr != nil || !info.IsDir() {
@@ -407,6 +431,9 @@ func Install(dir, command string, selected []string, identifier, directory strin
 			delete(value.Skills, name)
 			continue
 		case "add":
+			if multiple {
+				return "", "", fmt.Errorf("skill has multiple upstream sources; use merge to replace them: %s", name)
+			}
 			if previous["source"] == nil {
 				if _, statErr := os.Stat(filepath.Join(target, name)); statErr == nil {
 					return "", "", fmt.Errorf("refusing to overwrite a handwritten skill: %s", name)
