@@ -551,7 +551,11 @@ func validateAndRecord(dir string, plan lock.Plan, directory string) error {
 	for name := range names {
 		ordered = append(ordered, name)
 	}
-	if _, err := lock.Record(dir, current, recorded, ordered); err != nil {
+	registered, err := upstream.Read(dir, plan.Head)
+	if err != nil {
+		return err
+	}
+	if _, err := lock.Record(dir, current, recorded, ordered, registered.Skills); err != nil {
 		return err
 	}
 	if err := gitx.Run(dir, "add", "--", lock.Lock); err != nil {

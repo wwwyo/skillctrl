@@ -63,6 +63,8 @@ multi-source synthesis and hosted scheduled publication are unverified.
 | --- | --- | --- |
 | A hash covers the whole skill directory, including executable mode | `internal/lock.Snapshot` | `TestExecutableBitIsCovered` |
 | An accepted hash stops review | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
+| Only upstream-registered skills enter accepted hashes and review; handwritten intents do not opt in | `internal/lock.Select`, `internal/cli.runRecord` | `TestUpstreamOperationsIgnoreHandwrittenSkills`, `TestHandwrittenRepositoryNeedsNoLockOrReview` |
+| Legacy handwritten hashes are pruned without reviewing or changing their content | `internal/lock.Select`, `internal/lock.Record` | `TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes`, `TestUpdatePrunesLegacyHandwrittenHashesWithoutReview`, `TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges` |
 | An intent change alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | An intent deletion alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | A removed skill with a surviving intent is reported, not restored | `internal/lock.Compare` | `TestHashesDetectUnrecordedEdits`, `TestAcceptedRequiresACompletePartition/removed_skill...` |

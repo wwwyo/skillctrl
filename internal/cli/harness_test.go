@@ -127,7 +127,12 @@ func newHarness(t *testing.T) *harness {
 		"[tools]\nnode=\"1.2.3\"\n\"npm:@earendil-works/pi-coding-agent\"=\"4.5.6\"\n[settings]\npin=true\nminimum_release_age=\"7d\"\n")
 	h.write("home/dot_pi/agent/models.json", "{}")
 	h.commitAll()
-	h.write(lock.Lock, lockBytes(t, h.root))
+	value, err := lock.Snapshot(h.root, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(value.Skills, "other")
+	h.write(lock.Lock, mustJSON(value))
 	h.commitAll()
 	h.head = h.git("rev-parse", "HEAD")
 	h.originalLock = h.read(lock.Lock)

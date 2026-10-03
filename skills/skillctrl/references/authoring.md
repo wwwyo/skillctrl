@@ -59,8 +59,8 @@ do not depend on private paths or a separately installed helper skill. Use
 https://agentskills.io/specification to resolve format questions.
 
 For an imported skill, also write its customization requirements in
-`.agents/skillctrl/intents/<name>.md`. A handwritten skill does not need a fake
-upstream registration.
+`.agents/skillctrl/intents/<name>.md`. Handwritten skills stay outside upstream
+management and need neither an upstream registration nor an accepted hash.
 
 ## Verify and improve
 
@@ -85,8 +85,10 @@ Revise concrete failures, remove instructions that did not help, and repeat the
 affected cases. Scale evaluation to the change: a command correction needs less
 work than a new workflow. Report what was exercised and what remains untested.
 
-After verifying a skill installed in `.agents/skills/`, inspect its whole
-directory and run `skillctrl --repo /actual/working-copy record <name>` to accept
-the intentional content. For a distribution source package, review the source
+After verifying an upstream-registered skill installed in `.agents/skills/`,
+inspect its whole directory and run
+`skillctrl --repo /actual/working-copy record <name>` to accept the intentional
+content. For a handwritten skill, verification completes the edit without a
+second acceptance record. For a distribution source package, review the source
 diff instead; acceptance belongs to the separate installed copy. Follow the
 user's existing commit and publication instructions.

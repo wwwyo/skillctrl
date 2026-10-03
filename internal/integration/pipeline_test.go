@@ -170,6 +170,7 @@ func phaseRepository(t *testing.T) (string, string, string, *env) {
 	write(t, filepath.Join(repo, ".agents/skills/manual/SKILL.md"), "original v1\n")
 	write(t, filepath.Join(repo, ".agents/skills/plain/SKILL.md"), "original v1\n")
 	write(t, filepath.Join(repo, ".agents/skillctrl/intents/manual.md"), "keep the default browser\n")
+	write(t, filepath.Join(repo, ".agents/.skill-lock.json"), `{"version":3,"skills":{"manual":{"source":"fixture/source","sourceType":"github"},"plain":{"source":"fixture/source","sourceType":"github"}}}`)
 	write(t, filepath.Join(repo, "home/dot_config/mise/config.toml"),
 		"[tools]\nnode = \"22.11.0\"\n\"npm:@earendil-works/pi-coding-agent\" = \"0.55.1\"\n"+
 			"[settings]\npin = true\nminimum_release_age = \"7d\"\n")
