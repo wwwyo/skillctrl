@@ -6,8 +6,8 @@ Release only a tested commit on `main`. CI tests on Linux and macOS, checks form
 2. Tag that commit with a stable semantic version and push the tag:
 
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
 3. Wait for the **Release** workflow. It repeats validation, requires the tagged commit to belong to `main`, and publishes only after all archives have been uploaded to a draft release. Failed publication leaves the draft for inspection; reruns do not overwrite an existing release.
@@ -19,7 +19,7 @@ Archives contain the root `skillctrl` executable and MIT license. Go builds use 
 To build without publishing, use an empty output directory:
 
 ```sh
-mise exec -- go run ./tools/release v0.1.0 dist
+mise exec -- go run ./tools/release v0.2.0 dist
 ```
 
 The [mise GitHub backend](https://mise.jdx.dev/dev-tools/backends/github.html) selects uploaded assets for the host platform. A [Homebrew tap](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap) distributes the checksummed formula; this project does not claim inclusion in Homebrew core.
