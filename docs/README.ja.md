@@ -25,10 +25,10 @@ skill はどこか別の場所から導入したあと、その環境に合わ�
 
 ```sh
 # Go
-go install github.com/wwwyo/skillctrl@v0.2.0
+go install github.com/wwwyo/skillctrl@latest
 
 # mise (GitHub release backend)
-mise use -g github:wwwyo/skillctrl@v0.2.0
+mise use -g github:wwwyo/skillctrl@latest
 
 # Homebrew
 brew tap wwwyo/tap
@@ -112,7 +112,7 @@ skillctrl merge combined \
 skillctrl update combined
 ```
 
-上記の取得元は説明用の仮名です。`merge` は v0.2.0 以降で使えます。
+上記の取得元は説明用の仮名です。
 `--from` の一覧は既存の更新元を
 置き換えます。各原本の取得元・skill 名・commit・配置先・tree hash を個別に記録し、
 既存の単一 source の記録は従来の形式で保持します。

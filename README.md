@@ -26,10 +26,10 @@ The linked Japanese README provides a translated introduction.
 
 ```sh
 # Go
-go install github.com/wwwyo/skillctrl@v0.2.0
+go install github.com/wwwyo/skillctrl@latest
 
 # mise (GitHub release backend)
-mise use -g github:wwwyo/skillctrl@v0.2.0
+mise use -g github:wwwyo/skillctrl@latest
 
 # Homebrew
 brew tap wwwyo/tap
@@ -121,7 +121,7 @@ skillctrl merge combined \
 skillctrl update combined
 ```
 
-The repositories above are placeholders. `merge` requires v0.2.0 or later.
+The repositories above are placeholders.
 The full input list replaces the target's previous registrations. Each input
 records its own source, skill name, commit, path, and original tree hash. Existing
 single-source registrations retain their format.
