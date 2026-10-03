@@ -74,6 +74,27 @@ func Load(dir string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseLock(data)
+}
+
+// Read loads source registrations from a fixed Git tree rather than the
+// working copy, so CI selection cannot depend on unstaged edits.
+func Read(dir, ref string) (*Record, error) {
+	listing, err := gitx.Output(dir, "ls-tree", ref, "--", Lock)
+	if err != nil {
+		return nil, err
+	}
+	if len(listing) == 0 {
+		return &Record{Version: Version, Skills: map[string]any{}}, nil
+	}
+	data, err := gitx.Output(dir, "show", ref+":"+Lock)
+	if err != nil {
+		return nil, err
+	}
+	return parseLock(data)
+}
+
+func parseLock(data []byte) (*Record, error) {
 	var value Record
 	if err := json.Unmarshal(data, &value); err != nil {
 		return nil, fmt.Errorf("unsupported upstream lock; expected version %d", Version)

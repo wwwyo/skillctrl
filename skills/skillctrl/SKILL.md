@@ -161,9 +161,12 @@ skillctrl --repo /actual/working-copy record chosen-name
 skillctrl --repo /actual/working-copy status
 ```
 
-`record` accepts intentional manual edits in place and preserves caller staging.
-It does not review or adapt the skill. Handwritten skills can be recorded without
-an upstream registration. Do not edit the lock JSON by hand.
+`record` accepts intentional edits to upstream-registered skills in place and
+preserves caller staging. It does not review or adapt the skill. Handwritten
+skills are excluded from accepted hashes, status, and automatic intent review,
+even if they have an intent document; do not run `record` for them or invent an
+upstream registration. Legacy handwritten hashes are pruned on the next
+accepted-lock write. Do not edit the lock JSON by hand.
 
 Changing an intent alone does not trigger adaptation. Apply a newly written
 intent through a deliberate edit and verification now; do not claim that a

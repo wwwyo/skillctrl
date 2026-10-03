@@ -293,7 +293,11 @@ func Selection(repo string) (lock.Plan, error) {
 	if err != nil {
 		return lock.Plan{}, err
 	}
-	plan := lock.Select(current, recorded, intents)
+	registered, err := upstream.Read(repo, tree)
+	if err != nil {
+		return lock.Plan{}, err
+	}
+	plan := lock.Select(current, recorded, intents, registered.Skills)
 	plan.Base = commit
 	plan.Head = commit
 	plan.Comparison = commit
@@ -375,7 +379,11 @@ func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, mo
 		return nil, err
 	}
 	names := slices.Sorted(maps.Keys(resolved))
-	if _, err := lock.Record(repo, current, recorded, names); err != nil {
+	registered, err := upstream.Read(repo, tree)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := lock.Record(repo, current, recorded, names, registered.Skills); err != nil {
 		return nil, err
 	}
 	var unresolved []string

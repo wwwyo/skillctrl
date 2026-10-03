@@ -51,6 +51,11 @@ brew install wwwyo/tap/skillctrl
 lock ファイルはツールが作成します。上流の記録は
 `.agents/.skill-lock.json`、受け入れ済みの hash は
 `.agents/skillctrl/intents/lock.json` に保存されます。
+受け入れ済み hash・`status`・自動の意図チェックは、上流の lock に登録された
+skill だけが対象です。自作 skill は、意図ファイルがあっても対象にしません。
+意図的な編集を別途受け入れる二重管理を避けるためです。既存の自作 skill の
+hash は、導入・更新・削除、`record`、CI の次の lock 書き込み時に取り除きます。
+`status` は書き換えず、削除待ちの記録を `lock_changed` で報告します。
 
 ## 手順
 

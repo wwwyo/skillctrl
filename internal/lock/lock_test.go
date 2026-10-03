@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/wwwyo/skillctrl/internal/lock"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 // fixture is a throwaway Git repository with a fixed identity so commits work
@@ -80,7 +81,11 @@ func (f *fixture) record(t *testing.T, names ...string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lock.Record(f.dir, current, recorded, names); err != nil {
+	registered, err := upstream.Read(f.dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lock.Record(f.dir, current, recorded, names, registered.Skills); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -107,6 +112,7 @@ func TestHashesDetectUnrecordedEdits(t *testing.T) {
 	f.write(".agents/skills/manual/SKILL.md", "manual skill")
 	f.write(".agents/skills/manual/references/usage.md", "old reference")
 	f.write(".agents/skillctrl/intents/manual.md", "prefer the default browser")
+	f.write(upstream.Lock, `{"version":3,"skills":{"manual":{"source":"fixture/source","sourceType":"github"}}}`)
 	f.write("AGENTS.md", "environment policy")
 	first := f.commit()
 
@@ -187,7 +193,8 @@ func TestRecordPreservesUnrelatedEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorded := lock.Empty()
-	if _, err := lock.Record(f.dir, current, recorded, []string{"a"}); err != nil {
+	registered := map[string]any{"a": nil, "b": nil}
+	if _, err := lock.Record(f.dir, current, recorded, []string{"a"}, registered); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := lock.Local(f.dir)
@@ -195,7 +202,7 @@ func TestRecordPreservesUnrelatedEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	equal(t, sortedKeys(stored.Skills), []string{"a"}, "recorded entries")
-	if _, err := lock.Record(f.dir, lock.Empty(), stored, []string{"a"}); err != nil {
+	if _, err := lock.Record(f.dir, lock.Empty(), stored, []string{"a"}, registered); err != nil {
 		t.Fatal(err)
 	}
 	after, err := lock.Local(f.dir)
@@ -205,15 +212,89 @@ func TestRecordPreservesUnrelatedEntries(t *testing.T) {
 	equal(t, sortedKeys(after.Skills), []string{}, "recording a skill that no longer exists clears its entry")
 }
 
+func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
+	f := newFixture(t)
+	f.write(".agents/skills/imported/SKILL.md", "accepted upstream content")
+	f.write(".agents/skills/local/SKILL.md", "intentional local edit")
+	f.write(".agents/skillctrl/intents/local.md", "a local intent does not opt into upstream management")
+	f.write(upstream.Lock, `{"version":3,"skills":{"imported":{"source":"fixture/source","sourceType":"github"}}}`)
+	f.commit()
+	current, err := lock.Snapshot(f.dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Skills["local"] = "previous-local-hash"
+	data, err := json.Marshal(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.write(lock.Lock, string(data))
+	head := f.commit()
+	plan := f.plan(t, head, "")
+	equal(t, plan.Skills, []string{}, "handwritten edits are not selected")
+	equal(t, plan.ReviewSkills, []string{}, "handwritten intents are not reviewed")
+	equal(t, sortedKeys(plan.InputTrees), []string{"imported"}, "review inputs")
+	if !plan.LockChanged {
+		t.Fatal("legacy handwritten hashes must request lock cleanup")
+	}
+	f.record(t)
+	stored, err := lock.Local(f.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, sortedKeys(stored.Skills), []string{"imported"}, "cleanup preserves registered hashes only")
+	if stored.Skills["imported"] != current.Skills["imported"] {
+		t.Fatal("cleanup advanced an unrelated registered hash")
+	}
+	if got := f.git("diff", "--name-only"); got != lock.Lock {
+		t.Fatalf("cleanup changed files outside the accepted lock: %s", got)
+	}
+	cleaned := f.commit()
+	if f.plan(t, cleaned, "").LockChanged {
+		t.Fatal("cleaned lock still reports drift")
+	}
+
+	f.write(upstream.Lock, `{"version":3,"skills":{}}`)
+	if f.plan(t, cleaned, "").LockChanged {
+		t.Fatal("CI selection used an uncommitted upstream registration change")
+	}
+	unregistered := f.commit()
+	plan = f.plan(t, unregistered, "")
+	if !plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 {
+		t.Fatalf("removing an upstream registration must only clean its hash: %+v", plan)
+	}
+	f.record(t)
+	stored, err = lock.Local(f.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.Skills) != 0 {
+		t.Fatal("unregistered skill kept its accepted hash")
+	}
+}
+
+func TestHandwrittenRepositoryNeedsNoLockOrReview(t *testing.T) {
+	f := newFixture(t)
+	f.write(".agents/skills/local/SKILL.md", "intentional content")
+	f.write(".agents/skillctrl/intents/local.md", "intentional requirements")
+	head := f.commit()
+	plan := f.plan(t, head, "")
+	if plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 || len(plan.InputTrees) != 0 {
+		t.Fatalf("handwritten-only repository entered upstream management: %+v", plan)
+	}
+}
+
 // TestWorkingTreePreservesStaging is the safety property that makes `record`
 // usable with pending edits: the caller's index must be untouched.
 func TestWorkingTreePreserveStaging(t *testing.T) {
 	f := newFixture(t)
 	f.write(".agents/skills/a/SKILL.md", "original")
+	f.write(upstream.Lock, `{"version":3,"skills":{"a":{"source":"fixture/source","sourceType":"github"}}}`)
 	f.commit()
 	f.write(".agents/skills/a/SKILL.md", "staged edit")
 	f.git("add", "--", ".agents/skills/a/SKILL.md")
 	f.write(".agents/skills/b/SKILL.md", "untracked edit")
+	f.write(upstream.Lock, `{"version":3,"skills":{"b":{"source":"fixture/source","sourceType":"github"}}}`)
 	before := f.git("diff", "--cached", "--binary")
 
 	tree, err := lock.WorkingTree(f.dir)
@@ -226,6 +307,27 @@ func TestWorkingTreePreserveStaging(t *testing.T) {
 	}
 	if _, ok := current.Skills["b"]; !ok {
 		t.Fatal("working tree hashing must see uncommitted skills")
+	}
+	registered, err := upstream.Read(f.dir, tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := registered.Skills["b"]; !ok || len(registered.Skills) != 1 {
+		t.Fatal("working tree selection ignored uncommitted upstream registrations")
+	}
+	if err := os.Remove(filepath.Join(f.dir, upstream.Lock)); err != nil {
+		t.Fatal(err)
+	}
+	tree, err = lock.WorkingTree(f.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registered, err = upstream.Read(f.dir, tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registered.Skills) != 0 {
+		t.Fatal("working tree selection ignored upstream lock removal")
 	}
 	if after := f.git("diff", "--cached", "--binary"); after != before {
 		t.Fatalf("staging changed:\n%s\n%s", before, after)

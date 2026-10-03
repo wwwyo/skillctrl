@@ -3,7 +3,8 @@
 //
 // Two locks exist by design. The upstream lock describes where a skill came
 // from; the accepted lock in this package records what the maintainer has
-// actually reviewed. Only Git tree object IDs are stored, so a hash covers the
+// accepted for an upstream-managed skill. Handwritten skills remain outside
+// this management. Only Git tree object IDs are stored, so a hash covers the
 // whole skill directory including body, references, scripts, and executable
 // bits, and never covers the intent document itself.
 package lock
@@ -19,6 +20,7 @@ import (
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 // Repository-relative locations. These are part of the on-disk contract and are
@@ -173,19 +175,24 @@ func Read(dir, ref string) (Entry, error) {
 // Select chooses the differing hashes. Intent files supply review criteria, not
 // another baseline: a skill whose hash already matches the accepted lock is
 // never reviewed again, and a changed intent alone never triggers a run.
-func Select(current, recorded Entry, intents map[string]bool) Plan {
+// Handwritten skills are excluded even when they have an intent document.
+func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Plan {
 	plan := emptyPlan()
 	names := make([]string, 0, len(current.Skills)+len(recorded.Skills))
 	for name := range current.Skills {
-		names = append(names, name)
+		if _, ok := registered[name]; ok {
+			names = append(names, name)
+			plan.InputTrees[name] = current.Skills[name]
+		}
 	}
 	for name := range recorded.Skills {
+		if _, ok := registered[name]; !ok {
+			plan.LockChanged = true
+			continue
+		}
 		if _, ok := current.Skills[name]; !ok {
 			names = append(names, name)
 		}
-	}
-	for name := range current.Skills {
-		plan.InputTrees[name] = current.Skills[name]
 	}
 	for _, name := range slices.Sorted(slices.Values(names)) {
 		if current.Skills[name] != recorded.Skills[name] {
@@ -198,7 +205,7 @@ func Select(current, recorded Entry, intents map[string]bool) Plan {
 		}
 	}
 	plan.NeedsReview = len(plan.ReviewSkills) > 0
-	plan.LockChanged = len(plan.Skills) > 0
+	plan.LockChanged = plan.LockChanged || len(plan.Skills) > 0
 	return plan
 }
 
@@ -227,7 +234,11 @@ func Compare(dir, base, head, since string) (Plan, error) {
 			intents[strings.TrimSuffix(strings.TrimPrefix(path, Intents), ".md")] = true
 		}
 	}
-	plan := Select(current, recorded, intents)
+	registered, err := upstream.Read(dir, head)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan := Select(current, recorded, intents, registered.Skills)
 	plan.Base = base
 	plan.Head = head
 	plan.Comparison = comparison
@@ -244,6 +255,16 @@ func exists(dir, object string) bool {
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}
+		registered, err := entries(dir, "HEAD", upstream.Lock, false)
+		if err != nil {
+			return "", err
+		}
+		_, tracked := registered[upstream.Lock]
+		if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(upstream.Lock))); err == nil || tracked {
+			paths = append(paths, upstream.Lock)
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
 	}
 	directory, err := os.MkdirTemp("", "skillctrl-index-")
 	if err != nil {
@@ -267,10 +288,19 @@ func WorkingTree(dir string, paths ...string) (string, error) {
 }
 
 // Record advances only explicitly accepted hashes and preserves every other
-// entry. A skill that disappeared from the tree has its entry removed.
-func Record(dir string, current, recorded Entry, names []string) (Entry, error) {
+// registered entry. Unregistered skills are pruned without review; a skill
+// that disappeared from the tree has its named entry removed.
+func Record(dir string, current, recorded Entry, names []string, registered map[string]any) (Entry, error) {
 	values := copySkills(recorded.Skills)
+	for name := range values {
+		if _, ok := registered[name]; !ok {
+			delete(values, name)
+		}
+	}
 	for _, name := range names {
+		if _, ok := registered[name]; !ok {
+			continue
+		}
 		if hash, ok := current.Skills[name]; ok {
 			values[name] = hash
 		} else {

@@ -59,7 +59,7 @@ func fail(repository string, err error) error {
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show which installed skills differ from the accepted lock",
+		Short: "Show which upstream-managed skills differ from the accepted lock",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			repo, err := repository(command)
@@ -305,18 +305,20 @@ func runRecord(repo string, values []string) error {
 	if err != nil {
 		return fail(repo, err)
 	}
+	registered, err := upstream.Read(repo, tree)
+	if err != nil {
+		return fail(repo, err)
+	}
 	unknown := []string{}
 	for _, name := range values {
-		if _, ok := current.Skills[name]; !ok {
-			if _, ok := recorded.Skills[name]; !ok {
-				unknown = append(unknown, name)
-			}
+		if _, ok := registered.Skills[name]; !ok {
+			unknown = append(unknown, name)
 		}
 	}
 	if len(unknown) > 0 {
-		return fail(repo, fmt.Errorf("unknown skills: %s", strings.Join(unknown, ", ")))
+		return fail(repo, fmt.Errorf("skills have no registered upstream: %s", strings.Join(unknown, ", ")))
 	}
-	if _, err := lock.Record(repo, current, recorded, values); err != nil {
+	if _, err := lock.Record(repo, current, recorded, values, registered.Skills); err != nil {
 		return fail(repo, err)
 	}
 	return emit(map[string]any{"repo": repo, "recorded": values})
@@ -325,7 +327,7 @@ func runRecord(repo string, values []string) error {
 func newRecordCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "record names...",
-		Short: "Accept deliberate manual skill edits without creating a worktree",
+		Short: "Accept deliberate edits to upstream-managed skills without creating a worktree",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "record", "", args)

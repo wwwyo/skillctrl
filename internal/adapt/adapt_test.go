@@ -12,6 +12,7 @@ import (
 	"github.com/wwwyo/skillctrl/internal/adapt"
 	"github.com/wwwyo/skillctrl/internal/lock"
 	"github.com/wwwyo/skillctrl/internal/toolchain"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 type repo struct {
@@ -34,6 +35,7 @@ func newRepo(t *testing.T) *repo {
 	r.write(".agents/skills/manual/SKILL.md", "old body\n")
 	r.write(".agents/skills/other/SKILL.md", "old body\n")
 	r.write(".agents/skillctrl/intents/manual.md", "use the default browser\n")
+	r.write(upstream.Lock, `{"version":3,"skills":{"manual":{"source":"fixture/source","sourceType":"github"},"other":{"source":"fixture/source","sourceType":"github"}}}`)
 	r.write("home/dot_pi/agent/models.json", `{"trusted": true}`)
 	r.write("home/dot_config/mise/config.toml", `[tools]
 node = "1.2.3"
@@ -137,7 +139,11 @@ func (r *repo) planWith(intents map[string]bool) lock.Plan {
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	plan := lock.Select(value, lock.Empty(), intents)
+	registered, err := upstream.Read(r.dir, head)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	plan := lock.Select(value, lock.Empty(), intents, registered.Skills)
 	plan.Base = head
 	plan.Head = head
 	plan.Comparison = head
@@ -259,6 +265,55 @@ func TestApplyRecordsFromTheIndexOnly(t *testing.T) {
 	drifted.Head = strings.Repeat("0", 40)
 	if err := adapt.Apply(r.dir, drifted, directory); err == nil {
 		t.Fatal("apply accepted a plan for a different head")
+	}
+}
+
+func TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges(t *testing.T) {
+	r := newRepo(t)
+	r.write(".agents/skills/local/SKILL.md", "intentional handwritten body\n")
+	r.write(".agents/skillctrl/intents/local.md", "local intent\n")
+	r.git("add", "-A")
+	r.git("commit", "-qm", "handwritten skill")
+	current, err := lock.Snapshot(r.dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Skills["local"] = "previous-local-hash"
+	data, err := json.Marshal(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.write(lock.Lock, string(data))
+	r.git("add", "--", lock.Lock)
+	r.git("commit", "-qm", "legacy accepted lock")
+	head := r.head()
+	plan, err := lock.Compare(r.dir, head, head, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 {
+		t.Fatalf("legacy cleanup requested adaptation: %+v", plan)
+	}
+	if err := adapt.Apply(r.dir, plan, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := lock.Local(r.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := accepted.Skills["local"]; ok {
+		t.Fatal("CI kept a handwritten hash")
+	}
+	for _, name := range []string{"manual", "other"} {
+		if accepted.Skills[name] != current.Skills[name] {
+			t.Fatalf("cleanup moved an unrelated upstream-managed hash: %s", name)
+		}
+	}
+	if got := r.git("diff", "--cached", "--name-only"); got != lock.Lock {
+		t.Fatalf("cleanup staged changes outside the accepted lock: %s", got)
+	}
+	if got := r.read(".agents/skills/local/SKILL.md"); got != "intentional handwritten body\n" {
+		t.Fatal("cleanup changed handwritten content")
 	}
 }
 

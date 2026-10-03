@@ -53,7 +53,13 @@ two paths it reads:
 
 The two lock files are created by the tool. `.agents/.skill-lock.json` records
 where each skill came from; `.agents/skillctrl/intents/lock.json` records the
-accepted hash of each whole skill directory.
+accepted hash of each whole upstream-managed skill directory. Only skills
+registered in the upstream lock are included in accepted hashes, `status`, and
+automatic intent review. Handwritten skills are excluded even if they have an
+intent document; their intentional edits need no second acceptance record.
+Existing handwritten hash entries are removed the next time an installer,
+`record`, or CI phase writes the accepted lock. `status` remains read-only and
+reports pending cleanup through `lock_changed` without selecting those skills.
 
 ## Work with skills
 

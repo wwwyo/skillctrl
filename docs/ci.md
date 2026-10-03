@@ -57,7 +57,7 @@ the reviewing job.
 
 | Command | Reads | Writes | Refuses |
 | --- | --- | --- | --- |
-| `skillctrl plan --base B [--head H] [--since S]` | Git trees at `H`, the accepted lock at `H`, intent names at `H` | stdout only | an unreadable or unsupported lock |
+| `skillctrl plan --base B [--head H] [--since S]` | Git trees at `H`, upstream registrations at `H`, the accepted lock at `H`, intent names at `H` | stdout only | an unreadable or unsupported lock |
 | `skillctrl ci configure` | `CHECKER_SOURCE` | stdout only | a version range instead of an exact pin |
 | `skillctrl ci prepare <dir>` | `CHECKER_SOURCE`, `SKILL_PLAN` | `<dir>/mise.toml` | a HEAD that moved since the plan was made |
 | `skillctrl ci export <dir>` | `SKILL_PLAN`, the working tree, `<dir>/result.json` | `<dir>/repair.patch` | edits outside the reviewed skills; the credential in the report, result, patch, or a staged blob |
@@ -86,10 +86,10 @@ requirement, not the YAML.
    Publish `plan.json`. The plan is the only thing the reviewing job may treat as
    an input, and it is recomputed again later.
 
-2. **Decide.** If the plan selects nothing, stop. If it selects only skills
-   without an intent, they still need their hashes recorded before anything can
-   be published: create an empty artifact directory, then run steps 4 and 5
-   against it, which records those hashes without invoking any model. If it
+2. **Decide.** If `lock_changed` is false, stop. If `needs_review` is false,
+   the plan either selects registered skills without intent or only prunes
+   legacy unregistered hashes: create an empty artifact directory, then run
+   steps 4 and 5 against it without invoking any model. If it
    selects skills with an intent and no inference credential is available, stop
    without publishing and report the selected names: a green build that never
    checked anything is worse than a red one.

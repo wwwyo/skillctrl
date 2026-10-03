@@ -12,6 +12,65 @@ import (
 
 func unmarshal(data []byte, target any) error { return json.Unmarshal(data, target) }
 
+func TestUpstreamOperationsIgnoreHandwrittenSkills(t *testing.T) {
+	for _, withIntent := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without intent", true: "with intent"}[withIntent], func(t *testing.T) {
+			h := newHarness(t)
+			h.write(".agents/skills/other/SKILL.md", "intentional handwritten content\n")
+			if withIntent {
+				h.write(".agents/skillctrl/intents/other.md", "deliberate local requirements\n")
+			}
+			h.commitAll()
+			before := h.read(".agents/skills/other/SKILL.md")
+			h.run(0, "add", "fixture/source", "--skill", "new-skill")
+			if _, ok := h.lockedSkills()["other"]; ok {
+				t.Fatal("adding an upstream skill recorded a handwritten skill")
+			}
+			if string(h.read(".agents/skills/other/SKILL.md")) != string(before) {
+				t.Fatal("upstream operation changed handwritten content")
+			}
+			if h.log() != "" {
+				t.Fatal("handwritten intent triggered a reviewer")
+			}
+			got := h.run(0, "status")
+			equal(t, list(got["skills"]), []string{}, "handwritten drift is ignored")
+			h.run(1, "record", "other")
+			if _, ok := h.lockedSkills()["other"]; ok {
+				t.Fatal("record enrolled a handwritten skill")
+			}
+		})
+	}
+}
+
+func TestUpdatePrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
+	h := newHarness(t)
+	h.write(".agents/skillctrl/intents/other.md", "local intent\n")
+	h.write(lock.Lock, lockBytes(t, h.root))
+	h.commitAll()
+	h.write(".agents/skills/other/SKILL.md", "intentional handwritten edit\n")
+	h.commitAll()
+	before := h.read(".agents/skills/other/SKILL.md")
+	got := h.run(0, "status")
+	if got["lock_changed"] != true {
+		t.Fatal("legacy handwritten hash did not request cleanup")
+	}
+	if h.git("status", "--porcelain") != "" {
+		t.Fatal("status wrote the lock")
+	}
+	h.run(0, "update")
+	if _, ok := h.lockedSkills()["other"]; ok {
+		t.Fatal("update retained a legacy handwritten hash")
+	}
+	if string(h.read(".agents/skills/other/SKILL.md")) != string(before) || h.log() != "" {
+		t.Fatal("cleanup changed or reviewed handwritten content")
+	}
+	for _, name := range strings.Fields(h.git("diff", "--name-only")) {
+		if name != lock.Lock && name != ".agents/.skill-lock.json" {
+			t.Fatalf("cleanup changed an unrelated file: %s", name)
+		}
+	}
+}
+
 // TestInstallerLifecycle is the port of the original installer suite. It walks
 // the behaviors that make the tool safe to run on a real checkout: a dry run
 // writes nothing, an unchanged original is not re-imported, a changed original
@@ -88,8 +147,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		if locked["manual"] == previous.Skills["manual"] {
 			t.Fatal("changed original kept its old accepted hash")
 		}
-		if locked["other"] != previous.Skills["other"] {
-			t.Fatal("recording one skill moved another")
+		if _, ok := locked["other"]; ok {
+			t.Fatal("handwritten skill was recorded")
 		}
 		entry, _ := h.upstreamSkills()["manual"].(map[string]any)
 		if entry["skillFolderHash"] != updatedTree {
@@ -324,7 +383,7 @@ func TestInstallerLifecycle(t *testing.T) {
 			t.Fatal("record disturbed the caller's staging")
 		}
 		got := h.run(0, "status")
-		equal(t, list(got["skills"]), []string{"other"}, "status after record")
+		equal(t, list(got["skills"]), []string{}, "status ignores handwritten edits after record")
 	})
 }
 
