@@ -90,6 +90,12 @@ func sources(entry map[string]any, name string) ([]map[string]any, error) {
 	if _, err := Source(field(entry, "source")); err != nil {
 		return nil, err
 	}
+	if raw, ok := entry["skill"]; ok {
+		skill, ok := raw.(string)
+		if !ok || !Name(skill) {
+			return nil, fmt.Errorf("invalid upstream skill identity: %s", name)
+		}
+	}
 	return []map[string]any{entry}, nil
 }
 
@@ -103,10 +109,8 @@ func containsSourceDirectory(path string) bool {
 }
 
 func mergeSkill(dir, name, target string, previous map[string]any, inputs []Input, adapter Adapter, directory string) (map[string]any, error) {
-	intent, err := os.ReadFile(filepath.Join(dir, ".agents/skillctrl/intents", name+".md"))
-	if err != nil || strings.TrimSpace(string(intent)) == "" {
-		return nil, fmt.Errorf("merged skill requires a non-empty saved intent: %s", name)
-	}
+	configure := inputs != nil
+	var err error
 	var original []map[string]any
 	if len(previous) != 0 {
 		original, err = sources(previous, name)
@@ -154,19 +158,29 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		array = append(array, exported)
 	}
 	manifest := filepath.Join(target, "SKILL.md")
-	if _, err := os.Stat(manifest); os.IsNotExist(err) {
-		seed := fmt.Sprintf("---\nname: %s\ndescription: Merge upstream skills according to saved intent.\n---\n\n# %s\n\nThis candidate needs integration from the originals in %s/ according to the saved intent.\n", name, name, SourceDirectory)
+	if !configure {
+		_, err := os.Stat(manifest)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		configure = os.IsNotExist(err)
+	}
+	if configure {
+		var routing strings.Builder
+		fmt.Fprintf(&routing, "---\nname: %s\ndescription: Route tasks to the registered upstream skills.\n---\n\n# %s\n\nChoose the applicable skills from the linked manifests below and follow their instructions. Resolve each skill's relative resources from its own source directory. When several skills apply, use each applicable skill; surface conflicting instructions rather than silently choosing one.\n\n", name, name)
+		for index, input := range inputs {
+			fmt.Fprintf(&routing, "- [%s](%s/%d/SKILL.md) — %s:%s\n", input.Skill, SourceDirectory, index, input.Source, input.Skill)
+		}
+		seed := routing.String()
 		if err := os.WriteFile(manifest, []byte(seed), 0o644); err != nil {
 			return nil, err
 		}
-	} else if err != nil {
-		return nil, err
 	}
 	if err := rejectIgnored(dir, name, map[string]treeFile{"SKILL.md": {}}); err != nil {
 		return nil, err
 	}
 	result := maps.Clone(previous)
-	for _, key := range []string{"source", "sourceType", "sourceUrl", "skillPath", "skillFolderHash", "computedHash", "sourceCommit", "installedAt", "updatedAt"} {
+	for _, key := range []string{"skill", "source", "sourceType", "sourceUrl", "skillPath", "skillFolderHash", "computedHash", "sourceCommit", "installedAt", "updatedAt"} {
 		delete(result, key)
 	}
 	result["sources"] = array
@@ -176,10 +190,6 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 // ValidateMergedImport checks source identities, original hashes, and output
 // preservation independently of the process that fetched scheduled inputs.
 func ValidateMergedImport(dir, base, tree, name string, previous, current map[string]any) error {
-	intent, err := gitx.Output(dir, "show", base+":.agents/skillctrl/intents/"+name+".md")
-	if err != nil || strings.TrimSpace(string(intent)) == "" {
-		return fmt.Errorf("merged skill requires a non-empty saved intent: %s", name)
-	}
 	oldSources, err := sources(previous, name)
 	if err != nil {
 		return err

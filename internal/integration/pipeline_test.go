@@ -241,7 +241,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 		if err := json.Unmarshal([]byte(plan), &selection); err != nil {
 			t.Fatalf("plan is not JSON: %v\n%s", err, plan)
 		}
-		if len(selection.Skills) != 2 || selection.Skills[0] != "manual" || selection.Skills[1] != "plain" {
+		if len(selection.Skills) != 1 || selection.Skills[0] != "manual" {
 			t.Fatalf("unexpected selection: %v", selection.Skills)
 		}
 		if len(selection.ReviewSkills) != 1 || selection.ReviewSkills[0] != "manual" {

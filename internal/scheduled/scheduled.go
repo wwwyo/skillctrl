@@ -153,7 +153,7 @@ func ValidateImport(dir, base, tree string) error {
 			}
 			continue
 		}
-		if field(entry, "source") != field(original, "source") || field(entry, "sourceType") != "github" {
+		if field(entry, "source") != field(original, "source") || field(entry, "sourceType") != "github" || field(entry, "skill") != field(original, "skill") {
 			return fmt.Errorf("scheduled update changed upstream identity: %s", name)
 		}
 		// An unchanged original must still be absent from the diff; a changed

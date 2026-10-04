@@ -7,12 +7,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/wwwyo/skillctrl/internal/adapt"
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/install"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
 	"github.com/wwwyo/skillctrl/internal/lock"
-	"github.com/wwwyo/skillctrl/internal/toolchain"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
@@ -59,7 +57,7 @@ func fail(repository string, err error) error {
 func newStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show which upstream-managed skills differ from the accepted lock",
+		Short: "Show which intent-managed skills differ from the accepted lock",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			repo, err := repository(command)
@@ -109,13 +107,14 @@ func newAddCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:     "add source",
 		Aliases: []string{"install", "a"},
-		Short:   "Import skills from a GitHub repository",
+		Short:   "Import and register upstream skills without intent review",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			skills, _ := command.Flags().GetStringSlice("skill")
 			return runInstall(command, "add", args[0], skills)
 		},
 	}
+	command.Flags().String("name", "", "local directory name; requires exactly one --skill")
 	command.Flags().StringSlice("skill", nil, "skill to import; repeatable and required")
 	_ = command.MarkFlagRequired("skill")
 	return command
@@ -124,7 +123,7 @@ func newAddCommand() *cobra.Command {
 func newUpdateCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "update [names...]",
-		Short: "Import the current upstream original of registered skills",
+		Short: "Refresh registered originals without intent review",
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "update", "", args)
 		},
@@ -133,21 +132,32 @@ func newUpdateCommand() *cobra.Command {
 
 func newMergeCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "merge name",
-		Short: "Merge tracked upstream skills using saved intent",
-		Long: "Merge named GitHub skills into one repository-local skill. Save the integration\n" +
-			"policy in .agents/skillctrl/intents/<name>.md first. --from is repeatable and\n" +
-			"replaces the target's sources array; update subsequently refreshes every source.",
-		Args: cobra.ExactArgs(1),
+		Use:   "merge [name]",
+		Short: "Register upstream skills under one routing skill without intent review",
+		Long: "Register named GitHub originals under one repository-local routing skill.\n" +
+			"Use a positional name or --name. --from replaces the target's sources array;\n" +
+			"update subsequently refreshes every source. No intent or reviewer is required.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			name, _ := command.Flags().GetString("name")
+			if len(args) > 0 {
+				if command.Flags().Changed("name") {
+					return fmt.Errorf("use either a positional name or --name")
+				}
+				name = args[0]
+			}
+			if !upstream.Name(name) {
+				return fmt.Errorf("merge requires a valid name or --name")
+			}
 			values, _ := command.Flags().GetStringArray("from")
 			inputs, err := upstream.ParseInputs(values)
 			if err != nil {
 				return fail("", err)
 			}
-			return runInstall(command, "merge", "", args, inputs...)
+			return runInstall(command, "merge", "", []string{name}, inputs...)
 		},
 	}
+	command.Flags().String("name", "", "local routing skill name")
 	command.Flags().StringArray("from", nil, "upstream owner/repo:skill; repeatable and required")
 	_ = command.MarkFlagRequired("from")
 	return command
@@ -178,6 +188,13 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if err != nil {
 		return fail(repo, err)
 	}
+	outputName := ""
+	if kind == "add" {
+		outputName, _ = command.Flags().GetString("name")
+		if command.Flags().Changed("name") && (len(values) != 1 || !upstream.Name(outputName)) {
+			return fail(repo, fmt.Errorf("--name requires exactly one --skill and a plain directory name"))
+		}
+	}
 	identifier := ""
 	if kind == "add" {
 		identifier, err = upstream.Source(source)
@@ -192,6 +209,9 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		if kind == "merge" {
 			result["sources"] = inputs
 		}
+		if outputName != "" {
+			result["name"] = outputName
+		}
 		return emit(result)
 	}
 	if kind == "record" {
@@ -205,10 +225,6 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	worktree, err := install.Worktree(repo, provider)
 	if err != nil {
 		return fail(repo, err)
-	}
-	artifacts, err := os.MkdirTemp("", "skillctrl-")
-	if err != nil {
-		return fail(worktree, err)
 	}
 	isolated, err := os.MkdirTemp("", "skillctrl-install-")
 	if err != nil {
@@ -226,6 +242,9 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	var target, upstreamLock string
 	if kind == "merge" {
 		target, upstreamLock, err = upstream.MergeWithAdapter(worktree, values[0], inputs, isolated, adapter)
+	} else if outputName != "" {
+		target, upstreamLock, err = upstream.AddNamedWithAdapter(worktree, values[0], outputName, identifier, isolated, adapter)
+		values = []string{outputName}
 	} else {
 		target, upstreamLock, err = upstream.InstallWithAdapter(worktree, kind, values, identifier, isolated, adapter)
 	}
@@ -238,26 +257,12 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if err := install.Import(worktree, target, upstreamLock); err != nil {
 		return fail(worktree, err)
 	}
-	plan, err := install.Selection(worktree)
-	if err != nil {
-		return fail(worktree, err)
+	if kind == "remove" {
+		if err := pruneAcceptance(worktree); err != nil {
+			return fail(worktree, err)
+		}
 	}
-	unresolved, err := install.Adapt(worktree, plan, artifacts, adapt.Prompt, toolchain.ConfigPath(), toolchain.ModelsPath())
-	if err != nil {
-		return fail(worktree, err)
-	}
-	report := any(nil)
-	if plan.NeedsReview {
-		report = filepath.Join(artifacts, adapt.ReportFile)
-	}
-	if err := emit(map[string]any{"repo": worktree, "skills": plan.Skills,
-		"unresolved": unresolved, "report": report}); err != nil {
-		return silenceError{err}
-	}
-	if len(unresolved) > 0 {
-		return exitError{ExitUnresolved}
-	}
-	return nil
+	return emit(map[string]any{"repo": worktree, "skills": values})
 }
 
 // runRecord accepts deliberate manual edits in place. It must not create a
@@ -281,14 +286,18 @@ func runRecord(repo string, values []string) error {
 		return fail(repo, err)
 	}
 	unknown := []string{}
-	managed := registered.ManagedSkills()
+	intents, err := install.Intents(repo)
+	if err != nil {
+		return fail(repo, err)
+	}
+	managed := lock.IntentRegistered(registered.ManagedSkills(), intents)
 	for _, name := range values {
 		if _, ok := managed[name]; !ok {
 			unknown = append(unknown, name)
 		}
 	}
 	if len(unknown) > 0 {
-		return fail(repo, fmt.Errorf("skills have no registered upstream: %s", strings.Join(unknown, ", ")))
+		return fail(repo, fmt.Errorf("skills require a registered upstream and saved intent: %s", strings.Join(unknown, ", ")))
 	}
 	if _, err := lock.Record(repo, current, recorded, values, managed); err != nil {
 		return fail(repo, err)
@@ -299,7 +308,7 @@ func runRecord(repo string, values []string) error {
 func newRecordCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "record names...",
-		Short: "Accept deliberate edits to upstream-managed skills without creating a worktree",
+		Short: "Accept named skills with registered upstreams and saved intent",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "record", "", args)

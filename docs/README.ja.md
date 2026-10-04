@@ -12,11 +12,9 @@
 agent skill を Git リポジトリで管理しながら、ローカルで加えた適応の「意図」を
 失わないようにするための CLI です。
 
-skill はどこか別の場所から導入したあと、その環境に合わせて手で編集します。
-次の更新がその編集を上書きしても、何のために編集したのかの記録は残りません。
-`skillctrl` はその理由を skill の隣に置きます。上流のリリースで編集済みの skill
-が変わっても、原本で置き換えるのではなく自分の版に再適用し、実際に受け入れた
-内容の hash を Git に記録します。
+`add`・`merge`・`update` は原本の取得と登録だけを行います。調整の要件は
+`intent set` で保存し、`intent apply` で明示的に適用します。手動で修正・検証した
+内容は `record` で受け入れられます。取得時には AI を呼ばず、受理 hash も更新しません。
 
 出力・コードコメント・公開文書・レビューは英語を標準とし、この README は
 日本語で概要を案内します。
@@ -51,11 +49,10 @@ brew install wwwyo/tap/skillctrl
 lock ファイルはツールが作成します。上流の記録は
 `skills-lock.json`、受け入れ済みの hash は
 `.agents/skillctrl/intents/lock.json` に保存されます。
-受け入れ済み hash・`status`・自動の意図チェックは、上流の lock に登録された
-skill だけが対象です。自作 skill は、意図ファイルがあっても対象にしません。
-意図的な編集を別途受け入れる二重管理を避けるためです。既存の自作 skill の
-hash は、導入・更新・削除、`record`、CI の次の lock 書き込み時に取り除きます。
-`status` は書き換えず、削除待ちの記録を `lock_changed` で報告します。
+受け入れ済み hash・`status`・意図のレビューは、upstream に登録され、かつ intent が
+ある skill だけが対象です。intent のない導入済み skill と自作 skill は対象外です。
+対象外の既存 hash は次の受理 lock 書き込み時に取り除きます。取得コマンドは受理 lock を
+書きません。`status` は削除待ちの記録を `lock_changed` で報告します。
 
 `npx skills` のプロジェクト用 lock（version 1）は root に置いたまま読み、既存の
 version・他の provider の登録・未知のフィールドを保持します。skillctrl は Git の
@@ -73,11 +70,12 @@ skillctrl find review --owner owner
 # Import a skill
 skillctrl add owner/repo --skill chosen-skill
 
-# Write the intent for the imported skill
-$EDITOR .agents/skillctrl/intents/chosen-skill.md
-
-# Update the skill body to satisfy the saved intent
+# Refresh the original without AI or acceptance
 skillctrl update chosen-skill
+
+# Save requirements, then explicitly apply them
+skillctrl intent set chosen-skill --file requirements.md
+skillctrl intent apply chosen-skill
 
 # Check differences from the accepted hashes
 skillctrl status
@@ -85,7 +83,7 @@ skillctrl status
 # Accept a deliberate manual edit
 skillctrl record chosen-skill
 
-# Remove the upstream registration while keeping the intent file
+# Remove the skill, its saved intent, and registrations
 skillctrl remove chosen-skill
 ```
 
@@ -112,11 +110,12 @@ skillctrl check chosen-skill
 | command | 役割 |
 | --- | --- |
 | `find` / `search` | `skills` / `git` は skills.sh API、`gh` は `gh skill search` で検索。skills 1.7.0 の find には JSON 出力がないため API を使います。 |
-| `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・意図の再適用を担当。 |
+| `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・登録を担当。AI と受理 hash 更新は行いません。 |
 | `list` / `ls` | 手書きを含む project の skill 一覧。 |
 | `check` | 原本の更新と手元の受け入れ済み hash の差分を確認。取り込み・reviewer 実行はしません。名前指定は両方に適用します。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
-| `status`, `record`, `merge` | skillctrl 独自の受理 hash と保存した意図の管理。status はオフラインで手元の受理状態、check はそれに加えて更新元の変更を確認します。 |
+| `merge` | skillctrl 独自の routing skill 作成。intent や AI は不要です。 |
+| `intent set/remove/apply`, `status`, `record` | skillctrl 独自の意図と受理 hash の管理。`intent apply` は指定した skill を明示的にレビューします。 |
 | `ci`, `schedule` | 任意の自動化。`ci plan` は固定 commit の対象選択、`ci prompt` は reviewer 用の指示を担当します。 |
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
@@ -124,17 +123,17 @@ adapter は一時ディレクトリと一時 home に取得し、project の roo
 SKILL.md に残します。GitHub CLI は一時 home に切り替える前に既存の
 認証を解決し、取得プロセスだけに渡します。モデル用の credential は除去します。取得ツール自体は信頼する
 実行コマンドとして扱います。探索方法・release/ref の選択・取得ファイルの実行属性は
-backend の仕様に従います。切替で原本が変われば再適応します。command adapter が
+backend の仕様に従います。切替で原本が変わった場合の調整は `intent apply` で行います。command adapter が
 取得 commit を提供しない場合、存在しない commit を記録しません。
 CI は任意です。意図の再適用には CI とは別に reviewer とモデルの設定が必要です。
 
 `record NAME` は現在の skill ディレクトリ全体の hash を受け入れ済み lock に記録します。
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
 手動で編集して確認した内容を承認する操作であり、意図を満たすかの検証ではありません。
-更新するのは指定した管理対象 skill の hash だけで、他の管理対象の hash は保持します。
+upstream 登録と intent のある指定 skill の hash だけを更新し、他の対象の hash は保持します。対象外の記録は取り除きます。
 
 `ci plan` は固定 commit から CI のレビュー対象を選び、`ci prompt` は準備後に外部の
-agent へ渡すレビュー指示を表示します。通常の更新は内部の指示を直接使うため、この操作は不要です。
+agent へ渡すレビュー指示を表示します。ローカルの `intent apply` は内部の指示を直接使うため、この操作は不要です。
 `check` の結果は upstream 更新を `updates`、手元の差分を `local` に分けます。
 手元の確認は本文全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
 ネットワークなしで手元だけを確認するときは `status` を使います。
@@ -165,34 +164,37 @@ CLI の事前導入と、対象リポジトリの `.agents/skills/` が必要で
 
 ## 複数の原本を統合する
 
-1つの skill の更新元を `sources` 配列で管理できます。まず
-`.agents/skillctrl/intents/combined.md` に統合方針を保存します。
+複数の `--skill` を指定する `add` は、それぞれ別の skill を導入します。
+`merge` は原本を1つの skill 配下に保存し、root の `SKILL.md` を routing として作ります。
+intent や reviewer は不要です。
 
 ```sh
-skillctrl merge combined \
-  --from owner/discovery:find-skills \
-  --from owner/authoring:skill-creator
-
+skillctrl merge --name combined \
+  --from owner/first:first-skill \
+  --from owner/second:second-skill
 skillctrl update combined
 ```
 
-上記の取得元は説明用の仮名です。
-統合に使う intent は統合先の `combined.md` だけです。元の skill のローカル intent は
-読み込み・合成・削除しません。引き継ぐべき要件は統合先の intent に明記します。
-取得するのは upstream の原本であり、手元で調整済みの skill 本体ではありません。
-`--from` の一覧は既存の更新元を
-置き換えます。各原本の取得元・skill 名・配置先・tree hash（取得できる場合は commit も） を個別に記録し、
-既存の単一 source の記録は従来の形式で保持します。
+取得元は説明用の仮名です。原本は `.skillctrl-sources/0/`、`.skillctrl-sources/1/`
+に保存し、root の `SKILL.md` から参照します。reference・script と相対参照も保持します。
+原本の manifest は独立した skill として検索しません。`merge` を再実行すると更新元の
+一覧を置き換えて routing を再生成します。`update` は現在の root を保持して原本を更新します。
 
-原本は統合先 skill 内の `.skillctrl-sources/<index>/` に分けて保存します。
-agent は原本を変更せず、保存した意図に従って統合後の本文を更新します。
-原本が変わらなければ再統合しません。意図だけを変えたときは、本文を手で修正・
-検証して受理します。統合が未解決なら受理済み hash は保持します。
+統合方針を調整したい場合だけ、別操作で intent を保存して明示的に適用します。
 
-結果の `repo` が実際の作業先です。統合結果は1つのローカル skill で、
-そのディレクトリを配布できます。原本の manifest は skillctrl の検索対象から
-除外します。旧 CLI は複数 source の記録に対応しません。統合には
-[reviewer の設定](ci.md)が必要です。
+```sh
+skillctrl intent set combined --file integration-requirements.md
+skillctrl intent apply combined
+```
+
+レビューに使う intent は `combined.md` だけです。既存の入力 skill とそのローカル intent
+は合成・削除しません。レビュー中の原本は変更できず、未解決なら古い受理 hash を保持します。
+結果の `repo` が実際の作業先です。旧 CLI は複数 source の記録に対応しません。
+
+単一の導入には `add --name local-name --skill upstream-name` を使えます。ローカルの
+ディレクトリ名・登録名を変え、原本の本文と frontmatter は保持します。
+`update local-name`・`check local-name` は登録した upstream 名を使います。
+`--name` は1つの `--skill` にだけ使えます。複数の別 skill を導入するときは省略します。
 
 ## 安全の根拠
 
@@ -222,7 +224,7 @@ agent は原本を変更せず、保存した意図に従って統合後の本�
 - **再適応の隔離。** agent は no session / no context files / no skills / no
   extensions / no prompt templates / no auto-approve で起動します。これらは
   agent の探索と自動承認を止めるもので、作業対象である checkout 内のファイル
-  自体を隠すものではありません。ローカル実行の `skillctrl update` は作業
+  自体を隠すものではありません。ローカル実行の `skillctrl intent apply NAME` は作業
   ディレクトリの作業ツリーを直接編集し、CI の `skillctrl ci apply` は検証済み
   patch を index にだけ適用します。
 - **toolchain の解決先。** agent の toolchain は実行のために用意した設定

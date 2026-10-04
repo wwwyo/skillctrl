@@ -370,7 +370,7 @@ func Selection(repo string) (lock.Plan, error) {
 		return lock.Plan{}, err
 	}
 	commit := gitx.Trimmed(head)
-	intents, err := localIntents(repo)
+	intents, err := Intents(repo)
 	if err != nil {
 		return lock.Plan{}, err
 	}
@@ -385,7 +385,8 @@ func Selection(repo string) (lock.Plan, error) {
 	return plan, nil
 }
 
-func localIntents(repo string) (map[string]bool, error) {
+// Intents reads saved intent names from the working copy.
+func Intents(repo string) (map[string]bool, error) {
 	directory := filepath.Join(repo, filepath.FromSlash(lock.Intents))
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -450,7 +451,11 @@ func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, mo
 	if err != nil {
 		return nil, err
 	}
-	if _, err := lock.Record(repo, current, recorded, names, registered.ManagedSkills()); err != nil {
+	intents, err := Intents(repo)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := lock.Record(repo, current, recorded, names, lock.IntentRegistered(registered.ManagedSkills(), intents)); err != nil {
 		return nil, err
 	}
 	var unresolved []string

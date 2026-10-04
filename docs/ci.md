@@ -45,7 +45,7 @@ Three rules follow, and the commands enforce them:
 | `SKILLCTRL_TOOLCHAIN_CONFIG` | `ci prepare` | trusted configuration path; default `home/dot_config/mise/config.toml` |
 | `SKILLCTRL_AGENT_MODELS` | local review | trusted agent definitions; default `home/dot_pi/agent/models.json` |
 | `SKILLCTRL_ADAPT_MODEL`, `SKILLCTRL_ADAPT_THINKING`, `SKILLCTRL_ADAPT_COMMAND` | local review | reviewer override; defaults `opencode-go/space-bunny-free`, `high`, `pi` |
-| `SKILLCTRL_WORKTREE_PROVIDER` | `add`, `update`, `remove` | `git` (default) or `orca` |
+| `SKILLCTRL_WORKTREE_PROVIDER` | `add`, `merge`, `update`, `remove`, `intent apply` | `git` (default) or `orca` |
 
 The trusted configuration must pin a runtime and the reviewer agent and set the
 release-policy settings. Only those four values are copied into the isolated
@@ -86,8 +86,8 @@ flowchart TD
 `ci prepare` does not start a model. The external workflow obtains instructions
 with `skillctrl ci prompt` after preparation, then passes those instructions,
 the fixed plan, and the result path to its reviewer. The reviewer has no write
-token; the separate validating/publishing job receives it. Ordinary local
-updates use the embedded instructions internally and do not call `ci prompt`.
+token; the separate validating/publishing job receives it. Local `intent apply`
+uses the embedded instructions internally and do not call `ci prompt`.
 
 The phases below are what a workflow must arrange. Each step names the
 requirement, not the YAML.
@@ -104,8 +104,7 @@ requirement, not the YAML.
    an input, and it is recomputed again later.
 
 2. **Decide.** If `lock_changed` is false, stop. If `needs_review` is false,
-   the plan either selects registered skills without intent or only prunes
-   legacy unregistered hashes: create an empty artifact directory, then run
+   the plan only prunes legacy ineligible hashes (unregistered or without intent): create an empty artifact directory, then run
    steps 4 and 5 against it without invoking any model. If it
    selects skills with an intent and no inference credential is available, stop
    without publishing and report the selected names: a green build that never
@@ -236,3 +235,9 @@ Scheduled acquisition honors `--adapter skills|gh|git` and `SKILLCTRL_ADAPTER`,
 with the same default as local commands. Install the selected command through
 mise in the acquisition job. The trusted restore/validation job checks the
 prepared immutable input and needs neither installer nor model credentials.
+
+Selection and accepted hashes include only skills with both a registered upstream
+and saved intent. Intent-free scheduled imports can still produce an update PR,
+but do not enroll those skills in the accepted lock or require model review. Local
+`add`, `merge`, and `update` only acquire originals; use `intent apply NAME` for
+explicit local adaptation.

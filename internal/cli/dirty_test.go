@@ -126,7 +126,8 @@ func TestReviewFailurePreservesUnrelatedStaging(t *testing.T) {
 			if knob == "FIXTURE_UNRESOLVED=1" {
 				code = 2
 			}
-			h.run(code, "update", "manual")
+			h.run(0, "update", "manual")
+			h.run(code, "intent", "apply", "manual")
 			if string(h.read(".fixture-git/index")) != string(index) || string(h.read(".agents/skillctrl/intents/lock.json")) != string(accepted) {
 				t.Fatal("failed or unresolved review changed staging or acceptance")
 			}

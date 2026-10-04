@@ -136,7 +136,7 @@ func TestCheckReportsSelectedLocalDriftWithoutAcceptingIt(t *testing.T) {
 		t.Fatalf("local drift not reported: %v", local)
 	}
 	local = h.run(0, "check")["local"].(map[string]any)
-	equal(t, list(local["skills"]), []string{"manual", "new-skill"}, "all local drift")
+	equal(t, list(local["skills"]), []string{"manual"}, "only intent-bound local drift")
 	if h.git("status", "--porcelain") != before || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(accepted, h.read(".agents/skillctrl/intents/lock.json")) || h.log() != "" {
 		t.Fatal("check changed files, staging, acceptance, or invoked a reviewer")
 	}

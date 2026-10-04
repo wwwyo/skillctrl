@@ -15,7 +15,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | --- | --- | --- |
 | Dry run reports intent and writes nothing | `internal/cli.runInstall` | `TestInstallerLifecycle/dry_run_writes_nothing` |
 | Unchanged original is not re-imported, so an adaptation is never discarded | `internal/install.Import` fingerprint comparison | `TestInstallerLifecycle/unchanged_original_is_not_re-imported` |
-| A changed original is imported and re-adapted to the saved intent | `internal/upstream.Install`, `internal/install.Adapt` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
+| A changed original is imported without review, then separately adapted with intent apply | `internal/upstream.Install`, `internal/install.Adapt` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
 | Binary content and executable modes survive an import | `internal/upstream.Export` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
 | Unrelated upstream commits are ignored | `internal/upstream.Export` original-hash comparison | `TestInstallerLifecycle/unrelated_upstream_change_is_ignored` |
 | Unknown skill in a selection is rejected atomically | `internal/upstream.Install` | `TestInstallerLifecycle/rejected_imports_are_atomic/unknown_skill` |
@@ -32,7 +32,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | Failed adaptation exits 1 and keeps the old hash | `internal/install.Adapt` | `TestInstallerLifecycle/failed_adaptation_exits_1_and_keeps_the_old_hash` |
 | A reviewer that edits outside the selection is refused | `internal/adapt.ReviewLocal`, `internal/adapt.ValidatePaths` | `TestInstallerLifecycle/reviewer_scope_violation_is_refused` |
 | The reviewer runs isolated, and its output is exported | `internal/adapt.ReviewLocal` | `TestInstallerLifecycle/reviewer_is_isolated_and_its_output_is_exported` |
-| A skill without an intent is recorded without invoking the reviewer | `internal/install.Adapt` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
+| A skill without intent is imported without reviewer or accepted hash | `internal/install.Adapt` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | Repeated names collapse however they are ordered | `internal/install.Names` | `TestNamesRejectsEscapes` |
 | `remove` deletes the skill, its intent, and registrations | `internal/install.Import` | `TestInstallerLifecycle/remove_deletes_the_selected_intent` |
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
@@ -44,11 +44,11 @@ These behaviors extend the previous single-source implementation.
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
-| All inputs are recorded in order; changing the second input updates the merged body | `internal/upstream.Merge`, `internal/install.Adapt` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
+| All inputs are recorded in order; intent apply separately integrates a changed second input | `internal/upstream.Merge`, `internal/install.Adapt` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
 | Unchanged originals preserve output; intent-only edits do not trigger integration | `internal/upstream.mergeSkill`, `internal/lock.Select` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
 | Unresolved integration retains the accepted hash and can retry against the same originals | `internal/install.Adapt` | `TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries` |
 | Editing immutable originals cannot advance acceptance or leave staging behind | `internal/adapt.Accepted` | `TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging` |
-| Dry run and failure in a later input do not write partial results; saved intent is required | `internal/cli.runInstall`, `internal/upstream.mergeSkill` | `TestMergeDryRunAndPreparationFailureDoNotWrite` |
+| Dry run and failure in a later input do not write partial results; routing requires no saved intent | `internal/cli.runInstall`, `internal/upstream.mergeSkill` | `TestMergeDryRunAndPreparationFailureDoNotWrite` |
 | An ignored merged entrypoint is refused; the first merge in a main checkout creates its empty skills directory in the isolated worktree | `internal/upstream.mergeSkill`, `internal/install.PrepareSkills` | `TestMergeDryRunAndPreparationFailureDoNotWrite`, `TestFirstMergeInMainCheckoutRecreatesTheEmptySkillsDirectory` |
 | Malformed or duplicate source registrations are refused; legacy records are preserved | `internal/upstream.Load`, `internal/upstream.sources` | `TestSourcesArrayRejectsInvalidIdentitiesAndPreservesLegacyRecords` |
 | Inputs from separate repositories follow relocation and retain executable modes; snapshot manifests are not independently discovered | `internal/upstream.mergeSkill`, `internal/upstream.indexSkills` | `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
@@ -63,8 +63,8 @@ multi-source synthesis and hosted scheduled publication are unverified.
 | --- | --- | --- |
 | A hash covers the whole skill directory, including executable mode | `internal/lock.Snapshot` | `TestExecutableBitIsCovered` |
 | An accepted hash stops review | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
-| Only upstream-registered skills enter accepted hashes and review; handwritten intents do not opt in | `internal/lock.Select`, `internal/cli.runRecord` | `TestUpstreamOperationsIgnoreHandwrittenSkills`, `TestHandwrittenRepositoryNeedsNoLockOrReview` |
-| Legacy handwritten hashes are pruned without reviewing or changing their content | `internal/lock.Select`, `internal/lock.Record` | `TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes`, `TestUpdatePrunesLegacyHandwrittenHashesWithoutReview`, `TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges` |
+| Only upstream-registered skills with intent enter accepted hashes and review; handwritten intents do not opt in | `internal/lock.Select`, `internal/cli.runRecord` | `TestUpstreamOperationsIgnoreHandwrittenSkills`, `TestHandwrittenRepositoryNeedsNoLockOrReview` |
+| Legacy handwritten hashes are pruned without reviewing or changing their content | `internal/lock.Select`, `internal/lock.Record` | `TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes`, `TestRecordPrunesLegacyHandwrittenHashesWithoutReview`, `TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges` |
 | An intent change alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | An intent deletion alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | A removed skill with a surviving intent is reported, not restored | `internal/lock.Compare` | `TestHashesDetectUnrecordedEdits`, `TestAcceptedRequiresACompletePartition/removed_skill...` |
@@ -241,3 +241,13 @@ Real model adaptation and live Orca worktree creation are separate integrations
 from acquisition; subprocess reviewer/worktree fixtures are not those live checks.
 
 Native source tracking with a missing path is refused before export (`TestCommandAdapterRejectsMissingTrackingPath`). Live Orca creation with `--base-branch` set to a full commit SHA returned that exact `baseRef` and HEAD; the clean owned worktree was then removed through Orca.
+
+## Acquisition and explicit intent operations
+
+| Behavior | Observable coverage |
+| --- | --- |
+| Named add preserves original bytes and independent upstream identity through check/update | `TestNamedAddAndIntentLifecycle` |
+| Intent set writes no acceptance; record requires registered upstream plus intent; intent removal prunes acceptance and keeps content/upstream | `TestNamedAddAndIntentLifecycle` |
+| Explicit intent application runs even when only intent changed | `TestIntentApplyExplicitlyReviewsChangedIntentOnly` |
+| Pure merge generates links to complete originals without intent, AI, or acceptance; re-merge refreshes ordering | `TestPureMergeProducesRoutingWithoutIntent` |
+| Empty intent, escaping names, and linked intent files are rejected without changing project state | `TestIntentSetRejectsUnsafePathsAndEmptyInput` |

@@ -304,7 +304,10 @@ func TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges(t *testing.T)
 	if _, ok := accepted.Skills["local"]; ok {
 		t.Fatal("CI kept a handwritten hash")
 	}
-	for _, name := range []string{"manual", "other"} {
+	if _, ok := accepted.Skills["other"]; ok {
+		t.Fatal("intent-free skill kept an accepted hash")
+	}
+	for _, name := range []string{"manual"} {
 		if accepted.Skills[name] != current.Skills[name] {
 			t.Fatalf("cleanup moved an unrelated upstream-managed hash: %s", name)
 		}
@@ -557,9 +560,9 @@ func TestAcceptedRequiresACompletePartition(t *testing.T) {
 func TestApplyRefusesAStaleArtifactWithoutAReview(t *testing.T) {
 	r := newRepo(t)
 	directory := t.TempDir()
-	// A skill with no saved intent is recorded without a review.
+	// Skills without saved intent are excluded from review and acceptance.
 	plan := r.planWith(map[string]bool{})
-	if plan.NeedsReview || len(plan.Skills) != 2 {
+	if plan.NeedsReview || len(plan.Skills) != 0 {
 		r.t.Fatalf("unexpected fixture plan: %+v", plan)
 	}
 	r.patch(directory, r.stage(".agents/skills/manual/SKILL.md"))

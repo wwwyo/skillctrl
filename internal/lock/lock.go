@@ -3,7 +3,7 @@
 //
 // Two locks exist by design. The upstream lock describes where a skill came
 // from; the accepted lock in this package records what the maintainer has
-// accepted for an upstream-managed skill. Handwritten skills remain outside
+// accepted for an upstream-managed skill with saved intent. Other skills remain outside
 // this management. Only Git tree object IDs are stored, so a hash covers the
 // whole skill directory including body, references, scripts, and executable
 // bits, and never covers the intent document itself.
@@ -172,11 +172,37 @@ func Read(dir, ref string) (Entry, error) {
 	return Parse(out)
 }
 
-// Select chooses the differing hashes. Intent files supply review criteria, not
-// another baseline: a skill whose hash already matches the accepted lock is
-// never reviewed again, and a changed intent alone never triggers a run.
-// Handwritten skills are excluded even when they have an intent document.
+// IntentRegistered limits acceptance to upstream-managed skills with saved intent.
+func IntentRegistered(registered map[string]any, intents map[string]bool) map[string]any {
+	eligible := map[string]any{}
+	for name, entry := range registered {
+		if intents[name] {
+			eligible[name] = entry
+		}
+	}
+	return eligible
+}
+
+// IntentsAt reads intent names from a fixed Git tree.
+func IntentsAt(dir, ref string) (map[string]bool, error) {
+	tree, err := entries(dir, ref, Intents, false)
+	if err != nil {
+		return nil, err
+	}
+	intents := map[string]bool{}
+	for path, entry := range tree {
+		if entry.kind == "blob" && strings.HasSuffix(path, ".md") && path != Intents+"README.md" {
+			intents[strings.TrimSuffix(strings.TrimPrefix(path, Intents), ".md")] = true
+		}
+	}
+	return intents, nil
+}
+
+// Select chooses differing hashes for automatic review of registered skills
+// with intent. Intent changes alone do not trigger automatic review. Explicit
+// application can review a named skill even when its hash is already accepted.
 func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Plan {
+	registered = IntentRegistered(registered, intents)
 	plan := emptyPlan()
 	names := make([]string, 0, len(current.Skills)+len(recorded.Skills))
 	for name := range current.Skills {
@@ -224,15 +250,9 @@ func Compare(dir, base, head, since string) (Plan, error) {
 	if since != "" && exists(dir, since+"^{commit}") {
 		comparison = since
 	}
-	tree, err := entries(dir, head, Intents, false)
+	intents, err := IntentsAt(dir, head)
 	if err != nil {
 		return Plan{}, err
-	}
-	intents := map[string]bool{}
-	for path := range tree {
-		if strings.HasSuffix(path, ".md") && path != Intents+"README.md" {
-			intents[strings.TrimSuffix(strings.TrimPrefix(path, Intents), ".md")] = true
-		}
 	}
 	registered, err := upstream.Read(dir, head)
 	if err != nil {
@@ -289,18 +309,18 @@ func WorkingTree(dir string, paths ...string) (string, error) {
 	return gitx.Trimmed(out), nil
 }
 
-// Record advances only explicitly accepted hashes and preserves every other
-// registered entry. Unregistered skills are pruned without review; a skill
-// that disappeared from the tree has its named entry removed.
-func Record(dir string, current, recorded Entry, names []string, registered map[string]any) (Entry, error) {
+// Record advances only explicitly accepted hashes and preserves other eligible
+// entries. Callers supply upstream registrations filtered by saved intent.
+// Ineligible entries are pruned; a missing accepted skill has its entry removed.
+func Record(dir string, current, recorded Entry, names []string, eligible map[string]any) (Entry, error) {
 	values := copySkills(recorded.Skills)
 	for name := range values {
-		if _, ok := registered[name]; !ok {
+		if _, ok := eligible[name]; !ok {
 			delete(values, name)
 		}
 	}
 	for _, name := range names {
-		if _, ok := registered[name]; !ok {
+		if _, ok := eligible[name]; !ok {
 			continue
 		}
 		if hash, ok := current.Skills[name]; ok {

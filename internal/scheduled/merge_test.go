@@ -10,7 +10,7 @@ import (
 )
 
 func TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched(t *testing.T) {
-	for _, scenario := range []string{"valid second-source update", "changed identity", "forged original hash", "extra snapshot", "changed merged output", "removed array", "missing intent"} {
+	for _, scenario := range []string{"valid second-source update", "changed identity", "forged original hash", "extra snapshot", "changed merged output", "removed array", "intent-free update"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newFixture(t)
 			prefix := ".agents/skills/manual/" + upstream.SourceDirectory + "/"
@@ -32,8 +32,8 @@ func TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched(t *testin
 				f.write(upstream.Lock, string(data))
 			}
 			writeRecord(map[string]any{"sources": inputs})
-			if scenario == "missing intent" {
-				f.write(".agents/skillctrl/intents/manual.md", " \n")
+			if scenario == "intent-free update" {
+				f.git("rm", "--", ".agents/skillctrl/intents/manual.md")
 			}
 			f.git("add", "-A")
 			f.git("commit", "-qm", "merged baseline")
@@ -58,10 +58,10 @@ func TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched(t *testin
 			}
 			f.git("add", "-A")
 			err := scheduled.ValidateImport(f.dir, base, f.git("write-tree"))
-			if scenario == "valid second-source update" && err != nil {
+			if (scenario == "valid second-source update" || scenario == "intent-free update") && err != nil {
 				t.Fatalf("valid source update was rejected: %v", err)
 			}
-			if scenario != "valid second-source update" && err == nil {
+			if scenario != "valid second-source update" && scenario != "intent-free update" && err == nil {
 				t.Fatal("invalid merged inputs were accepted")
 			}
 		})

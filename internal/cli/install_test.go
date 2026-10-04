@@ -77,7 +77,7 @@ func TestUpstreamOperationsIgnoreHandwrittenSkills(t *testing.T) {
 	}
 }
 
-func TestUpdatePrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
+func TestRecordPrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 	h := newHarness(t)
 	h.write(".agents/skillctrl/intents/other.md", "local intent\n")
 	h.write(lock.Lock, lockBytes(t, h.root))
@@ -93,8 +93,9 @@ func TestUpdatePrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 		t.Fatal("status wrote the lock")
 	}
 	h.run(0, "update")
+	h.run(0, "record", "manual")
 	if _, ok := h.lockedSkills()["other"]; ok {
-		t.Fatal("update retained a legacy handwritten hash")
+		t.Fatal("record retained a legacy handwritten hash")
 	}
 	if string(h.read(".agents/skills/other/SKILL.md")) != string(before) || h.log() != "" {
 		t.Fatal("cleanup changed or reviewed handwritten content")
@@ -152,6 +153,13 @@ func TestInstallerLifecycle(t *testing.T) {
 		if stampOf(t, other) != otherStamp {
 			t.Fatal("updating one skill rewrote another")
 		}
+		if h.log() != "" || acceptedBefore != string(h.read(lock.Lock)) {
+			t.Fatal("pure update reviewed or accepted content")
+		}
+		if body := readAll(t, adapted); !strings.Contains(body, "generic browser") {
+			t.Fatal("pure update did not preserve the original")
+		}
+		h.run(0, "intent", "apply", "manual")
 		if body := readAll(t, adapted); !strings.Contains(body, "upstream v2") ||
 			!strings.Contains(body, "default browser") {
 			// The imported original must be adapted to the saved intent, not
@@ -277,7 +285,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		h.reset()
 		restore := h.withEnv("FIXTURE_UNRESOLVED", "1")
 		defer restore()
-		result := h.run(2, "update")
+		h.run(0, "update")
+		result := h.run(2, "intent", "apply", "manual")
 		equal(t, list(result["unresolved"]), []string{"manual"}, "unresolved skills")
 		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
 			t.Fatal("unresolved adaptation advanced the accepted lock")
@@ -296,7 +305,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		h.reset()
 		restore := h.withEnv("FIXTURE_REVIEW_FAIL", "1")
 		defer restore()
-		h.run(1, "update")
+		h.run(0, "update")
+		h.run(1, "intent", "apply", "manual")
 		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
 			t.Fatal("failed adaptation advanced the accepted lock")
 		}
@@ -312,7 +322,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		h.reset()
 		restore := h.withEnv("FIXTURE_SCOPE", "1")
 		defer restore()
-		h.run(1, "update")
+		h.run(0, "update")
+		h.run(1, "intent", "apply", "manual")
 		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
 			t.Fatal("scope violation advanced the accepted lock")
 		}
@@ -328,7 +339,8 @@ func TestInstallerLifecycle(t *testing.T) {
 
 	t.Run("reviewer is isolated and its output is exported", func(t *testing.T) {
 		h.reset()
-		result := h.run(0, "update")
+		h.run(0, "update")
+		result := h.run(0, "intent", "apply", "manual")
 		if str(result["report"]) == "" || str(result["report"]) == "<nil>" {
 			t.Fatalf("expected a report path: %v", result["report"])
 		}
@@ -356,8 +368,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		defer saved()
 		os.Remove(filepath.Join(h.base, "pi.log"))
 		h.run(0, "add", "fixture/source", "--skill", "new-skill")
-		if _, ok := h.lockedSkills()["new-skill"]; !ok {
-			t.Fatal("intent-free skill was not recorded")
+		if _, ok := h.lockedSkills()["new-skill"]; ok {
+			t.Fatal("intent-free skill was recorded in the accepted lock")
 		}
 		if _, ok := h.upstreamSkills()["new-skill"]; !ok {
 			t.Fatal("intent-free skill was not registered upstream")

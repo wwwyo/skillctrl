@@ -589,7 +589,11 @@ func validateAndRecord(dir string, plan lock.Plan, directory string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := lock.Record(dir, current, recorded, ordered, registered.Skills); err != nil {
+	intents, err := lock.IntentsAt(dir, plan.Head)
+	if err != nil {
+		return err
+	}
+	if _, err := lock.Record(dir, current, recorded, ordered, lock.IntentRegistered(registered.ManagedSkills(), intents)); err != nil {
 		return err
 	}
 	if err := gitx.Run(dir, "add", "--", lock.Lock); err != nil {

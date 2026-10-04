@@ -93,9 +93,9 @@ func New() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "skillctrl",
 		Short: "Manage agent skills while preserving locally recorded intent",
-		Long: "skillctrl installs and updates skills in a Git repository and re-adapts them\n" +
-			"to the intent recorded in .agents/skillctrl/intents/. Upstream originals are\n" +
-			"prepared by the selected skills adapter before review and import.",
+		Long: "skillctrl imports and registers skills through the selected acquisition adapter.\n" +
+			"Use intent apply to explicitly review them against saved intent.\n" +
+			"CI and scheduled automation are optional.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -108,7 +108,7 @@ func New() *cobra.Command {
 	root.PersistentFlags().Bool("dry-run", false,
 		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
 	root.PersistentFlags().String("worktree-provider", "",
-		"worktree isolation backend for add, merge, update and remove: git or orca")
+		"worktree isolation backend for add, merge, update, remove, and intent apply: git or orca")
 
 	registerAdapterFlag(root)
 	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Intent management:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
@@ -123,14 +123,15 @@ func New() *cobra.Command {
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),
+		newIntentCommand(),
 		newCICommand(),
 		newScheduleCommand(),
 	)
 	for _, command := range root.Commands() {
 		switch command.Name() {
-		case "find", "add", "list", "check", "update", "remove":
+		case "find", "add", "merge", "list", "check", "update", "remove":
 			command.GroupID = "skills"
-		case "status", "record", "merge":
+		case "status", "record", "intent":
 			command.GroupID = "intent"
 		default:
 			command.GroupID = "automation"

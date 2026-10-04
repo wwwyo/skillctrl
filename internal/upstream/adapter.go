@@ -81,7 +81,12 @@ func (adapter *gitAdapter) Export(request ExportRequest) (map[string]any, error)
 
 // InstallWithAdapter prepares a regular import with the selected backend.
 func InstallWithAdapter(dir, command string, selected []string, source, directory string, adapter Adapter) (string, string, error) {
-	return install(dir, command, selected, source, directory, nil, adapter)
+	return install(dir, directory, importRequest{command: command, selected: selected, source: source}, adapter)
+}
+
+// AddNamedWithAdapter imports one upstream skill under a local directory name.
+func AddNamedWithAdapter(dir, skill, name, source, directory string, adapter Adapter) (string, string, error) {
+	return install(dir, directory, importRequest{command: "add", selected: []string{skill}, source: source, outputName: name}, adapter)
 }
 
 // MergeWithAdapter prepares each merged input through the same backend.
@@ -89,7 +94,7 @@ func MergeWithAdapter(dir, name string, inputs []Input, directory string, adapte
 	if err := validateInputs(inputs); err != nil {
 		return "", "", err
 	}
-	return install(dir, "merge", []string{name}, "", directory, inputs, adapter)
+	return install(dir, directory, importRequest{command: "merge", selected: []string{name}, inputs: inputs}, adapter)
 }
 
 type commandAdapter struct{ name string }

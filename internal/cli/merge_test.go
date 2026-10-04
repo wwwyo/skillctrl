@@ -66,6 +66,7 @@ func mergedSources(t *testing.T, h *harness) []map[string]any {
 func TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput(t *testing.T) {
 	h := mergeHarness(t)
 	h.run(0, mergeArguments()...)
+	h.run(0, "intent", "apply", "combined")
 	before := mergedSources(t, h)
 	if len(before) != 2 || before[0]["skill"] != "manual" || before[1]["skill"] != "new-skill" {
 		t.Fatalf("sources were not recorded in input order: %v", before)
@@ -78,6 +79,7 @@ func TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput(t *testing.T) {
 	h.originGit("add", "-A")
 	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "second source changed")
 	h.run(0, "update")
+	h.run(0, "intent", "apply", "combined")
 	after := mergedSources(t, h)
 	if before[0]["skillFolderHash"] != after[0]["skillFolderHash"] || before[1]["skillFolderHash"] == after[1]["skillFolderHash"] {
 		t.Fatal("update did not track the changed second source independently")
@@ -105,13 +107,15 @@ func TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput(t *testing.T) {
 func TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries(t *testing.T) {
 	h := mergeHarness(t)
 	h.run(0, mergeArguments()...)
+	h.run(0, "intent", "apply", "combined")
 	h.commitAll()
 	accepted := h.read(".agents/skillctrl/intents/lock.json")
 	h.writeOrigin("skills/new-skill/SKILL.md", manifest("canonical-new-skill", "upstream v2"))
 	h.originGit("add", "-A")
 	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "update second original")
 	h.knobs("FIXTURE_UNRESOLVED=1")
-	result := h.run(2, "update", "combined")
+	h.run(0, "update", "combined")
+	result := h.run(2, "intent", "apply", "combined")
 	if fmt.Sprint(result["unresolved"]) != "[combined]" || !bytes.Equal(accepted, h.read(".agents/skillctrl/intents/lock.json")) {
 		t.Fatal("unresolved merge advanced accepted hashes")
 	}
@@ -120,6 +124,7 @@ func TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries(t *testing.T) {
 	h.commitAll()
 	h.knobs()
 	h.run(0, "update", "combined")
+	h.run(0, "intent", "apply", "combined")
 	if bytes.Equal(accepted, h.read(".agents/skillctrl/intents/lock.json")) {
 		t.Fatal("resolved retry did not accept merged content")
 	}
@@ -128,7 +133,8 @@ func TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries(t *testing.T) {
 func TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging(t *testing.T) {
 	h := mergeHarness(t)
 	h.knobs("FIXTURE_SCOPE=1")
-	stdout, stderr, code := h.try(mergeArguments()...)
+	h.run(0, mergeArguments()...)
+	stdout, stderr, code := h.try("intent", "apply", "combined")
 	if code != 1 || !strings.Contains(stderr, "immutable upstream originals") {
 		t.Fatalf("source edit was not refused: %d %s %s", code, stdout, stderr)
 	}
@@ -148,10 +154,11 @@ func TestMergeDryRunAndPreparationFailureDoNotWrite(t *testing.T) {
 	if !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || before != h.git("status", "--porcelain") {
 		t.Fatal("failure in the second source imported a partial result")
 	}
-	h.run(1, "merge", "unknown", "--from", "fixture/source:manual")
-	if before != h.git("status", "--porcelain") {
-		t.Fatal("missing intent failure changed the worktree")
+	h.run(0, "merge", "unknown", "--from", "fixture/source:manual")
+	if h.log() != "" {
+		t.Fatal("intent-free routing invoked a reviewer")
 	}
+	h.reset()
 	h.write(".gitignore", "*.local.*\n.agents/skills/combined/SKILL.md\n")
 	h.git("add", "--", ".gitignore")
 	h.commitAll()

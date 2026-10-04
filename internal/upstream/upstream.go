@@ -518,7 +518,16 @@ func Merge(dir, name string, inputs []Input, directory string) (target, lock str
 	return MergeWithAdapter(dir, name, inputs, directory, NewGitAdapter())
 }
 
-func install(dir, command string, selected []string, identifier, directory string, inputs []Input, adapter Adapter) (target, lock string, err error) {
+type importRequest struct {
+	command    string
+	selected   []string
+	source     string
+	inputs     []Input
+	outputName string
+}
+
+func install(dir, directory string, request importRequest, adapter Adapter) (target, lock string, err error) {
+	command, selected, identifier, inputs, outputName := request.command, request.selected, request.source, request.inputs, request.outputName
 	value, err := Load(dir)
 	if err != nil {
 		return "", "", err
@@ -534,8 +543,12 @@ func install(dir, command string, selected []string, identifier, directory strin
 	if len(selected) == 0 {
 		selected = slices.Sorted(maps.Keys(value.ManagedSkills()))
 	}
-	for _, name := range selected {
-		if !Name(name) {
+	for _, requested := range selected {
+		name := requested
+		if command == "add" && outputName != "" {
+			name = outputName
+		}
+		if !Name(requested) || !Name(name) {
 			return "", "", fmt.Errorf("skill names must be plain directory names")
 		}
 		previous, _ := value.Skills[name].(map[string]any)
@@ -586,9 +599,16 @@ func install(dir, command string, selected []string, identifier, directory strin
 		if err != nil {
 			return "", "", err
 		}
-		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: source, Skill: name, Name: name, Target: filepath.Join(target, name), Directory: directory, Previous: previous})
+		skill := requested
+		if command == "update" && field(previous, "skill") != "" {
+			skill = field(previous, "skill")
+		}
+		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: source, Skill: skill, Name: name, Target: filepath.Join(target, name), Directory: directory, Previous: previous})
 		if err != nil {
 			return "", "", err
+		}
+		if command == "add" && (outputName != "" || previous["skill"] != nil) {
+			exported["skill"] = skill
 		}
 		value.Skills[name] = exported
 	}

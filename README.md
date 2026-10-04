@@ -12,12 +12,10 @@
 Manage agent skills in a Git repository without losing the intent behind your
 local adaptations.
 
-A skill is installed from somewhere else, then edited to fit your machine. The
-next update overwrites those edits, and nothing records what they were for.
-`skillctrl` keeps the reason next to the skill: when an upstream release changes
-a skill you have edited, the change is re-applied to your version instead of
-replacing it, and the hashes of what you have actually accepted are recorded in
-Git.
+Import and register upstream originals with `add`, `merge`, and `update`.
+Save customization requirements separately with `intent set`, then explicitly
+apply them with `intent apply` or accept a verified manual edit with `record`.
+Acquisition never invokes a model or advances accepted content hashes.
 
 English is the default for output, code comments, documentation, and review reports.
 The linked Japanese README provides a translated introduction.
@@ -53,13 +51,11 @@ two paths it reads:
 
 The project lock stays at the repository root: `skills-lock.json` records
 where each skill came from; `.agents/skillctrl/intents/lock.json` records the
-accepted hash of each whole upstream-managed skill directory. Only skills
-registered in the upstream lock are included in accepted hashes, `status`, and
-automatic intent review. Handwritten skills are excluded even if they have an
-intent document; their intentional edits need no second acceptance record.
-Existing handwritten hash entries are removed the next time an installer,
-`record`, or CI phase writes the accepted lock. `status` remains read-only and
-reports pending cleanup through `lock_changed` without selecting those skills.
+accepted hash of each whole skill directory that has both an upstream
+registration and saved intent. Intent-free imports and handwritten skills stay
+outside this accepted lock. Existing ineligible entries are pruned on the next
+accepted-lock write; acquisition does not write that lock. `status` remains
+read-only and reports pending cleanup through `lock_changed`.
 
 Existing `npx skills` project locks (version 1) are read in place, preserving their
 version, other providers, and unknown fields. New locks use version 1, with extra
@@ -83,10 +79,12 @@ skillctrl check
 # import a skill
 skillctrl add owner/repo --skill chosen-skill
 
-# ... then write .agents/skillctrl/intents/chosen-skill.md
-
-# refresh it; the skill body is repaired to satisfy the saved intent
+# refresh the original without AI or acceptance
 skillctrl update chosen-skill
+
+# save requirements separately, then explicitly apply them with AI
+skillctrl intent set chosen-skill --file requirements.md
+skillctrl intent apply chosen-skill
 
 # what still differs from the accepted hashes
 skillctrl status
@@ -124,11 +122,12 @@ skillctrl check chosen-skill
 | Command | Responsibility |
 | --- | --- |
 | `find` / `search` | Search skills.sh for `skills` or `git`; use `gh skill search` for `gh`. The skills 1.7.0 find command has no JSON API, so its public index is queried directly. |
-| `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and reapply saved intent. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
+| `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and register originals without AI or accepted hashes. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
 | `list` / `ls` | Read project skill directories, including handwritten skills. |
 | `check` | Report upstream updates and local accepted-hash drift without importing or reviewing; optional names scope both reports. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
-| `status`, `record`, `merge` | skillctrl's accepted hashes and saved-intent workflow. `status` checks local acceptance offline, while `check` also checks upstream updates. |
+| `merge` | skillctrl-specific routing skill containing ordered upstream originals; no intent or AI required. |
+| `intent set/remove/apply`, `status`, `record` | skillctrl-specific intent and acceptance workflow. `status` checks local acceptance offline; `intent apply` explicitly reviews named skills. |
 | `ci`, `schedule` | Optional automation; `ci plan` selects fixed-commit inputs and `ci prompt` provides reviewer instructions. |
 
 Acquisition runs in a disposable directory and home, so installer-owned global
@@ -140,7 +139,7 @@ before changing home, then passes it only to the acquisition process while
 removing the inference credential. Native acquisition
 tools are trusted executables; downloaded skill scripts are not executed.
 Discovery, release/ref selection, and downloaded file modes follow the chosen
-backend; switching backends can produce a different original and trigger review.
+backend; switching backends can produce a different original to review with intent apply.
 Do not interpret the adapters as identical upstream resolvers. The direct Git
 backend records source commits; command adapters record paths and content hashes
 without inventing a commit identifier. Intent review, import protection, accepted
@@ -153,12 +152,12 @@ configured reviewer toolchain and model, independently of CI.
 accepted lock. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
-Only the named managed skills advance; other managed hashes remain unchanged.
+Only named upstream-registered skills with saved intent advance; other eligible hashes remain unchanged. Ineligible entries are pruned.
 
 `ci plan` selects from fixed commits for a CI job without fetching upstreams.
 `ci prompt` prints the embedded review instructions after preparation, for the
 external job to pass to its reviewer. These helpers live under `ci` and are not
-needed for local updates, which use the embedded instructions directly.
+needed for local `intent apply`, which uses the embedded instructions directly.
 
 `check` keeps upstream changes in `updates` and local drift in `local`.
 Local drift compares skill-directory hashes with the accepted lock; it does not
@@ -201,40 +200,41 @@ target's `.agents/skills/`. The skill and CLI are separate artifacts.
 
 ## Merge upstream skills
 
-One managed skill can track multiple upstream inputs in a `sources` array.
-First save the integration policy in
-`.agents/skillctrl/intents/combined.md`. Then select the inputs explicitly:
+`add` with several `--skill` values imports separate skills. `merge` imports
+ordered originals into one routing skill, with each input registered in its
+`sources` array. It requires neither intent nor a reviewer:
 
 ```sh
-skillctrl merge combined \
-  --from owner/discovery:find-skills \
-  --from owner/authoring:skill-creator
-
-# Checks every registered original and adapts the merged skill when needed
+skillctrl merge --name combined \
+  --from owner/first:first-skill \
+  --from owner/second:second-skill
 skillctrl update combined
 ```
 
-The repositories above are placeholders. Only the merged target's intent
-(`combined.md`) guides integration. Input skills' local intent documents are not
-read, merged, or removed; include their required behavior explicitly in the
-target intent when it must survive integration. Inputs are fetched upstream
-originals, not existing locally adapted skill copies.
-The full input list replaces the target's previous registrations. Each input
-records its own source, skill name, path, and original tree hash (and a commit when available). Existing
-single-source registrations retain their format.
+The repositories above are placeholders. The generated root `SKILL.md` routes
+tasks to `.skillctrl-sources/0/SKILL.md`, `.skillctrl-sources/1/SKILL.md`, and so
+on. Each original retains its bundled resources and relative resource paths.
+Snapshots are excluded from independent skill discovery. Explicitly running
+`merge` again replaces the ordered source list and regenerates routing; `update`
+refreshes originals while preserving the current root entrypoint.
 
-Originals live in `.agents/skills/combined/.skillctrl-sources/<index>/` so resource
-names cannot collide and review can use the complete inputs. The reviewer keeps
-those originals intact and integrates their behavior into the current entrypoint
-according to the intent. Conflicts remain unresolved with the old accepted hash.
-Changing an intent alone does not re-run integration; deliberately edit and verify
-the merged skill when applying a new policy to unchanged originals.
+To customize integration, save a separate target intent and apply it explicitly:
 
-Use the `repo` returned by `merge` or `update` for subsequent inspection. The
-result is one repository-local skill, and can be distributed as that directory.
-Its snapshot manifests are excluded from skillctrl's discovery. Older binaries
-cannot manage multi-source lock entries. The optional reviewer toolchain and
-models must be configured as described in [CI integration](docs/ci.md).
+```sh
+skillctrl intent set combined --file integration-requirements.md
+skillctrl intent apply combined
+```
+
+Only `combined.md` guides that review. Existing input skills and their local
+intents are neither combined nor deleted. Review preserves the source snapshots;
+unresolved integration keeps the old accepted hash. Use the returned `repo`
+path for subsequent operations. Older binaries cannot manage multi-source entries.
+
+For a single input, `add --name local-name --skill upstream-name` changes the
+local directory and registration name, preserving original file bytes and
+frontmatter. Subsequent `update local-name` and `check local-name` resolve the
+recorded upstream name. `--name` requires exactly one selected skill; omit it
+when importing several separate skills.
 
 ## What it will and will not do
 
@@ -269,7 +269,7 @@ models must be configured as described in [CI integration](docs/ci.md).
   shell's directory and never in the repository under review - and the resolved
   values take precedence over inherited ones.
 - **Local repair edits the working tree; CI repair does not.** `skillctrl
-  update` lets the reviewer edit the working directory and leaves the result
+  intent apply NAME` lets the reviewer edit the working directory and leaves the result
   there for you to inspect. `skillctrl ci apply` applies a validated patch to the
   Git index only.
 - **Agent output is untrusted.** A separate, credential-free path re-derives the

@@ -18,7 +18,7 @@ next to the skill so later upstream changes can be reconciled with it.
 | --- | --- |
 | Find a skill or explore available capabilities | Search and inspect candidates; install only if requested |
 | Install a selected skill | Import the named skill, inspect the resulting worktree and report it |
-| Combine skills and keep tracking their originals | Save the integration intent, merge explicit inputs, then use update |
+| Combine skills and keep tracking their originals | Merge explicit inputs into routing; save/apply integration intent only when needed |
 | Create a skill or improve its instructions | Read [authoring](references/authoring.md), then write and evaluate the skill |
 | Preserve a customization across updates | Write its intent, edit and verify the skill, then record the accepted content |
 | Refresh or remove installed skills | Update or remove the requested names, then inspect the result |
@@ -125,8 +125,7 @@ Important behavior:
 ## Merge with upstream tracking
 
 Check `skillctrl merge --help`; this command needs a binary containing the merge
-feature. Save a non-empty integration policy in
-`.agents/skillctrl/intents/<name>.md`. Select the full list of originals explicitly:
+feature. Select the full list of originals explicitly; no intent or reviewer is required:
 
 ```sh
 skillctrl --repo /absolute/path/to/project merge combined \
@@ -136,11 +135,10 @@ skillctrl --repo /actual/working-copy update combined
 ```
 
 Replace these placeholder repositories with inspected sources. `--from` is
-repeatable and replaces the target's entire `sources` array. Existing output is
-preserved as the starting point for intent review. A changed original triggers
-integration; unchanged originals and intent-only edits do not. If the reviewer
-cannot reconcile conflicting inputs, keep the result unresolved with its old
-accepted hash.
+repeatable and replaces the target's entire `sources` array. `merge` mechanically
+creates root routing to complete upstream originals, and explicit re-merge
+regenerates routing. `update` refreshes snapshots while preserving current root
+output. Neither command invokes AI or advances accepted hashes.
 
 Complete original directories are stored under the merged skill's
 `.skillctrl-sources/<index>/`. They are immutable during review and are excluded
@@ -165,16 +163,22 @@ skillctrl --repo /actual/working-copy record chosen-name
 skillctrl --repo /actual/working-copy status
 ```
 
-`record` accepts intentional edits to upstream-registered skills in place and
+`record` accepts intentional edits to upstream-registered skills with saved intent in place and
 preserves caller staging. It does not review or adapt the skill. Handwritten
 skills are excluded from accepted hashes, status, and automatic intent review,
 even if they have an intent document; do not run `record` for them or invent an
 upstream registration. Legacy handwritten hashes are pruned on the next
 accepted-lock write. Do not edit the lock JSON by hand.
 
-Changing an intent alone does not trigger adaptation. Apply a newly written
-intent through a deliberate edit and verification now; do not claim that a
-subsequent update will apply it if the upstream content has not changed.
+Save intent with `intent set chosen-name --file requirements.md`. Explicitly run
+`intent apply chosen-name` to review it, including after intent-only changes;
+review requires the configured agent. Alternatively edit and verify manually,
+then `record chosen-name`. `intent remove chosen-name` removes intent and its
+accepted hash while keeping the skill and upstream registration. Intent-free
+imports never enroll in the accepted lock. Acquisition is always independent
+of intent. For one selected skill, `add --name local-name --skill upstream-name`
+changes the local directory/registration while preserving original frontmatter;
+update/check use the stored upstream name. `--name` cannot label several skills.
 
 ## Report completion
 

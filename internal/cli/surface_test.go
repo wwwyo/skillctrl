@@ -50,7 +50,10 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"root prompt moved", []string{"prompt"}, "unknown command"},
 		{"add without a source", []string{"add"}, "accepts 1 arg"},
 		{"add without a skill", []string{"add", "owner/repo"}, "required flag"},
-		{"merge without a name", []string{"merge"}, "accepts 1 arg"},
+		{"merge without a name", []string{"merge", "--from", "owner/repo:skill"}, "requires a valid name"},
+		{"conflicting merge names", []string{"merge", "combined", "--name", "other", "--from", "owner/repo:skill"}, "either a positional"},
+		{"intent without file", []string{"intent", "set", "chosen"}, "required flag"},
+		{"intent apply without names", []string{"intent", "apply"}, "requires at least 1 arg"},
 		{"merge without sources", []string{"merge", "combined"}, "required flag"},
 		{"malformed merge source", []string{"merge", "combined", "--from", "owner/repo"}, "owner/repo:skill"},
 		{"duplicate merge source", []string{"merge", "combined", "--from", "owner/repo:skill", "--from", "owner/repo:skill"}, "duplicate upstream"},
@@ -122,7 +125,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check"} {
+	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "intent", "find", "list", "check"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}

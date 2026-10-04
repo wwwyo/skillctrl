@@ -85,7 +85,7 @@ func (f *fixture) record(t *testing.T, names ...string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lock.Record(f.dir, current, recorded, names, registered.Skills); err != nil {
+	if _, err := lock.Record(f.dir, current, recorded, names, lock.IntentRegistered(registered.ManagedSkills(), mustIntents(t, f.dir))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -171,7 +171,7 @@ func TestHashesDetectUnrecordedEdits(t *testing.T) {
 	}
 	f.commit()
 	selection := f.plan(t, removed, "")
-	equal(t, selection.Skills, []string{"manual"}, "removed skill selection")
+	equal(t, selection.Skills, []string{}, "removed skill without intent is excluded")
 	if selection.NeedsReview {
 		t.Fatal("removed skill without intent needs no review")
 	}
@@ -215,6 +215,7 @@ func TestRecordPreservesUnrelatedEntries(t *testing.T) {
 func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
 	f := newFixture(t)
 	f.write(".agents/skills/imported/SKILL.md", "accepted upstream content")
+	f.write(".agents/skillctrl/intents/imported.md", "keep imported behavior")
 	f.write(".agents/skills/local/SKILL.md", "intentional local edit")
 	f.write(".agents/skillctrl/intents/local.md", "a local intent does not opt into upstream management")
 	f.write(upstream.Lock, `{"version":3,"skills":{"imported":{"source":"fixture/source","sourceType":"github"}}}`)
@@ -396,4 +397,13 @@ func sortedKeys(values map[string]string) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func mustIntents(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	names, err := lock.IntentsAt(dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
 }
