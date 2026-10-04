@@ -2,6 +2,7 @@ package upstream
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,63 @@ LOCK
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("invalid tracking produced an import: %v", err)
+	}
+}
+
+func TestGhAdapterResolvesCallerAuthWithoutPersistingToken(t *testing.T) {
+	bin, callerHome := t.TempDir(), t.TempDir()
+	script := `#!/bin/sh
+set -eu
+if [ "$1" = auth ]; then
+  [ "$HOME" = "$FIXTURE_CALLER_HOME" ]
+  printf '%s\n' fixture-keyring-token
+  exit 0
+fi
+[ "$HOME" != "$FIXTURE_CALLER_HOME" ]
+[ "${GH_TOKEN:-}" = fixture-keyring-token ]
+mkdir -p .agents/skills/chosen "$HOME/.agents"
+printf '%s\n' '---' 'name: chosen' '---' 'original' > .agents/skills/chosen/SKILL.md
+cat > "$HOME/.agents/.skill-lock.json" <<'LOCK'
+{"version":3,"skills":{"chosen":{"source":"fixture/source","sourceType":"github","skillPath":"skills/chosen/SKILL.md"}}}
+LOCK
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("HOME", callerHome)
+	t.Setenv("FIXTURE_CALLER_HOME", callerHome)
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	adapter, err := NewAdapter("gh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	target := filepath.Join(directory, "result")
+	entry, err := adapter.Export(ExportRequest{Destination: newDestination(t, ""), Source: "fixture/source", Skill: "chosen", Name: "chosen", Target: target, Directory: directory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(fmt.Sprint(entry), "fixture-keyring-token") {
+		t.Fatal("credential stored in source tracking")
+	}
+	if err := filepath.WalkDir(directory, func(current string, item os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if item.Type().IsRegular() {
+			data, err := os.ReadFile(current)
+			if err != nil {
+				return err
+			}
+			if bytes.Contains(data, []byte("fixture-keyring-token")) {
+				t.Fatalf("credential persisted to %s", current)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

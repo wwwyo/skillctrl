@@ -31,7 +31,7 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 			}}})
 			// The executable observes actual arguments and isolation from outside
 			// skillctrl. It emits the backend's native tracking location.
-			script := "#!/bin/sh\nset -eu\n" +
+			script := "#!/bin/sh\nset -eu\n[ \"$1\" != auth ] || exit 1\n" +
 				"[ -z \"${OPENCODE_API_KEY:-}\" ]\n" +
 				"printf '%s\\n' \"$PWD\" \"$HOME\" \"$@\" >> '" + h.base + "/adapter.log'\n" +
 				"mkdir -p .agents/skills/new-skill\ncat > .agents/skills/new-skill/SKILL.md <<'BODY'\n" + body + "BODY\n"

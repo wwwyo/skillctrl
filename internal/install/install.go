@@ -452,6 +452,7 @@ func Worktree(repo, provider string) (string, error) {
 		return "", err
 	}
 	var target string
+	ready := false
 	switch provider {
 	case "git":
 		directory, err := os.MkdirTemp("", "skillctrl-worktree-")
@@ -461,8 +462,18 @@ func Worktree(repo, provider string) (string, error) {
 		target = filepath.Join(directory, "worktree")
 		if err := gitx.Run(repo, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
 			"worktree", "add", "--detach", "--quiet", target, base); err != nil {
+			_ = os.RemoveAll(directory)
 			return "", err
 		}
+		defer func() {
+			if !ready {
+				// This checkout is owned by preparation; the caller's pending files
+				// remain in the original repository if carrying them fails.
+				if err := gitx.Run(repo, "worktree", "remove", "--force", target); err == nil {
+					_ = os.RemoveAll(directory)
+				}
+			}
+		}()
 	case "orca":
 		target, err = orcaWorktree(repo, base)
 		if err != nil {
@@ -482,6 +493,7 @@ func Worktree(repo, provider string) (string, error) {
 			return "", err
 		}
 	}
+	ready = true
 	return target, nil
 }
 

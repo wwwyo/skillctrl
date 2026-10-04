@@ -119,8 +119,8 @@ skillctrl check chosen-skill
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
 `skills-lock.json` の管理場所は変更しません。GitHub CLI が埋め込む追跡 metadata は
-SKILL.md に残します。非公開の取得元にも接続できるよう、GitHub の認証は
-adapter に渡し、モデル用の credential は除去します。取得ツール自体は信頼する
+SKILL.md に残します。GitHub CLI は一時 home に切り替える前に既存の
+認証を解決し、取得プロセスだけに渡します。モデル用の credential は除去します。取得ツール自体は信頼する
 実行コマンドとして扱います。探索方法・release/ref の選択・取得ファイルの実行属性は
 backend の仕様に従います。切替で原本が変われば再適応します。command adapter が
 取得 commit を提供しない場合、存在しない commit を記録しません。

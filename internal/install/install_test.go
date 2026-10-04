@@ -197,6 +197,38 @@ func TestWorktreeCarriesPendingFilesWithoutChangingTheCaller(t *testing.T) {
 	}
 }
 
+func TestFailedPatchDoesNotLeaveARegisteredWorktree(t *testing.T) {
+	dir := newRepo(t)
+	body := filepath.Join(dir, ".agents/skills/manual/SKILL.md")
+	if err := os.WriteFile(body, []byte("pending content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	quotedGit := "'" + strings.ReplaceAll(git, "'", "'\"'\"'") + "'"
+	script := "#!/bin/sh\ncase \"$*\" in *'apply --binary'*) exit 23 ;; esac\nexec " + quotedGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if _, err := install.Worktree(dir, "git"); err == nil {
+		t.Fatal("failed patch accepted")
+	}
+	command := exec.Command(git, "worktree", "list", "--porcelain")
+	command.Dir = dir
+	out, err := command.Output()
+	if err != nil || strings.Count(string(out), "worktree ") != 1 {
+		t.Fatalf("failed preparation left a registered worktree: %s %v", out, err)
+	}
+	data, err := os.ReadFile(body)
+	if err != nil || string(data) != "pending content\n" {
+		t.Fatalf("caller edits lost: %s %v", data, err)
+	}
+}
+
 // TestWorktreeReusesAnExistingIsolationBoundary keeps a caller that is already
 // working inside a linked worktree from nesting another one.
 func TestWorktreeReusesAnExistingIsolationBoundary(t *testing.T) {

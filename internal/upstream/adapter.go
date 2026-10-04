@@ -283,6 +283,15 @@ func runAdapter(name, directory, home string, args []string) error {
 	command := exec.CommandContext(ctx, executable, args...)
 	command.Dir = directory
 	env := removeEnv(gitx.Environment(), "OPENCODE_API_KEY")
+	if name == "gh" && os.Getenv("GH_TOKEN") == "" && os.Getenv("GITHUB_TOKEN") == "" {
+		// Resolve Keychain-backed authentication before changing HOME. The token
+		// stays in process memory/environment, never an artifact or diagnostic.
+		auth := exec.CommandContext(ctx, executable, "auth", "token", "--hostname", "github.com")
+		auth.Env = env
+		if token, err := auth.Output(); err == nil && strings.TrimSpace(string(token)) != "" {
+			env = append(removeEnv(env, "GH_TOKEN"), "GH_TOKEN="+strings.TrimSpace(string(token)))
+		}
+	}
 	// Keep gh authentication available while isolating installer-owned state.
 	config := os.Getenv("GH_CONFIG_DIR")
 	if config == "" {
