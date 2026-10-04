@@ -161,6 +161,8 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	var args []string
 	switch adapter.name {
 	case "skills":
+		// codex selects the shared .agents/skills destination, independent of
+		// installed hosts; full-depth prevents a root manifest hiding nested skills.
 		identifier := "https://github.com/" + source
 		if ref != "" {
 			identifier += "/tree/" + ref
@@ -201,6 +203,10 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	if !ok {
 		return nil, fmt.Errorf("adapter source tracking does not include installed skill")
 	}
+	skillPath := field(metadata, "skillPath")
+	if strings.TrimSpace(skillPath) == "" {
+		return nil, fmt.Errorf("%s adapter source tracking requires a non-empty skillPath", adapter.name)
+	}
 	actualSource, err := Source(field(metadata, "source"))
 	if err != nil || !strings.EqualFold(actualSource, source) || metadata["sourceType"] != "github" {
 		return nil, fmt.Errorf("adapter changed upstream source identity")
@@ -223,10 +229,12 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	}); err != nil {
 		return nil, err
 	}
-	if err := gitx.SafeRun(stage, "init", "--quiet"); err != nil {
+	// Global attributes and filters must not rewrite the downloaded original.
+	objectEnv := gitx.Environment("GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1")
+	if err := gitx.SafeEnv(stage, objectEnv, "init", "--quiet", "--template="); err != nil {
 		return nil, err
 	}
-	if err := gitx.SafeRun(stage, "-c", "core.autocrlf=false", "add", "--force", "--", ".agents/skills"); err != nil {
+	if err := gitx.SafeEnv(stage, objectEnv, "-c", "core.autocrlf=false", "-c", "core.attributesFile=/dev/null", "add", "--force", "--", ".agents/skills"); err != nil {
 		return nil, err
 	}
 	tree, err := gitx.Safe(stage, "write-tree")
@@ -246,7 +254,7 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	}
 	// Project locks remain at the caller's root. Backend-only global tracking
 	// stays in the disposable home; metadata embedded by gh remains in SKILL.md.
-	result["skillPath"] = metadata["skillPath"]
+	result["skillPath"] = skillPath
 	delete(result, "sourceCommit")
 	if ref != "" {
 		result["ref"] = ref

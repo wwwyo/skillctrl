@@ -133,6 +133,9 @@ Acquisition runs in a disposable directory and home, so installer-owned global
 locks do not replace or relocate the project's root `skills-lock.json`. Only
 selected source registrations are imported, preserving unrelated lock metadata.
 GitHub CLI's native tracking metadata remains in the downloaded SKILL.md.
+Acquisition retains GitHub authentication (tokens or the gh configuration) so
+private sources work, while removing the inference credential. Native acquisition
+tools are trusted executables; downloaded skill scripts are not executed.
 Discovery, release/ref selection, and downloaded file modes follow the chosen
 backend; switching backends can produce a different original and trigger review.
 Do not interpret the adapters as identical upstream resolvers. The direct Git

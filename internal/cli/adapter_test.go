@@ -14,7 +14,17 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 	for _, backend := range []string{"skills", "gh"} {
 		t.Run(backend, func(t *testing.T) {
 			h := newHarness(t)
-			body := manifest("new-skill", "downloaded original")
+			body := strings.ReplaceAll(manifest("new-skill", "downloaded original"), "\n", "\r\n")
+			attributes := filepath.Join(h.base, "global-attributes")
+			h.writeFile(attributes, "*.md text eol=lf\n")
+			file, err := os.OpenFile(h.gitConfig, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fmt.Fprintf(file, "[core]\n attributesFile = %s\n", attributes); err != nil {
+				t.Fatal(err)
+			}
+			file.Close()
 			hash := fmt.Sprintf("%x", sha256.Sum256([]byte("SKILL.md"+body)))
 			metadata := mustJSON(map[string]any{"version": 1, "skills": map[string]any{"new-skill": map[string]any{
 				"source": "fixture/source", "sourceType": "github", "skillPath": "skills/new-skill/SKILL.md", "computedHash": hash,
@@ -43,6 +53,9 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 				t.Fatal(err)
 			}
 			h.run(0, "--adapter", backend, "install", "fixture/source", "--skill", "new-skill")
+			if !bytes.Equal(h.read(".agents/skills/new-skill/SKILL.md"), []byte(body)) {
+				t.Fatal("global Git attributes changed downloaded original")
+			}
 			entry := h.upstreamSkills()["new-skill"].(map[string]any)
 			if entry["computedHash"] != hash || entry["skillPath"] != "skills/new-skill/SKILL.md" {
 				t.Fatalf("wrong native registration: %v", entry)

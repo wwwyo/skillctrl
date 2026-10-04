@@ -226,7 +226,7 @@ is not a proof that every host's locale and ICU version produce identical hashes
 
 | Behavior | Observable coverage |
 | --- | --- |
-| Both command adapters acquire in disposable staging/home, redact the inference credential, and preserve caller staging and unrelated edits | `TestCommandAdaptersPreserveProjectState` |
+| Both command adapters acquire in disposable staging/home, redact the inference credential, preserve downloaded CRLF bytes despite global Git attributes, and preserve caller staging and unrelated edits | `TestCommandAdaptersPreserveProjectState` |
 | Native project registration and an unchanged local adaptation survive update/check | `TestCommandAdaptersPreserveProjectState` |
 | Upstream check reports updates without import or review | `TestCheckReportsUpstreamChangesWithoutImport` |
 | Failed or unknown adapters do not silently fall back or mutate project files | `TestAdapterErrorsDoNotFallBack` |
@@ -238,3 +238,5 @@ updates. GitHub CLI search was also exercised. These runs do not prove every
 native discovery convention, release/ref form, or operating-system combination.
 Real model adaptation and live Orca worktree creation are separate integrations
 from acquisition; subprocess reviewer/worktree fixtures are not those live checks.
+
+Native source tracking with a missing path is refused before export (`TestCommandAdapterRejectsMissingTrackingPath`). Live Orca creation with `--base-branch` set to a full commit SHA returned that exact `baseRef` and HEAD; the clean owned worktree was then removed through Orca.

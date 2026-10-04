@@ -8,6 +8,35 @@ import (
 	"testing"
 )
 
+func TestCommandAdapterRejectsMissingTrackingPath(t *testing.T) {
+	bin := t.TempDir()
+	script := `#!/bin/sh
+set -eu
+mkdir -p .agents/skills/chosen
+printf '%s\n' '---' 'name: chosen' '---' 'original' > .agents/skills/chosen/SKILL.md
+cat > skills-lock.json <<'LOCK'
+{"version":1,"skills":{"chosen":{"source":"fixture/source","sourceType":"github","computedHash":"unused"}}}
+LOCK
+`
+	if err := os.WriteFile(filepath.Join(bin, "skills"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	adapter, err := NewAdapter("skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	target := filepath.Join(directory, "result")
+	_, err = adapter.Export(ExportRequest{Destination: newDestination(t, ""), Source: "fixture/source", Skill: "chosen", Name: "chosen", Target: target, Directory: directory})
+	if err == nil || !strings.Contains(err.Error(), "non-empty skillPath") {
+		t.Fatalf("missing tracking accepted: %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("invalid tracking produced an import: %v", err)
+	}
+}
+
 func TestGitAdapterRespectsRegisteredRef(t *testing.T) {
 	o := newOrigin(t)
 	o.withRepository("fixture/source", o.dir)
