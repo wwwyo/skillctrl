@@ -92,13 +92,15 @@ func newSchemaCommand() *cobra.Command {
 					"remove":   "names...",
 					"record":   "names...",
 					"status":   "",
+					"list":     "",
+					"check":    "[names...]",
 					"find":     "query... [--owner owner]",
 					"plan":     "--base <commit> [--head <commit>] [--since <commit>]",
 					"ci":       "prepare|export|apply|publish <directory>",
 					"schedule": "prepare|restore|publish <directory>",
 				},
 				"sources": "GitHub owner/repo or HTTPS repository URL",
-				"options": []string{"--repo", "--dry-run", "--worktree-provider"},
+				"options": []string{"--repo", "--dry-run", "--worktree-provider", "--adapter"},
 				"output":  "JSON; logs on stderr; exit 2 means unresolved adaptation",
 				"merge": map[string]any{
 					"requires":  "non-empty .agents/skillctrl/intents/<name>.md",
@@ -112,9 +114,10 @@ func newSchemaCommand() *cobra.Command {
 
 func newFindCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "find query...",
-		Short: "Search the public skills index without installing anything",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "find query...",
+		Aliases: []string{"search"},
+		Short:   "Search the public skills index without installing anything",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			owner, _ := command.Flags().GetString("owner")
 			dry, _ := command.Flags().GetBool("dry-run")
@@ -122,7 +125,10 @@ func newFindCommand() *cobra.Command {
 			if dry {
 				return emit(map[string]any{"dry_run": true, "query": query, "owner": owner})
 			}
-			result, err := upstream.Find(query, owner)
+			if _, err := selectedAdapter(command); err != nil {
+				return fail("", err)
+			}
+			result, err := upstream.FindWithAdapter(adapterName(command), query, owner)
 			if err != nil {
 				return fail("", err)
 			}
@@ -135,9 +141,10 @@ func newFindCommand() *cobra.Command {
 
 func newAddCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "add source",
-		Short: "Import skills from a GitHub repository",
-		Args:  cobra.ExactArgs(1),
+		Use:     "add source",
+		Aliases: []string{"install", "a"},
+		Short:   "Import skills from a GitHub repository",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			skills, _ := command.Flags().GetStringSlice("skill")
 			return runInstall(command, "add", args[0], skills)
@@ -182,9 +189,10 @@ func newMergeCommand() *cobra.Command {
 
 func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove names...",
-		Short: "Remove imported skills and their upstream registration, keeping intent files",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "remove names...",
+		Aliases: []string{"rm"},
+		Short:   "Remove imported skills and their upstream registration, keeping intent files",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "remove", "", args)
 		},
@@ -223,17 +231,14 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if kind == "record" {
 		return runRecord(repo, values)
 	}
+	adapter, err := selectedAdapter(command)
+	if err != nil {
+		return fail(repo, err)
+	}
 	provider, _ := command.Flags().GetString("worktree-provider")
 	worktree, err := install.Worktree(repo, provider)
 	if err != nil {
 		return fail(repo, err)
-	}
-	status, err := gitx.Output(worktree, "status", "--porcelain")
-	if err != nil {
-		return fail(worktree, err)
-	}
-	if strings.TrimSpace(string(status)) != "" {
-		return fail(worktree, fmt.Errorf("installer requires a clean worktree; commit intentional edits first"))
 	}
 	artifacts, err := os.MkdirTemp("", "skillctrl-")
 	if err != nil {
@@ -254,9 +259,9 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	}
 	var target, upstreamLock string
 	if kind == "merge" {
-		target, upstreamLock, err = upstream.Merge(worktree, values[0], inputs, isolated)
+		target, upstreamLock, err = upstream.MergeWithAdapter(worktree, values[0], inputs, isolated, adapter)
 	} else {
-		target, upstreamLock, err = upstream.Install(worktree, kind, values, identifier, isolated)
+		target, upstreamLock, err = upstream.InstallWithAdapter(worktree, kind, values, identifier, isolated, adapter)
 	}
 	if err != nil {
 		return fail(worktree, err)
@@ -310,15 +315,16 @@ func runRecord(repo string, values []string) error {
 		return fail(repo, err)
 	}
 	unknown := []string{}
+	managed := registered.ManagedSkills()
 	for _, name := range values {
-		if _, ok := registered.Skills[name]; !ok {
+		if _, ok := managed[name]; !ok {
 			unknown = append(unknown, name)
 		}
 	}
 	if len(unknown) > 0 {
 		return fail(repo, fmt.Errorf("skills have no registered upstream: %s", strings.Join(unknown, ", ")))
 	}
-	if _, err := lock.Record(repo, current, recorded, values, registered.Skills); err != nil {
+	if _, err := lock.Record(repo, current, recorded, values, managed); err != nil {
 		return fail(repo, err)
 	}
 	return emit(map[string]any{"repo": repo, "recorded": values})

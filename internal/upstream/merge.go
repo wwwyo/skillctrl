@@ -102,7 +102,7 @@ func containsSourceDirectory(path string) bool {
 	return false
 }
 
-func mergeSkill(dir, name, target string, previous map[string]any, inputs []Input, repositories map[string]*Repository, directory string) (map[string]any, error) {
+func mergeSkill(dir, name, target string, previous map[string]any, inputs []Input, adapter Adapter, directory string) (map[string]any, error) {
 	intent, err := os.ReadFile(filepath.Join(dir, ".agents/skillctrl/intents", name+".md"))
 	if err != nil || strings.TrimSpace(string(intent)) == "" {
 		return nil, fmt.Errorf("merged skill requires a non-empty saved intent: %s", name)
@@ -135,22 +135,14 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 				break
 			}
 		}
-		repository, ok := repositories[input.Source]
-		if !ok {
-			repository, err = New(input.Source, filepath.Join(directory, fmt.Sprintf("repo-%d", len(repositories))))
-			if err != nil {
-				return nil, err
-			}
-			repositories[input.Source] = repository
-		}
 		// Each original is exported afresh into the isolated preparation tree.
 		// Reusing the same-original shortcut here would trust a locally modified
 		// source snapshot; it is the merged output that must stay unchanged.
 		force := maps.Clone(prior)
 		delete(force, "skillFolderHash")
+		delete(force, "computedHash")
 		relative := name + "/" + SourceDirectory + "/" + strconv.Itoa(index)
-		exported, err := repository.export(dir, input.Skill, relative,
-			filepath.Join(target, SourceDirectory, strconv.Itoa(index)), force)
+		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: input.Source, Skill: input.Skill, Name: relative, Target: filepath.Join(target, SourceDirectory, strconv.Itoa(index)), Directory: directory, Previous: force})
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +166,7 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		return nil, err
 	}
 	result := maps.Clone(previous)
-	for _, key := range []string{"source", "sourceType", "sourceUrl", "skillPath", "skillFolderHash", "sourceCommit", "installedAt", "updatedAt"} {
+	for _, key := range []string{"source", "sourceType", "sourceUrl", "skillPath", "skillFolderHash", "computedHash", "sourceCommit", "installedAt", "updatedAt"} {
 		delete(result, key)
 	}
 	result["sources"] = array

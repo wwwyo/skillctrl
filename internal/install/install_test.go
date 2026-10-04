@@ -117,8 +117,7 @@ func TestCheckSkillsRefusesSymlinks(t *testing.T) {
 }
 
 // TestWorktreeIsolationCreatesACleanCheckout is the portable isolation path: the
-// installer must never mutate the caller's checkout, and it must refuse to start
-// from a dirty one.
+// installer must never mutate the caller's checkout.
 func TestWorktreeIsolationCreatesACleanCheckout(t *testing.T) {
 	dir := newRepo(t)
 	worktree, err := install.Worktree(dir, "git")
@@ -151,14 +150,50 @@ func TestWorktreeIsolationCreatesACleanCheckout(t *testing.T) {
 	}
 }
 
-func TestWorktreeRefusesADirtyMainCheckout(t *testing.T) {
+func TestWorktreeCarriesPendingFilesWithoutChangingTheCaller(t *testing.T) {
 	dir := newRepo(t)
-	if err := os.WriteFile(filepath.Join(dir, ".agents/skills/manual/SKILL.md"), []byte("pending\n"), 0o644); err != nil {
+	run := func(args ...string) string {
+		t.Helper()
+		command := exec.Command("git", args...)
+		command.Dir = dir
+		out, err := command.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return string(out)
+	}
+	path := ".agents/skills/manual/SKILL.md"
+	if err := os.WriteFile(filepath.Join(dir, path), []byte("staged\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := install.Worktree(dir, "git")
-	if err == nil || !strings.Contains(err.Error(), "pending changes") {
-		t.Fatalf("a dirty checkout was accepted: %v", err)
+	run("add", "--", path)
+	if err := os.WriteFile(filepath.Join(dir, path), []byte("pending\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "new file.bin"), []byte{0, 255, 10}, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	staged, status, head := run("diff", "--cached", "--binary"), run("status", "--porcelain"), run("rev-parse", "HEAD")
+	worktree, err := install.Worktree(dir, "git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{path, "new file.bin"} {
+		want, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(worktree, file))
+		if err != nil || string(got) != string(want) {
+			t.Fatalf("pending file lost: %s: %q (%v)", file, got, err)
+		}
+	}
+	info, err := os.Stat(filepath.Join(worktree, "new file.bin"))
+	if err != nil || info.Mode().Perm()&0o111 == 0 {
+		t.Fatal("pending executable mode lost")
+	}
+	if staged != run("diff", "--cached", "--binary") || status != run("status", "--porcelain") || head != run("rev-parse", "HEAD") {
+		t.Fatal("isolation changed the caller's Git state")
 	}
 }
 

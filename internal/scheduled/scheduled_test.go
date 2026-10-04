@@ -62,7 +62,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.write(".agents/.skill-lock.json", string(registration))
+	f.write("skills-lock.json", string(registration))
 	// The suite asserts it runs in the repository being published, so a run from
 	// the wrong working directory cannot pass.
 	f.write("tests/fixture.test.sh",
@@ -157,7 +157,11 @@ func (f *fixture) installFakeImporter() {
 				Version int            `json:"version"`
 				Skills  map[string]any `json:"skills"`
 			}
-			if err := json.Unmarshal([]byte(f.read(upstream.Lock)), &metadata); err != nil {
+			path := upstream.Lock
+			if _, err := os.Stat(filepath.Join(dir, path)); os.IsNotExist(err) {
+				path = upstream.LegacyLock
+			}
+			if err := json.Unmarshal([]byte(f.read(path)), &metadata); err != nil {
 				return "", "", err
 			}
 			if f.changed {
@@ -330,7 +334,7 @@ func TestValidateImportRefusesAnythingButOriginals(t *testing.T) {
 	})
 	t.Run("a changed registration", func(t *testing.T) {
 		f := newFixture(t)
-		f.write(".agents/.skill-lock.json",
+		f.write("skills-lock.json",
 			`{"version": 3, "skills": {"manual": {"source": "other/repo", "sourceType": "github",
 			  "skillFolderHash": "`+strings.Repeat("0", 40)+`"}}}`)
 		f.git("add", "-A")
@@ -352,7 +356,7 @@ func TestValidateImportRefusesAnythingButOriginals(t *testing.T) {
 	})
 	t.Run("an added registration", func(t *testing.T) {
 		f := newFixture(t)
-		f.write(".agents/.skill-lock.json", `{"version": 3, "skills": {
+		f.write("skills-lock.json", `{"version": 3, "skills": {
 			"manual": {"source": "fixture/skills", "sourceType": "github", "skillFolderHash": "`+strings.Repeat("0", 40)+`"},
 			"extra": {"source": "fixture/skills", "sourceType": "github", "skillFolderHash": "`+strings.Repeat("0", 40)+`"}}}`)
 		f.git("add", "-A")
@@ -542,4 +546,51 @@ func copyTree(source, destination string) error {
 		}
 		return os.WriteFile(target, data, info.Mode().Perm())
 	})
+}
+
+func TestValidateImportPreservesOtherProviders(t *testing.T) {
+	f := newFixture(t)
+	record, err := upstream.Load(f.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Skills["local-skill"] = map[string]any{"source": "./local", "sourceType": "local", "computedHash": "local"}
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.write(upstream.Lock, string(data))
+	f.write(".agents/skills/local-skill/SKILL.md", "local behavior\n")
+	f.git("add", "-A")
+	f.git("commit", "-qm", "add local provider")
+	base := f.git("rev-parse", "HEAD")
+	if err := scheduled.ValidateImport(f.dir, base, base); err != nil {
+		t.Fatal(err)
+	}
+	f.write(".agents/skills/local-skill/SKILL.md", "unauthorized local change\n")
+	f.git("add", "-A")
+	if err := scheduled.ValidateImport(f.dir, base, f.git("write-tree")); err == nil || !strings.Contains(err.Error(), "unauthorized path") {
+		t.Fatalf("unsupported-provider body changed without rejection: %v", err)
+	}
+}
+
+func TestScheduledInputMigratesTheLegacyLock(t *testing.T) {
+	f := newFixture(t)
+	f.git("mv", upstream.Lock, upstream.LegacyLock)
+	f.git("commit", "-qm", "legacy registration location")
+	f.head = f.git("rev-parse", "HEAD")
+	f.installFakeImporter()
+	result, err := scheduled.Prepare(f.dir, t.TempDir(), "fixture/skills", &ghFixture{branchSHA: f.head})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Changed {
+		t.Fatal("legacy migration was not included in the fixed input")
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, upstream.LegacyLock)); !os.IsNotExist(err) {
+		t.Fatal("scheduled input kept a duplicate legacy lock")
+	}
+	if _, err := upstream.Read(f.dir, result.Plan.Head); err != nil {
+		t.Fatal(err)
+	}
 }

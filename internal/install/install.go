@@ -172,6 +172,10 @@ func Import(repo, target, upstreamLock string) error {
 		afterSet[entry.Name()] = true
 		names[entry.Name()] = true
 	}
+	replacements, err := protectPendingSkills(repo, target, names)
+	if err != nil {
+		return err
+	}
 	claude := filepath.Join(repo, filepath.FromSlash(ClaudeDir))
 	if err := os.MkdirAll(claude, 0o755); err != nil {
 		return err
@@ -186,15 +190,7 @@ func Import(repo, target, upstreamLock string) error {
 	for _, name := range ordered {
 		destination := filepath.Join(existing, name)
 		source := filepath.Join(target, name)
-		current, err := fingerprint(destination)
-		if err != nil {
-			return err
-		}
-		replacement, err := fingerprint(source)
-		if err != nil {
-			return err
-		}
-		if !sameFingerprint(current, replacement) {
+		if replacements[name] {
 			if _, err := os.Stat(destination); err == nil {
 				if err := os.RemoveAll(destination); err != nil {
 					return err
@@ -225,13 +221,61 @@ func Import(repo, target, upstreamLock string) error {
 		}
 	}
 	if _, err := os.Stat(upstreamLock); err == nil {
+		root := filepath.Join(repo, UpstreamLock)
+		info, rootErr := os.Lstat(root)
+		if rootErr != nil && !os.IsNotExist(rootErr) {
+			return rootErr
+		}
+		if rootErr == nil && !info.Mode().IsRegular() {
+			return fmt.Errorf("upstream lock must be a regular file: %s", UpstreamLock)
+		}
+		migrate := os.IsNotExist(rootErr)
 		data, err := os.ReadFile(upstreamLock)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(repo, filepath.FromSlash(UpstreamLock)), data, 0o644)
+		if err := os.WriteFile(root, data, 0o644); err != nil {
+			return err
+		}
+		if migrate {
+			if err := os.Remove(filepath.Join(repo, filepath.FromSlash(upstream.LegacyLock))); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+		return nil
 	}
 	return nil
+}
+
+// protectPendingSkills allows unrelated edits and unchanged originals, but a
+// directory replacement must not silently discard an uncommitted customization.
+func protectPendingSkills(repo, target string, names map[string]bool) (map[string]bool, error) {
+	replacements := map[string]bool{}
+	for _, name := range slices.Sorted(maps.Keys(names)) {
+		current, err := fingerprint(filepath.Join(repo, filepath.FromSlash(SkillsDir), name))
+		if err != nil {
+			return nil, err
+		}
+		replacement, err := fingerprint(filepath.Join(target, name))
+		if err != nil {
+			return nil, err
+		}
+		if sameFingerprint(current, replacement) {
+			continue
+		}
+		// A Git tree alone misses staged-only changes and ignored local files.
+		// Disable optional index writes so the status check preserves caller staging.
+		status, err := gitx.OutputEnv(repo, gitx.Environment("GIT_OPTIONAL_LOCKS=0"),
+			"status", "--porcelain", "-z", "--ignored", "--untracked-files=all", "--", SkillsDir+"/"+name+"/")
+		if err != nil {
+			return nil, err
+		}
+		if len(status) > 0 {
+			return nil, fmt.Errorf("import would overwrite pending edits to skill %s; preserve those edits before replacing it", name)
+		}
+		replacements[name] = true
+	}
+	return replacements, nil
 }
 
 func copyDirectory(source, destination string) error {
@@ -297,7 +341,7 @@ func Selection(repo string) (lock.Plan, error) {
 	if err != nil {
 		return lock.Plan{}, err
 	}
-	plan := lock.Select(current, recorded, intents, registered.Skills)
+	plan := lock.Select(current, recorded, intents, registered.ManagedSkills())
 	plan.Base = commit
 	plan.Head = commit
 	plan.Comparison = commit
@@ -344,23 +388,9 @@ func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, mo
 			Dir: repo, Plan: plan, Directory: directory, Source: plan.Head,
 			Prompt: prompt, ConfigPath: configPath, ModelsPath: modelsPath,
 		}
-		// The accepted/unresolved partition is read while the reviewed skills are
-		// still staged: it describes the state the reviewer produced. Reading it
-		// after the index is restored would compare against the pre-review commit.
-		var accepted []string
-		reviewErr := func() error {
-			// Reviewing stages skill bodies; callers retain ownership of staging
-			// and commits, so the index is restored even when the review fails.
-			defer gitx.Run(repo, "reset", "--quiet", "HEAD", "--", ".")
-			if err := adapt.ReviewLocal(options); err != nil {
-				return err
-			}
-			names, err := adapt.Accepted(repo, plan, directory)
-			accepted = names
-			return err
-		}()
-		if reviewErr != nil {
-			return nil, reviewErr
+		accepted, err := adapt.ReviewLocal(options)
+		if err != nil {
+			return nil, err
 		}
 		for _, name := range accepted {
 			resolved[name] = true
@@ -383,7 +413,7 @@ func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, mo
 	if err != nil {
 		return nil, err
 	}
-	if _, err := lock.Record(repo, current, recorded, names, registered.Skills); err != nil {
+	if _, err := lock.Record(repo, current, recorded, names, registered.ManagedSkills()); err != nil {
 		return nil, err
 	}
 	var unresolved []string
@@ -395,7 +425,7 @@ func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, mo
 	return unresolved, nil
 }
 
-// Worktree returns a clean, isolated checkout for the installer to mutate.
+// Worktree returns an isolated checkout containing the current working files.
 //
 // Three shapes exist: an existing linked worktree is reused, an Orca worktree
 // is created when the caller asks for it, and otherwise a detached Git worktree
@@ -412,33 +442,50 @@ func Worktree(repo, provider string) (string, error) {
 	if provider == "" {
 		provider = "git"
 	}
-	status, err := gitx.Output(repo, "status", "--porcelain")
+	head, err := gitx.Output(repo, "rev-parse", "HEAD")
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(string(status)) != "" {
-		return "", fmt.Errorf("main checkout has pending changes; use an existing isolated worktree")
+	base := gitx.Trimmed(head)
+	tree, err := lock.WorkingTree(repo, ".")
+	if err != nil {
+		return "", err
 	}
+	var target string
 	switch provider {
 	case "git":
 		directory, err := os.MkdirTemp("", "skillctrl-worktree-")
 		if err != nil {
 			return "", err
 		}
-		target := filepath.Join(directory, "worktree")
+		target = filepath.Join(directory, "worktree")
 		if err := gitx.Run(repo, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
-			"worktree", "add", "--detach", "--quiet", target, "HEAD"); err != nil {
+			"worktree", "add", "--detach", "--quiet", target, base); err != nil {
 			return "", err
 		}
-		return target, nil
 	case "orca":
-		return orcaWorktree(repo)
+		target, err = orcaWorktree(repo, base)
+		if err != nil {
+			return "", err
+		}
 	default:
 		return "", fmt.Errorf("unknown worktree provider: %s", provider)
 	}
+	// Applying a binary working-copy diff carries local intent and registrations
+	// into isolation without stashing, committing, or touching the caller's index.
+	patch, err := gitx.Safe(repo, "diff", "--binary", "--full-index", "--no-ext-diff", "--no-renames", base, tree)
+	if err != nil {
+		return "", err
+	}
+	if len(patch) > 0 {
+		if _, err := gitx.SafeStdin(target, patch, "apply", "--binary"); err != nil {
+			return "", err
+		}
+	}
+	return target, nil
 }
 
-func orcaWorktree(repo string) (string, error) {
+func orcaWorktree(repo, base string) (string, error) {
 	executable := os.Getenv("ORCA_CLI_COMMAND")
 	if executable == "" {
 		switch {
@@ -452,7 +499,7 @@ func orcaWorktree(repo string) (string, error) {
 	}
 	name := "skillctrl-" + time.Now().UTC().Format("20060102-150405")
 	out, err := exec.Command(executable, "worktree", "create", "--repo", "path:"+repo,
-		"--name", name, "--no-parent", "--json").Output()
+		"--name", name, "--base-branch", base, "--no-parent", "--json").Output()
 	if err != nil {
 		return "", fmt.Errorf("Orca worktree creation failed")
 	}

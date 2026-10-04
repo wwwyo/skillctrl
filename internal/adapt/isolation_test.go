@@ -105,7 +105,7 @@ func (f *reviewFixture) run(t *testing.T, plan lock.Plan) {
 		t.Fatal(err)
 	}
 	defer os.Chdir(previous)
-	if err := adapt.ReviewLocal(adapt.Options{
+	if _, err := adapt.ReviewLocal(adapt.Options{
 		Dir: f.repo.dir, Plan: plan, Directory: f.artifacts, Source: plan.Head,
 		Prompt: adapt.Prompt, ConfigPath: toolchain.DefaultConfig,
 		ModelsPath: toolchain.DefaultModels,
@@ -226,7 +226,7 @@ printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
 			// The caller holds no credential of its own.
 			t.Setenv("OPENCODE_API_KEY", "")
 			plan := f.repo.plan()
-			err := adapt.ReviewLocal(adapt.Options{
+			_, err := adapt.ReviewLocal(adapt.Options{
 				Dir: f.repo.dir, Plan: plan, Directory: f.artifacts, Source: plan.Head,
 				Prompt: adapt.Prompt, ConfigPath: toolchain.DefaultConfig,
 				ModelsPath: toolchain.DefaultModels,
@@ -253,7 +253,7 @@ func TestReviewLocalRequiresATrustedToolchain(t *testing.T) {
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	plan := r.plan()
-	err := adapt.ReviewLocal(adapt.Options{
+	_, err := adapt.ReviewLocal(adapt.Options{
 		Dir: r.dir, Plan: plan, Directory: t.TempDir(), Source: plan.Head,
 		Prompt: adapt.Prompt, ConfigPath: toolchain.DefaultConfig,
 		ModelsPath: toolchain.DefaultModels,

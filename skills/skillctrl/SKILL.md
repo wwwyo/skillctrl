@@ -42,9 +42,10 @@ wants completed, or silently replace another skill manager's registrations.
    default is the current repository. It has no `--global` option; a repository
    may separately expose its skills through shared agent configuration.
 4. The Git repository must contain `.agents/skills/`. For an authorized setup,
-   create that directory if needed. `add`, `merge`, `update`, and `remove` require a clean
-   checkout. Preserve pending user edits; use an existing clean worktree or the
-   repository's worktree tooling instead of resetting or committing them.
+   create that directory if needed. Pending edits are allowed: the CLI preserves
+   unrelated files and caller staging. Imports that would replace a skill directory
+   with pending edits are refused; preserve that customization before replacing it.
+   Never reset or commit user edits merely to run the CLI.
 
 ```sh
 skillctrl --repo /absolute/path/to/project status
@@ -55,9 +56,14 @@ The managed paths inside the target are:
 ```text
 .agents/skills/<name>/                  skill body and bundled resources
 .agents/skillctrl/intents/<name>.md     local customization requirements
-.agents/.skill-lock.json               upstream registration, maintained by CLI
+skills-lock.json                      upstream registration at repository root
 .agents/skillctrl/intents/lock.json     accepted content hashes, maintained by CLI
 ```
+
+The root project lock is shared with the skills CLI. Existing version-1 locks
+stay in place with their other-provider entries and unknown fields preserved.
+A legacy `.agents/.skill-lock.json` is read only when the root lock is absent;
+a successful import migrates it. Read-only commands never move it.
 
 ## Find and inspect
 
@@ -66,7 +72,7 @@ repository; try a different term or an owner filter if the first result misses.
 
 ```sh
 skillctrl find browser automation
-skillctrl find browser --owner vercel-labs
+skillctrl find browser --owner owner
 ```
 
 Read candidate `SKILL.md` files and relevant bundled scripts before recommending
@@ -109,7 +115,7 @@ Important behavior:
 - `remove` keeps the saved intent document; explain any remaining intent.
 - `--dry-run` checks basic arguments and reports command metadata without making
   changes. It does not fetch or inspect source content, confirm that the selected
-  skills exist upstream, check worktree cleanliness, or prove that adaptation
+  skills exist upstream, check for overlapping pending edits, or prove that adaptation
   will succeed.
 - If an import rejects a symlink, submodule, Git control file, or ignored file,
   explain the rejected source content rather than bypassing the check.
@@ -121,8 +127,7 @@ Important behavior:
 
 Check `skillctrl merge --help`; this command needs a binary containing the merge
 feature. Save a non-empty integration policy in
-`.agents/skillctrl/intents/<name>.md`, and prepare a clean checkout through the
-repository's authorized workflow. Select the full list of originals explicitly:
+`.agents/skillctrl/intents/<name>.md`. Select the full list of originals explicitly:
 
 ```sh
 skillctrl --repo /absolute/path/to/project merge combined \
@@ -179,3 +184,15 @@ performed, unresolved items, and any remaining integration step. Distinguish
 files prepared in a worktree from skills enabled in the user's active agent.
 Reserve `ci` and `schedule` publication commands for an explicit CI integration
 task; they have different side effects from local management commands.
+
+## Acquisition adapters
+
+Use the shared `find/add/list/check/update/remove` commands. `install`, `search`,
+`ls`, and `rm` are aliases. `status` reports local acceptance; `check` reports
+upstream changes without importing or reviewing. Default acquisition uses the
+pinned `skills` executable. Select `--adapter gh` for GitHub CLI or `--adapter git`
+for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in
+disposable staging and the project lock remains at root `skills-lock.json`.
+Backend discovery, release selection, embedded metadata, and file modes can
+differ; switching adapters can require another intent review. Missing tools are
+errors. Install dependencies through mise; do not run an unpinned npx download.

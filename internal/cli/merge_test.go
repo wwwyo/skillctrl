@@ -54,7 +54,7 @@ func mergedSources(t *testing.T, h *harness) []map[string]any {
 			Sources []map[string]any `json:"sources"`
 		} `json:"skills"`
 	}
-	if err := json.Unmarshal(h.read(".agents/.skill-lock.json"), &document); err != nil {
+	if err := json.Unmarshal(h.read("skills-lock.json"), &document); err != nil {
 		t.Fatal(err)
 	}
 	if document.Version != 3 {
@@ -86,9 +86,9 @@ func TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput(t *testing.T) {
 		t.Fatal("second-source update did not reach the merged body")
 	}
 	h.commitAll()
-	body, registration, calls := h.read(".agents/skills/combined/SKILL.md"), h.read(".agents/.skill-lock.json"), h.log()
+	body, registration, calls := h.read(".agents/skills/combined/SKILL.md"), h.read("skills-lock.json"), h.log()
 	h.run(0, "update", "combined")
-	if !bytes.Equal(body, h.read(".agents/skills/combined/SKILL.md")) || !bytes.Equal(registration, h.read(".agents/.skill-lock.json")) || calls != h.log() {
+	if !bytes.Equal(body, h.read(".agents/skills/combined/SKILL.md")) || !bytes.Equal(registration, h.read("skills-lock.json")) || calls != h.log() {
 		t.Fatal("unchanged originals re-imported output or invoked review")
 	}
 	if h.git("status", "--porcelain") != "" {
@@ -145,7 +145,7 @@ func TestMergeDryRunAndPreparationFailureDoNotWrite(t *testing.T) {
 		t.Fatal("dry-run did not describe inputs without writes or review")
 	}
 	h.run(1, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:linked")
-	if !bytes.Equal(h.originalUpstream, h.read(".agents/.skill-lock.json")) || before != h.git("status", "--porcelain") {
+	if !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || before != h.git("status", "--porcelain") {
 		t.Fatal("failure in the second source imported a partial result")
 	}
 	h.run(1, "merge", "unknown", "--from", "fixture/source:manual")
@@ -156,7 +156,7 @@ func TestMergeDryRunAndPreparationFailureDoNotWrite(t *testing.T) {
 	h.git("add", "--", ".gitignore")
 	h.commitAll()
 	h.run(1, mergeArguments()...)
-	if !bytes.Equal(h.originalUpstream, h.read(".agents/.skill-lock.json")) || h.git("status", "--porcelain") != "" {
+	if !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || h.git("status", "--porcelain") != "" {
 		t.Fatal("ignored merged entrypoint was imported")
 	}
 }
@@ -166,7 +166,7 @@ func TestFirstMergeInMainCheckoutRecreatesTheEmptySkillsDirectory(t *testing.T) 
 	if err := os.RemoveAll(filepath.Join(h.root, ".agents/skills")); err != nil {
 		t.Fatal(err)
 	}
-	h.write(".agents/.skill-lock.json", `{"version":3,"skills":{}}`)
+	h.write("skills-lock.json", `{"version":3,"skills":{}}`)
 	h.write(".agents/skillctrl/intents/lock.json", `{"version":2,"skills":{}}`)
 	h.commitAll()
 	if err := os.MkdirAll(filepath.Join(h.root, ".agents/skills"), 0o755); err != nil {

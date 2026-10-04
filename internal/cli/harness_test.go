@@ -113,7 +113,7 @@ func newHarness(t *testing.T) *harness {
 		h.write(".agents/skills/"+name+"/SKILL.md", manifest(name, "upstream v1; default browser"))
 	}
 	h.write(".agents/skillctrl/intents/manual.md", "use default browser\n")
-	h.write(".agents/.skill-lock.json", mustJSON(map[string]any{
+	h.write("skills-lock.json", mustJSON(map[string]any{
 		"version": 3,
 		"skills": map[string]any{"manual": map[string]any{
 			"source": "fixture/source", "sourceType": "github",
@@ -136,12 +136,13 @@ func newHarness(t *testing.T) *harness {
 	h.commitAll()
 	h.head = h.git("rev-parse", "HEAD")
 	h.originalLock = h.read(lock.Lock)
-	h.originalUpstream = h.read(".agents/.skill-lock.json")
+	h.originalUpstream = h.read("skills-lock.json")
 
 	h.installFakes()
 	h.env = append(os.Environ(),
 		"PATH="+h.binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"OPENCODE_API_KEY=fixture-credential",
+		"SKILLCTRL_ADAPTER=git",
 		"GIT_CONFIG_GLOBAL="+h.gitConfig,
 		"CLAUDE_CONFIG_DIR=/must-not-write",
 		"CODEX_HOME=/must-not-write",
@@ -212,6 +213,9 @@ func (h *harness) upstreamSymlink(relative, target string) {
 func (h *harness) commitAll() {
 	h.t.Helper()
 	h.git("add", "--", ".agents", "home")
+	if _, err := os.Lstat(filepath.Join(h.root, "skills-lock.json")); err == nil || h.git("ls-files", "--", "skills-lock.json") != "" {
+		h.git("add", "-A", "--", "skills-lock.json")
+	}
 	if _, err := os.Stat(filepath.Join(h.root, ".claude")); err == nil {
 		h.git("add", "--", ".claude")
 	}
@@ -355,7 +359,7 @@ func (h *harness) upstreamSkills() map[string]any {
 	var value struct {
 		Skills map[string]any `json:"skills"`
 	}
-	if err := json.Unmarshal(h.read(".agents/.skill-lock.json"), &value); err != nil {
+	if err := json.Unmarshal(h.read("skills-lock.json"), &value); err != nil {
 		h.t.Fatal(err)
 	}
 	return value.Skills

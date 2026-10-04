@@ -83,7 +83,19 @@ func ValidateHead(dir string, plan lock.Plan) error {
 // happens to live inside a skill directory is not the reviewer's doing and is
 // left alone.
 func ValidatePaths(dir string, plan lock.Plan) error {
-	out, err := gitx.Output(dir, "diff", "--cached", "--raw", "-z", "--no-renames")
+	return validatePathsAtTree(dir, plan, "")
+}
+
+func treeDiff(tree string) []string {
+	if tree == "" {
+		return []string{"--cached"}
+	}
+	return []string{"HEAD", tree}
+}
+
+func validatePathsAtTree(dir string, plan lock.Plan, tree string) error {
+	args := append([]string{"diff", "--raw", "-z", "--no-renames"}, treeDiff(tree)...)
+	out, err := gitx.Output(dir, args...)
 	if err != nil {
 		return err
 	}
@@ -104,7 +116,7 @@ func ValidatePaths(dir string, plan lock.Plan) error {
 			return err
 		}
 	}
-	return gitx.Run(dir, "diff", "--cached", "--check")
+	return gitx.Run(dir, append([]string{"diff", "--check"}, treeDiff(tree)...)...)
 }
 
 // readBounded reads at most limit bytes and reports one byte more. Reading a
@@ -206,6 +218,10 @@ func PrepareWithPaths(dir string, plan lock.Plan, source, output, configPath str
 // changed staged blobs. A transformed credential is not detectable; this catches
 // the direct case and is paired with the sandbox's own log redaction.
 func ValidateSecret(dir, directory string, patch []byte, secret string) error {
+	return validateSecretAtTree(dir, directory, patch, secret, "")
+}
+
+func validateSecretAtTree(dir, directory string, patch []byte, secret, tree string) error {
 	if secret == "" {
 		return fmt.Errorf("missing inference credential")
 	}
@@ -232,7 +248,8 @@ func ValidateSecret(dir, directory string, patch []byte, secret string) error {
 	if contains(patch, key) {
 		return fmt.Errorf("inference credential found in review output; artifact export refused")
 	}
-	out, err := gitx.Output(dir, "diff", "--cached", "--name-only", "-z", "--no-renames", "--diff-filter=ACMRT")
+	args := append([]string{"diff", "--name-only", "-z", "--no-renames", "--diff-filter=ACMRT"}, treeDiff(tree)...)
+	out, err := gitx.Output(dir, args...)
 	if err != nil {
 		return err
 	}
@@ -241,7 +258,7 @@ func ValidateSecret(dir, directory string, patch []byte, secret string) error {
 			continue
 		}
 		scanner := secretScanner{key: key}
-		if err := gitx.Stream(dir, &scanner, "show", ":"+raw); err != nil {
+		if err := gitx.Stream(dir, &scanner, "show", tree+":"+raw); err != nil {
 			return err
 		}
 		if scanner.found {
@@ -262,6 +279,14 @@ func contains(data, key []byte) bool {
 // before any hash advances. A reviewer that marks everything accepted without
 // evidence, or that silently omits a skill, is rejected.
 func Accepted(dir string, plan lock.Plan, directory string) ([]string, error) {
+	tree, err := gitx.Output(dir, "write-tree")
+	if err != nil {
+		return nil, err
+	}
+	return acceptedAtTree(dir, plan, directory, gitx.Trimmed(tree))
+}
+
+func acceptedAtTree(dir string, plan lock.Plan, directory, tree string) ([]string, error) {
 	data, err := readBounded(filepath.Join(directory, ResultFile), MaxPatchBytes)
 	if err != nil {
 		return nil, fmt.Errorf("invalid adaptation result")
@@ -283,11 +308,7 @@ func Accepted(dir string, plan lock.Plan, directory string) ([]string, error) {
 	if len(names) != len(seen) || !sameSet(names, plan.ReviewSkills) {
 		return nil, fmt.Errorf("adaptation result must cover exactly the reviewed skills")
 	}
-	tree, err := gitx.Output(dir, "write-tree")
-	if err != nil {
-		return nil, err
-	}
-	current, err := lock.Snapshot(dir, gitx.Trimmed(tree))
+	current, err := lock.Snapshot(dir, tree)
 	if err != nil {
 		return nil, err
 	}
@@ -350,31 +371,44 @@ func WriteRepairArtifact(dir string, plan lock.Plan, directory, secret string) e
 	if err := gitx.Run(dir, "add", "-A", "--", lock.Skills); err != nil {
 		return err
 	}
-	if err := ValidatePaths(dir, plan); err != nil {
-		return err
-	}
-	if _, err := Accepted(dir, plan, directory); err != nil {
-		return err
-	}
-	output := cappedOutput{remaining: MaxPatchBytes}
-	err := gitx.Stream(dir, &output, "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "--no-renames")
-	if output.exceeded {
-		return fmt.Errorf("repair patch exceeds 5 MB")
-	}
+	tree, err := gitx.Output(dir, "write-tree")
 	if err != nil {
 		return err
+	}
+	_, err = writeRepairArtifactAtTree(dir, plan, directory, secret, gitx.Trimmed(tree))
+	return err
+}
+
+func writeRepairArtifactAtTree(dir string, plan lock.Plan, directory, secret, tree string) ([]string, error) {
+	if err := validatePathsAtTree(dir, plan, tree); err != nil {
+		return nil, err
+	}
+	accepted, err := acceptedAtTree(dir, plan, directory, tree)
+	if err != nil {
+		return nil, err
+	}
+	output := cappedOutput{remaining: MaxPatchBytes}
+	err = gitx.Stream(dir, &output, append([]string{"diff", "--binary", "--full-index", "--no-ext-diff", "--no-renames"}, treeDiff(tree)...)...)
+	if output.exceeded {
+		return nil, fmt.Errorf("repair patch exceeds 5 MB")
+	}
+	if err != nil {
+		return nil, err
 	}
 	patch := output.buffer.Bytes()
 	// Every artifact is bounded before it is examined or written. The checks are
 	// independent of the credential check and never replace it: a size refusal
 	// must not become a way to skip screening.
 	if err := checkArtifactBounds(directory, patch); err != nil {
-		return err
+		return nil, err
 	}
-	if err := ValidateSecret(dir, directory, patch, secret); err != nil {
-		return err
+	if err := validateSecretAtTree(dir, directory, patch, secret, tree); err != nil {
+		return nil, err
 	}
-	return os.WriteFile(filepath.Join(directory, PatchFile), patch, 0o644)
+	if err := os.WriteFile(filepath.Join(directory, PatchFile), patch, 0o644); err != nil {
+		return nil, err
+	}
+	return accepted, nil
 }
 
 // checkArtifactBounds refuses model output that is too large to process or to

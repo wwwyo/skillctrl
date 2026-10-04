@@ -65,7 +65,7 @@ func TestUpdatePrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 		t.Fatal("cleanup changed or reviewed handwritten content")
 	}
 	for _, name := range strings.Fields(h.git("diff", "--name-only")) {
-		if name != lock.Lock && name != ".agents/.skill-lock.json" {
+		if name != lock.Lock && name != "skills-lock.json" {
 			t.Fatalf("cleanup changed an unrelated file: %s", name)
 		}
 	}
@@ -171,7 +171,7 @@ func TestInstallerLifecycle(t *testing.T) {
 
 	t.Run("unrelated upstream change is ignored", func(t *testing.T) {
 		acceptedBytes := readAll(t, filepath.Join(h.root, lock.Lock))
-		upstreamBytes := readAll(t, filepath.Join(h.root, ".agents/.skill-lock.json"))
+		upstreamBytes := readAll(t, filepath.Join(h.root, "skills-lock.json"))
 		stamp := stampOf(t, adapted)
 		h.writeOrigin("README.md", "unrelated upstream change\n")
 		h.originGit("add", "--", "README.md")
@@ -180,7 +180,7 @@ func TestInstallerLifecycle(t *testing.T) {
 		if len(list(result["skills"])) != 0 {
 			t.Fatalf("unrelated change selected skills: %v", result["skills"])
 		}
-		if readAll(t, filepath.Join(h.root, ".agents/.skill-lock.json")) != upstreamBytes {
+		if readAll(t, filepath.Join(h.root, "skills-lock.json")) != upstreamBytes {
 			t.Fatal("upstream lock was rewritten for an unrelated change")
 		}
 		if readAll(t, filepath.Join(h.root, lock.Lock)) != acceptedBytes {
@@ -211,7 +211,7 @@ func TestInstallerLifecycle(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				h.reset()
 				lockBefore := readAll(t, filepath.Join(h.root, lock.Lock))
-				upstreamBefore := readAll(t, filepath.Join(h.root, ".agents/.skill-lock.json"))
+				upstreamBefore := readAll(t, filepath.Join(h.root, "skills-lock.json"))
 				stdout, stderr, code := h.try(test.args...)
 				if code != 1 {
 					t.Fatalf("exit %d want 1 (stdout %s stderr %s)", code, stdout, stderr)
@@ -225,7 +225,7 @@ func TestInstallerLifecycle(t *testing.T) {
 				if readAll(t, filepath.Join(h.root, lock.Lock)) != lockBefore {
 					t.Fatal("rejected import moved the accepted lock")
 				}
-				if readAll(t, filepath.Join(h.root, ".agents/.skill-lock.json")) != upstreamBefore {
+				if readAll(t, filepath.Join(h.root, "skills-lock.json")) != upstreamBefore {
 					t.Fatal("rejected import moved the upstream lock")
 				}
 				if diff := h.git("diff", "--name-only"); diff != "" {

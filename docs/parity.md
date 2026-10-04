@@ -162,8 +162,10 @@ proves no phase reaches the remote repository under `--dry-run`.
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
-| The installer never mutates the caller's checkout | `internal/install.Worktree` | `TestWorktreeIsolationCreatesACleanCheckout` |
-| A dirty main checkout refuses to start | `internal/install.Worktree` | `TestWorktreeRefusesADirtyMainCheckout` |
+| Main-checkout isolation preserves the caller's checkout | `internal/install.Worktree` | `TestWorktreeIsolationCreatesACleanCheckout` |
+| A dirty main checkout carries current files into isolation without changing caller staging | `internal/install.Worktree` | `TestWorktreeCarriesPendingFilesWithoutChangingTheCaller` |
+| Local operations preserve unrelated staged, unstaged, deleted, and untracked files | `internal/cli.runInstall`, `internal/adapt.ReviewLocal` | `TestInstallerPreservesUnrelatedPendingEditsAndStaging` |
+| Only imports replacing skill directories with pending edits are refused, before any skill is imported | `internal/install.Import` | `TestInstallerRefusesOnlyReplacementsThatLosePendingSkillEdits` |
 | An existing linked worktree is reused | `internal/install.Worktree` | `TestWorktreeReusesAnExistingIsolationBoundary` |
 | An unknown worktree provider is refused | `internal/install.Worktree` | `TestWorktreeRejectsAnUnknownProvider` |
 | A symlink inside a skill is refused | `internal/install.CheckSkills` | `TestCheckSkillsRefusesSymlinks` |
@@ -205,3 +207,34 @@ proves no phase reaches the remote repository under `--dry-run`.
 - **Live `gh`.** Publication is exercised against a stubbed `gh` and a local bare
   remote. The real GitHub API responses, permissions model, and
   `gh auth setup-git` behavior are unverified.
+
+## Project lock compatibility
+
+| Behavior | Go boundary | Evidence |
+| --- | --- | --- |
+| Native version-1 registrations stay at the root, preserve other providers and unknown metadata, and skip unchanged originals | `internal/upstream.Load`, `internal/upstream.Install` | `TestNativeProjectLockIsKeptAtTheRepositoryRoot` |
+| Legacy repository-local registrations migrate only after successful import; reads and dry runs never migrate | `internal/upstream.Load`, `internal/install.Import` | `TestLegacyProjectLockMigratesOnlyAfterSuccessfulImport` |
+| An existing root lock wins over the legacy lock; malformed root data is not replaced | `internal/upstream.Load`, `internal/upstream.Read` | `TestExistingRootLockTakesPrecedenceOverTheLegacyLock` |
+| Source content hashing uses the project lock's path-and-content convention | `internal/upstream.contentHash` | `TestProjectContentHashMatchesSkillsCLIOrdering`; golden generated with Node's `localeCompare` and `crypto` |
+
+The native project lock convention was checked against
+[`src/local-lock.ts`](https://github.com/vercel-labs/skills/blob/main/src/local-lock.ts).
+The hash fixture covers punctuation, case, accented and Japanese file names. It
+is not a proof that every host's locale and ICU version produce identical hashes.
+
+## Acquisition adapters and shared commands
+
+| Behavior | Observable coverage |
+| --- | --- |
+| Both command adapters acquire in disposable staging/home, redact the inference credential, and preserve caller staging and unrelated edits | `TestCommandAdaptersPreserveProjectState` |
+| Native project registration and an unchanged local adaptation survive update/check | `TestCommandAdaptersPreserveProjectState` |
+| Upstream check reports updates without import or review | `TestCheckReportsUpstreamChangesWithoutImport` |
+| Failed or unknown adapters do not silently fall back or mutate project files | `TestAdapterErrorsDoNotFallBack` |
+| Common add/install, find/search, list/ls and remove/rm names plus grouped help | `TestHelpIsDiscoverable`, `TestCommandAdaptersPreserveProjectState` |
+
+Manual acquisition against the public `wwwyo/skillctrl` source succeeded with
+`skills` 1.7.0 and `gh` 2.101.0 for add/list/check; unchanged checks reported no
+updates. GitHub CLI search was also exercised. These runs do not prove every
+native discovery convention, release/ref form, or operating-system combination.
+Real model adaptation and live Orca worktree creation are separate integrations
+from acquisition; subprocess reviewer/worktree fixtures are not those live checks.

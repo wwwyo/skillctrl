@@ -238,7 +238,7 @@ func Compare(dir, base, head, since string) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	plan := Select(current, recorded, intents, registered.Skills)
+	plan := Select(current, recorded, intents, registered.ManagedSkills())
 	plan.Base = base
 	plan.Head = head
 	plan.Comparison = comparison
@@ -255,15 +255,17 @@ func exists(dir, object string) bool {
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}
-		registered, err := entries(dir, "HEAD", upstream.Lock, false)
-		if err != nil {
-			return "", err
-		}
-		_, tracked := registered[upstream.Lock]
-		if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(upstream.Lock))); err == nil || tracked {
-			paths = append(paths, upstream.Lock)
-		} else if !os.IsNotExist(err) {
-			return "", err
+		for _, relative := range []string{upstream.Lock, upstream.LegacyLock} {
+			registered, err := entries(dir, "HEAD", relative, false)
+			if err != nil {
+				return "", err
+			}
+			_, tracked := registered[relative]
+			if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(relative))); err == nil || tracked {
+				paths = append(paths, relative)
+			} else if !os.IsNotExist(err) {
+				return "", err
+			}
 		}
 	}
 	directory, err := os.MkdirTemp("", "skillctrl-index-")

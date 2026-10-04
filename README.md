@@ -51,7 +51,7 @@ two paths it reads:
 .agents/skillctrl/intents/<name>.md     what your customization must keep doing
 ```
 
-The two lock files are created by the tool. `.agents/.skill-lock.json` records
+The project lock stays at the repository root: `skills-lock.json` records
 where each skill came from; `.agents/skillctrl/intents/lock.json` records the
 accepted hash of each whole upstream-managed skill directory. Only skills
 registered in the upstream lock are included in accepted hashes, `status`, and
@@ -61,29 +61,87 @@ Existing handwritten hash entries are removed the next time an installer,
 `record`, or CI phase writes the accepted lock. `status` remains read-only and
 reports pending cleanup through `lock_changed` without selecting those skills.
 
+Existing `npx skills` project locks (version 1) are read in place, preserving their
+version, other providers, and unknown fields. New locks use version 1, with extra
+Git source metadata for skillctrl. Legacy version 3 records remain readable. If
+only `.agents/.skill-lock.json` exists, a successful import migrates it to the
+root; `status` and dry runs never move it. An existing root lock takes precedence.
+Merged entries use skillctrl's `sources` extension; manage those with skillctrl.
+
 ## Work with skills
 
 ```sh
 # search the public index; installs nothing
-skillctrl find browser --owner vercel-labs
+skillctrl find review --owner owner
+
+# list installed project skills
+skillctrl list
+
+# check upstream updates without changing project files
+skillctrl check
 
 # import a skill
-skillctrl add vercel-labs/agent-browser --skill agent-browser
+skillctrl add owner/repo --skill chosen-skill
 
-# ... then write .agents/skillctrl/intents/agent-browser.md
+# ... then write .agents/skillctrl/intents/chosen-skill.md
 
 # refresh it; the skill body is repaired to satisfy the saved intent
-skillctrl update agent-browser
+skillctrl update chosen-skill
 
 # what still differs from the accepted hashes
 skillctrl status
 
 # accept a deliberate manual edit
-skillctrl record agent-browser
+skillctrl record chosen-skill
 
 # drop the upstream registration; the intent file stays
-skillctrl remove agent-browser
+skillctrl remove chosen-skill
 ```
+
+`owner/repo` and `chosen-skill` are placeholders; replace them with an inspected
+source and skill. An intent describes behavior, for example: "Keep instructions
+concise and require tests before completing code changes."
+
+`add`, `update`, and merged inputs use a replaceable acquisition adapter. The
+default `skills` adapter invokes the pinned `skills` CLI (the same package used
+by `npx skills`); `--adapter gh` invokes `gh skill install`. `--adapter git`
+retains the direct Git importer for existing integrations. Set
+`SKILLCTRL_ADAPTER` to choose a default; an explicit flag takes precedence.
+Missing tools are errors, not automatic fallbacks. Install the adapter tools
+with mise; the repository pins `skills` 1.7.0 and `gh` 2.101.0 with a seven-day
+release cooldown. The skills executable must be on PATH; skillctrl does not
+use an unpinned `npx` download.
+
+```sh
+skillctrl --adapter skills add owner/repo --skill chosen-skill
+skillctrl --adapter gh add owner/repo --skill chosen-skill
+skillctrl list
+skillctrl check chosen-skill
+```
+
+| Command | Responsibility |
+| --- | --- |
+| `find` / `search` | Search skills.sh for `skills` or `git`; use `gh skill search` for `gh`. The skills 1.7.0 find command has no JSON API, so its public index is queried directly. |
+| `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and reapply saved intent. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
+| `list` / `ls` | Read project skill directories, including handwritten skills. |
+| `check` | Fetch and compare upstream originals without importing or reviewing. |
+| `remove` / `rm` | Remove project content and registration locally; no network or adapter executable is needed. |
+| `status`, `record`, `merge` | skillctrl's accepted hashes and saved-intent workflow. `status` checks local acceptance, while `check` checks upstream updates. |
+| `plan`, `prompt`, `schema`, `ci`, `schedule` | Inspection and optional automation. |
+
+Acquisition runs in a disposable directory and home, so installer-owned global
+locks do not replace or relocate the project's root `skills-lock.json`. Only
+selected source registrations are imported, preserving unrelated lock metadata.
+GitHub CLI's native tracking metadata remains in the downloaded SKILL.md.
+Discovery, release/ref selection, and downloaded file modes follow the chosen
+backend; switching backends can produce a different original and trigger review.
+Do not interpret the adapters as identical upstream resolvers. The direct Git
+backend records source commits; command adapters record paths and content hashes
+without inventing a commit identifier. Intent review, import protection, accepted
+hashes, and CI validation are shared by all adapters.
+
+CI is optional: these commands work locally, and intent adaptation needs a
+configured reviewer toolchain and model, independently of CI.
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `2` means
 adaptation finished with unresolved skills, exit `1` means failure. These local
@@ -115,8 +173,7 @@ target's `.agents/skills/`. The skill and CLI are separate artifacts.
 
 One managed skill can track multiple upstream inputs in a `sources` array.
 First save the integration policy in
-`.agents/skillctrl/intents/combined.md` and prepare a clean checkout through your
-repository's normal workflow. Then select the inputs explicitly:
+`.agents/skillctrl/intents/combined.md`. Then select the inputs explicitly:
 
 ```sh
 skillctrl merge combined \
@@ -129,7 +186,7 @@ skillctrl update combined
 
 The repositories above are placeholders.
 The full input list replaces the target's previous registrations. Each input
-records its own source, skill name, commit, path, and original tree hash. Existing
+records its own source, skill name, path, and original tree hash (and a commit when available). Existing
 single-source registrations retain their format.
 
 Originals live in `.agents/skills/combined/.skillctrl-sources/<index>/` so resource
@@ -147,11 +204,13 @@ models must be configured as described in [CI integration](docs/ci.md).
 
 ## What it will and will not do
 
-- **Originals are read from Git, not installed.** Tracked files come straight
-  out of a shallow clone. No upstream installer, script, or hook runs. Binary
-  content and executable bits are preserved; an import containing a symlink, a
-  submodule, a `.gitignore` or `.gitattributes`, or a file your repository would
-  ignore is refused, and a name that does not resolve uniquely is not guessed.
+- **Originals are prepared in isolation.** The selected adapter runs outside
+  the caller's repository. Imported files are checked for symlinks, Git control
+  files, and destination ignore rules before any result is promoted. The direct
+  Git adapter reads tracked blobs without running upstream installers or hooks
+  and preserves their executable modes. Command adapters use their native
+  discovery and installation behavior; installed skill scripts are not executed
+  by skillctrl.
 - **An unchanged original is never re-imported.** That is what keeps an
   adaptation alive across an update that did not touch it.
 - **The accepted hash covers the whole skill directory** - body, references,
@@ -159,12 +218,15 @@ models must be configured as described in [CI integration](docs/ci.md).
   deleting an intent is a decision in itself and never triggers adaptation on its
   own. An ambiguous skill is left untouched with its old hash and reported as
   unresolved. A deleted skill with a surviving intent is reported, not restored.
-- **The working directory you point at is not always left alone.** `add`,
-  `update`, and `remove` refuse a dirty checkout. If the target is already a
-  linked worktree, that worktree is the working copy and is modified. If it is a
-  main checkout, a detached worktree is created in a temporary directory and the
-  main checkout is left untouched. `--worktree-provider orca` delegates worktree
-  creation to Orca.
+- **Pending edits are allowed.** `add`, `merge`, `update`, and `remove` preserve
+  unrelated working files and the caller's staging area. An import that would
+  replace a skill directory containing pending edits is refused before any skill
+  is imported; unchanged originals do not overwrite those edits. If the target is
+  a linked worktree, it is modified in place. For a main checkout, a separate
+  worktree starts from its current commit and carries tracked changes and
+  non-ignored untracked files; the original checkout remains untouched. Use the
+  returned `repo` path to inspect the result. `--worktree-provider orca` delegates
+  worktree creation to Orca.
 - **Isolation flags do not hide files.** Intent review runs the agent with no
   session, no context files, no skills, no extensions, no prompt templates, and
   no auto-approval. Those stop discovery and unattended action; they do not stop

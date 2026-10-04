@@ -86,7 +86,10 @@ func ValidateImport(dir, base, tree string) error {
 	}
 	prefixes := make([]string, 0, len(registered))
 	for _, name := range registered {
-		prefixes = append(prefixes, lock.Skills+name+"/")
+		entry := before.Skills[name].(map[string]any)
+		if field(entry, "sourceType") == "github" || entry["sources"] != nil {
+			prefixes = append(prefixes, lock.Skills+name+"/")
+		}
 	}
 	out, err := gitx.Output(dir, "diff", "--name-only", "-z", "--no-renames", base, tree)
 	if err != nil {
@@ -94,6 +97,20 @@ func ValidateImport(dir, base, tree string) error {
 	}
 	for _, raw := range strings.Split(string(out), "\x00") {
 		if raw == "" {
+			continue
+		}
+		if raw == upstream.LegacyLock {
+			remaining, err := gitx.Output(dir, "ls-tree", tree, "--", upstream.LegacyLock)
+			if err != nil {
+				return err
+			}
+			existing, err := gitx.Output(dir, "ls-tree", base, "--", upstream.Lock)
+			if err != nil {
+				return err
+			}
+			if len(remaining) != 0 || len(existing) != 0 {
+				return fmt.Errorf("upstream import changed an unauthorized legacy lock")
+			}
 			continue
 		}
 		if raw == upstream.Lock || hasAnyPrefix(raw, prefixes) {
@@ -126,6 +143,13 @@ func ValidateImport(dir, base, tree string) error {
 		if merged || wasMerged {
 			if err := upstream.ValidateMergedImport(dir, base, tree, name, original, entry); err != nil {
 				return err
+			}
+			continue
+		}
+		// Other providers share the project lock but are never imported here.
+		if field(original, "sourceType") != "github" {
+			if !sameEntry(entry, original) {
+				return fmt.Errorf("scheduled update changed an unsupported source: %s", name)
 			}
 			continue
 		}
@@ -182,18 +206,11 @@ type upstreamLock struct {
 }
 
 func lockEntries(dir, tree string) (upstreamLock, error) {
-	before, err := gitx.Output(dir, "show", tree+":"+upstream.Lock)
+	record, err := upstream.Read(dir, tree)
 	if err != nil {
-		return upstreamLock{}, fmt.Errorf("upstream lock is unavailable at %s: %w", tree, err)
+		return upstreamLock{}, err
 	}
-	var value upstreamLock
-	if err := json.Unmarshal(before, &value); err != nil {
-		return upstreamLock{}, fmt.Errorf("unreadable upstream lock at %s: %w", tree, err)
-	}
-	if value.Skills == nil {
-		return upstreamLock{}, fmt.Errorf("upstream lock at %s has no skills", tree)
-	}
-	return value, nil
+	return upstreamLock{Skills: record.Skills}, nil
 }
 
 // Result is the prepared input plus whether anything changed.
@@ -206,6 +223,17 @@ type Result struct {
 // Prepare fetches all originals before emitting a fixed input commit, bundle,
 // and hash plan.
 func Prepare(dir, directory, ghRepo string, gh adapt.GH) (Result, error) {
+	return prepare(dir, directory, ghRepo, gh, Install)
+}
+
+// PrepareWithAdapter acquires scheduled originals through the selected backend.
+func PrepareWithAdapter(dir, directory, ghRepo string, gh adapt.GH, adapter upstream.Adapter) (Result, error) {
+	return prepare(dir, directory, ghRepo, gh, func(dir, command string, names []string, source, directory string) (string, string, error) {
+		return upstream.InstallWithAdapter(dir, command, names, source, directory, adapter)
+	})
+}
+
+func prepare(dir, directory, ghRepo string, gh adapt.GH, acquire func(string, string, []string, string, string) (string, string, error)) (Result, error) {
 	if existing, err := OpenUpdate(gh, ghRepo); err != nil {
 		return Result{}, err
 	} else if existing != "" {
@@ -244,7 +272,7 @@ func Prepare(dir, directory, ghRepo string, gh adapt.GH) (Result, error) {
 		return Result{}, err
 	}
 	defer os.RemoveAll(temporary)
-	target, upstreamLockPath, err := Install(dir, "update", nil, "", temporary)
+	target, upstreamLockPath, err := acquire(dir, "update", nil, "", temporary)
 	if err != nil {
 		return Result{}, err
 	}
@@ -254,7 +282,15 @@ func Prepare(dir, directory, ghRepo string, gh adapt.GH) (Result, error) {
 	if err := install.Import(dir, target, upstreamLockPath); err != nil {
 		return Result{}, err
 	}
-	if err := gitx.Run(dir, "add", "-A", "--", lock.Skills, upstream.Lock, ".claude/skills"); err != nil {
+	paths := []string{lock.Skills, upstream.Lock, ".claude/skills"}
+	legacy, err := gitx.Output(dir, "ls-files", "--", upstream.LegacyLock)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(legacy) > 0 {
+		paths = append(paths, upstream.LegacyLock)
+	}
+	if err := gitx.Run(dir, append([]string{"add", "-A", "--"}, paths...)...); err != nil {
 		return Result{}, err
 	}
 	tree, err := gitx.Output(dir, "write-tree")

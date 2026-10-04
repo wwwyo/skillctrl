@@ -39,7 +39,7 @@ func BuildVersion() string {
 // write the Git index, a lock file, and a remote pull request; there is no
 // partial execution to offer, and silently ignoring the flag would let a caller
 // believe nothing was published.
-const dryRunRejection = "--dry-run applies to find, add, merge, update, remove, and record; " +
+const dryRunRejection = "--dry-run applies to find, check, add, merge, update, remove, and record; " +
 	"this phase writes the index, the lock, and the remote repository"
 
 // rejectDryRun refuses a phase that has no defined dry-run semantics before it
@@ -95,7 +95,7 @@ func New() *cobra.Command {
 		Short: "Manage agent skills while preserving locally recorded intent",
 		Long: "skillctrl installs and updates skills in a Git repository and re-adapts them\n" +
 			"to the intent recorded in .agents/skillctrl/intents/. Upstream originals are\n" +
-			"read straight from Git objects; no upstream installer, script, or hook runs.",
+			"prepared by the selected skills adapter before review and import.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -106,11 +106,16 @@ func New() *cobra.Command {
 
 	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
 	root.PersistentFlags().Bool("dry-run", false,
-		"report what would happen without changing anything; applies to find, add, merge, update, remove, and record")
+		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
 	root.PersistentFlags().String("worktree-provider", "",
 		"worktree isolation backend for add, merge, update and remove: git or orca")
 
+	root.PersistentFlags().String("adapter", "", "skills backend: skills (default), gh, or git; also SKILLCTRL_ADAPTER")
+	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Intent management:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
+	root.SetHelpCommandGroupID("automation")
 	root.AddCommand(
+		newListCommand(),
+		newCheckCommand(),
 		newStatusCommand(),
 		newSchemaCommand(),
 		newFindCommand(),
@@ -124,5 +129,15 @@ func New() *cobra.Command {
 		newScheduleCommand(),
 		newPromptCommand(),
 	)
+	for _, command := range root.Commands() {
+		switch command.Name() {
+		case "find", "add", "list", "check", "update", "remove":
+			command.GroupID = "skills"
+		case "status", "record", "merge":
+			command.GroupID = "intent"
+		default:
+			command.GroupID = "automation"
+		}
+	}
 	return root
 }

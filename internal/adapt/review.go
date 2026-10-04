@@ -55,37 +55,37 @@ type Options struct {
 // the trusted toolchain. Isolation matters twice: the agent must not read the
 // incoming repository's own mise configuration or agent settings, and its output
 // is only ever a candidate patch.
-func ReviewLocal(options Options) error {
+func ReviewLocal(options Options) ([]string, error) {
 	if err := ValidateHead(options.Dir, options.Plan); err != nil {
-		return err
+		return nil, err
 	}
 	before, err := lock.WorkingTree(options.Dir, ".")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	state := filepath.Join(options.Directory, "agent")
 	if err := os.MkdirAll(state, 0o755); err != nil {
-		return err
+		return nil, err
 	}
 	models, err := toolchain.Models(options.Dir, options.Source, options.ModelsPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.WriteFile(filepath.Join(state, "models.json"), models, 0o644); err != nil {
-		return err
+		return nil, err
 	}
 	configuration, err := toolchain.Trusted(options.Dir, options.Source, options.ConfigPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// CI already ran Prepare, so this rewrite is a no-op there; writing it here
 	// keeps the direct local path self-contained.
 	rendered, err := toolchain.Render(configuration)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.WriteFile(filepath.Join(options.Directory, "mise.toml"), rendered, 0o644); err != nil {
-		return err
+		return nil, err
 	}
 	prompt := options.Prompt +
 		"\nSelection plan (input data):\n" + mustJSON(options.Plan) +
@@ -93,11 +93,15 @@ func ReviewLocal(options Options) error {
 
 	environment, err := toolchainEnvironment(options.Directory)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The agent's own state directory is the only thing added on top of the
 	// reduced environment.
-	environment = append(environment, "PI_CODING_AGENT_DIR="+state)
+	index := filepath.Join(state, "index")
+	if err := gitx.RunEnv(options.Dir, gitx.Environment("GIT_INDEX_FILE="+index), "read-tree", "HEAD"); err != nil {
+		return nil, err
+	}
+	environment = append(environment, "PI_CODING_AGENT_DIR="+state, "GIT_INDEX_FILE="+index)
 
 	command := os.Getenv(CommandEnv)
 	if command == "" {
@@ -108,7 +112,7 @@ func ReviewLocal(options Options) error {
 	// the trusted configuration never pinned.
 	resolved, err := resolveCommand(environment, command)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	model := os.Getenv(ModelEnv)
 	if model == "" {
@@ -120,7 +124,7 @@ func ReviewLocal(options Options) error {
 	}
 	report, err := os.Create(filepath.Join(options.Directory, ReportFile))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	run := exec.Command(resolved,
 		"--model", model, "--thinking", thinking,
@@ -138,14 +142,14 @@ func ReviewLocal(options Options) error {
 	runErr := run.Run()
 	_ = report.Close()
 	if runErr != nil {
-		return runErr
+		return nil, runErr
 	}
 	if err := ValidateHead(options.Dir, options.Plan); err != nil {
-		return err
+		return nil, err
 	}
 	after, err := lock.WorkingTree(options.Dir, ".")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	prefixes := make([]string, 0, len(options.Plan.ReviewSkills))
 	for _, name := range options.Plan.ReviewSkills {
@@ -153,20 +157,28 @@ func ReviewLocal(options Options) error {
 	}
 	out, err := gitx.Output(options.Dir, "diff", "--name-only", "-z", "--no-renames", before, after)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, raw := range strings.Split(string(out), "\x00") {
 		if raw == "" {
 			continue
 		}
 		if !hasPrefix(raw, prefixes) {
-			return fmt.Errorf("reviewer changed a path outside reviewed skills: %s", raw)
+			return nil, fmt.Errorf("reviewer changed a path outside reviewed skills: %s", raw)
 		}
 	}
 	// The credential to screen for is the one the reviewer actually received,
 	// which the trusted toolchain may have supplied.
-	return WriteRepairArtifact(options.Dir, options.Plan, options.Directory,
-		environmentValue(environment, "OPENCODE_API_KEY"))
+	paths := make([]string, 0, len(options.Plan.Skills))
+	for _, name := range options.Plan.Skills {
+		paths = append(paths, lock.Skills+name)
+	}
+	tree, err := lock.WorkingTree(options.Dir, paths...)
+	if err != nil {
+		return nil, err
+	}
+	return writeRepairArtifactAtTree(options.Dir, options.Plan, options.Directory,
+		environmentValue(environment, "OPENCODE_API_KEY"), tree)
 }
 
 // processEnvironment is the whole of what a reviewer inherits from the caller:

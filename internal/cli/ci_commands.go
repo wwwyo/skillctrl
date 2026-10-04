@@ -136,7 +136,11 @@ func newScheduleCommand() *cobra.Command {
 	}
 	command.AddCommand(
 		newScheduleStep("prepare", func(dir, directory string, _ lock.Plan) error {
-			result, err := scheduled.Prepare(dir, directory, os.Getenv("GITHUB_REPOSITORY"), adapt.CLI{})
+			adapter, err := selectedAdapter(command)
+			if err != nil {
+				return err
+			}
+			result, err := scheduled.PrepareWithAdapter(dir, directory, os.Getenv("GITHUB_REPOSITORY"), adapt.CLI{}, adapter)
 			if err != nil {
 				return err
 			}

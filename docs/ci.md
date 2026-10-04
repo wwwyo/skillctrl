@@ -214,3 +214,8 @@ requirement, not the YAML.
 - Orca worktree creation. `--worktree-provider orca` is implemented and was
   exercised against a live Orca during this port; see the gaps section of
   [parity.md](parity.md) for exactly what was and was not covered.
+
+Scheduled acquisition honors `--adapter skills|gh|git` and `SKILLCTRL_ADAPTER`,
+with the same default as local commands. Install the selected command through
+mise in the acquisition job. The trusted restore/validation job checks the
+prepared immutable input and needs neither installer nor model credentials.

@@ -44,7 +44,7 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		want string
 	}{
 		{"unknown flag", []string{"status", "--nonsense"}, "unknown flag"},
-		{"unknown command", []string{"install"}, "unknown command"},
+		{"unknown command", []string{"nonexistent"}, "unknown command"},
 		{"add without a source", []string{"add"}, "accepts 1 arg"},
 		{"add without a skill", []string{"add", "owner/repo"}, "required flag"},
 		{"merge without a name", []string{"merge"}, "accepts 1 arg"},
@@ -98,7 +98,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "schema", "plan"} {
+	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check", "schema", "plan"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}
@@ -127,7 +127,7 @@ func TestSchemaDescribesTheContract(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &schema); err != nil {
 		t.Fatalf("schema is not one JSON document: %v\n%s", err, stdout)
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "record", "status", "find", "plan"} {
+	for _, command := range []string{"add", "merge", "update", "remove", "record", "status", "find", "list", "check", "plan"} {
 		if _, ok := schema.Commands[command]; !ok {
 			t.Fatalf("schema omits %s", command)
 		}
