@@ -45,6 +45,9 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 	}{
 		{"unknown flag", []string{"status", "--nonsense"}, "unknown flag"},
 		{"unknown command", []string{"nonexistent"}, "unknown command"},
+		{"removed schema", []string{"schema"}, "unknown command"},
+		{"root plan moved", []string{"plan"}, "unknown command"},
+		{"root prompt moved", []string{"prompt"}, "unknown command"},
 		{"add without a source", []string{"add"}, "accepts 1 arg"},
 		{"add without a skill", []string{"add", "owner/repo"}, "required flag"},
 		{"merge without a name", []string{"merge"}, "accepts 1 arg"},
@@ -52,7 +55,7 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"malformed merge source", []string{"merge", "combined", "--from", "owner/repo"}, "owner/repo:skill"},
 		{"duplicate merge source", []string{"merge", "combined", "--from", "owner/repo:skill", "--from", "owner/repo:skill"}, "duplicate upstream"},
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
-		{"plan without a base", []string{"plan"}, "requires --base"},
+		{"plan without a base", []string{"ci", "plan"}, "requires --base"},
 		{"extra arguments", []string{"status", "extra"}, "unknown command"},
 	}
 	for _, test := range cases {
@@ -98,7 +101,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check", "schema", "plan"} {
+	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}
@@ -110,30 +113,9 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if !strings.Contains(stdout, "--skill") || !strings.Contains(stdout, "--repo") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
 	}
-}
-
-// TestSchemaDescribesTheContract keeps the machine-readable description of the
-// commands and the exit codes in step with the command tree.
-func TestSchemaDescribesTheContract(t *testing.T) {
-	stdout, _, code := runBinary(t, nil, "schema")
-	if code != 0 {
-		t.Fatal("schema failed")
-	}
-	var schema struct {
-		Commands map[string]string `json:"commands"`
-		Options  []string          `json:"options"`
-		Output   string            `json:"output"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &schema); err != nil {
-		t.Fatalf("schema is not one JSON document: %v\n%s", err, stdout)
-	}
-	for _, command := range []string{"add", "merge", "update", "remove", "record", "status", "find", "list", "check", "plan"} {
-		if _, ok := schema.Commands[command]; !ok {
-			t.Fatalf("schema omits %s", command)
-		}
-	}
-	if !strings.Contains(schema.Output, "exit 2") {
-		t.Fatalf("schema omits the unresolved exit code: %q", schema.Output)
+	stdout, _, code = runBinary(t, nil, "ci", "--help")
+	if code != 0 || !strings.Contains(stdout, "plan") || !strings.Contains(stdout, "prompt") {
+		t.Fatalf("CI help omits integration helpers:\n%s", stdout)
 	}
 }
 

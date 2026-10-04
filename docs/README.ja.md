@@ -112,10 +112,10 @@ skillctrl check chosen-skill
 | `find` / `search` | `skills` / `git` は skills.sh API、`gh` は `gh skill search` で検索。skills 1.7.0 の find には JSON 出力がないため API を使います。 |
 | `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・意図の再適用を担当。 |
 | `list` / `ls` | 手書きを含む project の skill 一覧。 |
-| `check` | 原本の更新確認。取り込みと reviewer 実行はしません。 |
+| `check` | 原本の更新と手元の受け入れ済み hash の差分を確認。取り込み・reviewer 実行はしません。名前指定は両方に適用します。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
-| `status`, `record`, `merge` | skillctrl 独自の受理 hash と保存した意図の管理。status は手元の受理状態、check は更新元の変更を確認します。 |
-| `plan`, `prompt`, `schema`, `ci`, `schedule` | 検査と任意の自動化。 |
+| `status`, `record`, `merge` | skillctrl 独自の受理 hash と保存した意図の管理。status はオフラインで手元の受理状態、check はそれに加えて更新元の変更を確認します。 |
+| `ci`, `schedule` | 任意の自動化。`ci plan` は固定 commit の対象選択、`ci prompt` は reviewer 用の指示を担当します。 |
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
 `skills-lock.json` の管理場所は変更しません。GitHub CLI が埋め込む追跡 metadata は
@@ -129,9 +129,13 @@ CI は任意です。意図の再適用には CI とは別に reviewer とモデ
 `record NAME` は現在の skill ディレクトリ全体の hash を受け入れ済み lock に記録します。
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
 手動で編集して確認した内容を承認する操作であり、意図を満たすかの検証ではありません。
+更新するのは指定した管理対象 skill の hash だけで、他の管理対象の hash は保持します。
 
-`plan` は CI 用に commit 間のレビュー対象を選び、`prompt` は外部の agent に渡す
-レビュー指示を表示します。`schema` は機械向けのコマンド一覧です。通常のローカル操作には不要です。
+`ci plan` は固定 commit から CI のレビュー対象を選び、`ci prompt` は準備後に外部の
+agent へ渡すレビュー指示を表示します。通常の更新は内部の指示を直接使うため、この操作は不要です。
+`check` の結果は upstream 更新を `updates`、手元の差分を `local` に分けます。
+手元の確認は本文全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
+ネットワークなしで手元だけを確認するときは `status` を使います。
 `ci` は PR の検証・修復・公開、`schedule` は upstream 更新の準備と検証後の
 更新 PR 作成を担います。workflow の導入やタイマーの起動はせず、外部の CI や scheduler
 から各段階を呼び出す必要があります。
@@ -171,6 +175,9 @@ skillctrl update combined
 ```
 
 上記の取得元は説明用の仮名です。
+統合に使う intent は統合先の `combined.md` だけです。元の skill のローカル intent は
+読み込み・合成・削除しません。引き継ぐべき要件は統合先の intent に明記します。
+取得するのは upstream の原本であり、手元で調整済みの skill 本体ではありません。
 `--from` の一覧は既存の更新元を
 置き換えます。各原本の取得元・skill 名・配置先・tree hash（取得できる場合は commit も） を個別に記録し、
 既存の単一 source の記録は従来の形式で保持します。

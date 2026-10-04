@@ -37,7 +37,7 @@ Three rules follow, and the commands enforce them:
 
 | Variable | Read by | Meaning |
 | --- | --- | --- |
-| `SKILL_PLAN` | `ci export`, `ci apply`, `ci publish`, `schedule publish` | the selection plan, as the JSON `skillctrl plan` printed |
+| `SKILL_PLAN` | `ci export`, `ci apply`, `ci publish`, `schedule publish` | the selection plan, as the JSON `skillctrl ci plan` printed |
 | `CHECKER_SOURCE` | `ci prepare`, `ci export`, `schedule restore` | commit holding the trusted configuration |
 | `OPENCODE_API_KEY` | `ci export` | the credential to screen artifacts for; it may arrive from the trusted toolchain instead of the environment |
 | `GITHUB_REPOSITORY`, `PR_NUMBER` | `ci publish` | where to report |
@@ -57,7 +57,7 @@ the reviewing job.
 
 | Command | Reads | Writes | Refuses |
 | --- | --- | --- | --- |
-| `skillctrl plan --base B [--head H] [--since S]` | Git trees at `H`, upstream registrations at `H`, the accepted lock at `H`, intent names at `H` | stdout only | an unreadable or unsupported lock |
+| `skillctrl ci plan --base B [--head H] [--since S]` | Git trees at `H`, upstream registrations at `H`, the accepted lock at `H`, intent names at `H` | stdout only | an unreadable or unsupported lock |
 | `skillctrl ci configure` | `CHECKER_SOURCE` | stdout only | a version range instead of an exact pin |
 | `skillctrl ci prepare <dir>` | `CHECKER_SOURCE`, `SKILL_PLAN` | `<dir>/mise.toml` | a HEAD that moved since the plan was made |
 | `skillctrl ci export <dir>` | `SKILL_PLAN`, the working tree, `<dir>/result.json` | `<dir>/repair.patch` | edits outside the reviewed skills; the credential in the report, result, patch, or a staged blob |
@@ -67,10 +67,27 @@ the reviewing job.
 | `skillctrl schedule restore <dir>` | `<dir>/plan.json`, `<dir>/input.bundle`, `CHECKER_SOURCE` | the checkout, a recomputed plan on stdout | a plan that is not bound to the base; a bundle that is not a direct child of the base; a plan that differs from its own trees |
 | `skillctrl schedule publish <dir>` | `SKILL_PLAN`, `<dir>/report.md`, the repository's test suites | a branch, a draft pull request | an unauthorized path; a failing test suite; a moved default branch |
 
-`skillctrl prompt` prints the review contract. It is embedded in the binary, so
+`skillctrl ci prompt` prints the review contract. It is embedded in the binary, so
 a job that pins a released binary has also pinned the instructions.
 
 ## A pull request
+
+```mermaid
+flowchart TD
+    select["ci plan: select from fixed commits"] --> prepare["ci prepare: bind trusted toolchain"]
+    prepare --> reviewer["External reviewer: edit selected skills"]
+    prompt["ci prompt: embedded review instructions"] --> reviewer
+    reviewer --> export["ci export: validate and export repair artifacts"]
+    export --> validate["Separate job: recompute ci plan, then ci apply"]
+    validate --> publish["ci publish: commit, push, report"]
+    publish --> gate["ci plan: require lock_changed=false"]
+```
+
+`ci prepare` does not start a model. The external workflow obtains instructions
+with `skillctrl ci prompt` after preparation, then passes those instructions,
+the fixed plan, and the result path to its reviewer. The reviewer has no write
+token; the separate validating/publishing job receives it. Ordinary local
+updates use the embedded instructions internally and do not call `ci prompt`.
 
 The phases below are what a workflow must arrange. Each step names the
 requirement, not the YAML.
@@ -80,7 +97,7 @@ requirement, not the YAML.
 
    ```sh
    base=$(git merge-base "$BASE_SHA" HEAD)
-   skillctrl --repo . plan --base "$base" --head HEAD > plan.json
+   skillctrl --repo . ci plan --base "$base" --head HEAD > plan.json
    ```
 
    Publish `plan.json`. The plan is the only thing the reviewing job may treat as
@@ -131,7 +148,7 @@ requirement, not the YAML.
       `home/dot_pi/agent/models.json`, override with `SKILLCTRL_AGENT_MODELS`).
       An empty directory is not enough: a custom provider is configured through
       those definitions, and without them the agent has no route to the model;
-   5. pass the prompt from `skillctrl prompt`, the plan, and the exact result
+   5. pass the prompt from `skillctrl ci prompt`, the plan, and the exact result
       path.
 
    Only `ci export` runs afterwards. It re-checks the outcome, but by then the
@@ -147,7 +164,7 @@ requirement, not the YAML.
 
    ```sh
    base=$(git merge-base "$BASE_SHA" HEAD)
-   skillctrl --repo . plan --base "$base" --head HEAD > /tmp/skillctrl/plan.json
+   skillctrl --repo . ci plan --base "$base" --head HEAD > /tmp/skillctrl/plan.json
    diff <(jq -S . plan.json) <(jq -S . /tmp/skillctrl/plan.json)
    export SKILL_PLAN="$(cat /tmp/skillctrl/plan.json)"
    skillctrl --repo . ci apply /tmp/skillctrl

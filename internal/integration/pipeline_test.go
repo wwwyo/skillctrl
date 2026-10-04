@@ -231,7 +231,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 
 	t.Run("select", func(t *testing.T) {
 		plan := run(t, repo, caller, environment, 0,
-			"plan", "--base", head, "--head", head)
+			"ci", "plan", "--base", head, "--head", head)
 		var selection struct {
 			Skills       []string `json:"skills"`
 			ReviewSkills []string `json:"review_skills"`
@@ -314,7 +314,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 
 	t.Run("validate", func(t *testing.T) {
 		recomputed := run(t, validator, validator, validatorJob, 0,
-			"plan", "--base", head, "--head", head)
+			"ci", "plan", "--base", head, "--head", head)
 		if normalise(recomputed) != normalise(plan) {
 			t.Fatalf("the recomputed plan differs:\n%s\n%s", plan, recomputed)
 		}
@@ -339,7 +339,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	t.Run("gate before publication still reports unresolved work", func(t *testing.T) {
 		// ci apply is index-only, so until the repair is committed the hashes on
 		// disk still differ from the accepted lock. The gate must say so.
-		state := run(t, validator, validator, validatorJob, 0, "plan", "--base", head, "--head", "HEAD")
+		state := run(t, validator, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
 		var selection struct {
 			LockChanged bool `json:"lock_changed"`
 		}
@@ -399,7 +399,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	})
 
 	t.Run("gate", func(t *testing.T) {
-		state := run(t, validator, validator, validatorJob, 0, "plan", "--base", head, "--head", "HEAD")
+		state := run(t, validator, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
 		var selection struct {
 			LockChanged bool     `json:"lock_changed"`
 			Skills      []string `json:"skills"`
@@ -418,7 +418,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 func runReviewer(t *testing.T, repo, artifacts, trustedTools string, environment *env, plan string) {
 	t.Helper()
 	prompt := filepath.Join(artifacts, "ci-prompt.md")
-	write(t, prompt, run(t, repo, repo, environment, 0, "prompt"))
+	write(t, prompt, run(t, repo, repo, environment, 0, "ci", "prompt"))
 	report, err := os.Create(filepath.Join(artifacts, "report.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -582,7 +582,7 @@ func TestPublishRefusesDryRun(t *testing.T) {
 
 	job := environment.with(
 		"PATH", ghDir+string(os.PathListSeparator)+environment.values["PATH"],
-		"SKILL_PLAN", run(t, repo, caller, environment, 0, "plan", "--base", head, "--head", head),
+		"SKILL_PLAN", run(t, repo, caller, environment, 0, "ci", "plan", "--base", head, "--head", head),
 		"CHECKER_SOURCE", head,
 		"GITHUB_REPOSITORY", "fixture/repo",
 		"PR_NUMBER", "7",

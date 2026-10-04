@@ -33,7 +33,7 @@ jobs:
           mkdir smoke
           tar -xzf "dist/skillctrl_${RELEASE_TAG#v}_linux_amd64.tar.gz" -C smoke
           test "$(smoke/skillctrl --version)" = "skillctrl version $RELEASE_TAG"
-          smoke/skillctrl schema
+          smoke/skillctrl ci --help
       - name: Publish complete release
         env:
           GH_TOKEN: ${{ github.token }}

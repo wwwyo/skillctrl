@@ -117,17 +117,14 @@ func New() *cobra.Command {
 		newListCommand(),
 		newCheckCommand(),
 		newStatusCommand(),
-		newSchemaCommand(),
 		newFindCommand(),
 		newAddCommand(),
 		newMergeCommand(),
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),
-		newPlanCommand(),
 		newCICommand(),
 		newScheduleCommand(),
-		newPromptCommand(),
 	)
 	for _, command := range root.Commands() {
 		switch command.Name() {

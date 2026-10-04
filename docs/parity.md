@@ -175,9 +175,10 @@ proves no phase reaches the remote repository under `--dry-run`.
 | Behavior | Go code | Test |
 | --- | --- | --- |
 | Every command is discoverable in help | `internal/cli.New` | `TestHelpIsDiscoverable` |
+| Check reports selected local accepted-hash drift and upstream updates without accepting or reviewing | `internal/cli.newCheckCommand`, `internal/install.Selection` | `TestCheckReportsSelectedLocalDriftWithoutAcceptingIt`, `TestCheckReportsUpstreamChangesWithoutImport` |
 | The bare invocation shows help | `internal/cli.New` | `TestBareInvocationShowsHelp` |
 | An argument or flag error exits non-zero with an explanation and a clean stdout | `internal/cli.Execute` | `TestArgumentErrorsAreReported` |
-| `schema` describes the commands, options, and exit codes | `internal/cli.newSchemaCommand` | `TestSchemaDescribesTheContract` |
+| CI-only plan and prompt live under ci; removed top-level helpers are rejected | `internal/cli.newCICommand` | `TestHelpIsDiscoverable`, `TestArgumentErrorsAreReported`, `TestDocumentedPhaseSequence` |
 | A module installation reports its version without linker flags | `internal/cli.BuildVersion` | `TestVersionReflectsTheInstalledModule`, `TestInjectedVersionWins` |
 | `--dry-run` is refused where it cannot be honored | `internal/cli.rejectDryRun` | `TestDryRunIsRefusedWhereItCannotBeHonored`, `TestPublishRefusesDryRun` |
 | A failure is one JSON object on stderr | `internal/cli.fail` | `TestFailuresAreJSONOnStderr` |

@@ -77,7 +77,7 @@ skillctrl find review --owner owner
 # list installed project skills
 skillctrl list
 
-# check upstream updates without changing project files
+# check upstream updates and local accepted hashes without changing files
 skillctrl check
 
 # import a skill
@@ -124,10 +124,10 @@ skillctrl check chosen-skill
 | `find` / `search` | Search skills.sh for `skills` or `git`; use `gh skill search` for `gh`. The skills 1.7.0 find command has no JSON API, so its public index is queried directly. |
 | `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and reapply saved intent. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
 | `list` / `ls` | Read project skill directories, including handwritten skills. |
-| `check` | Fetch and compare upstream originals without importing or reviewing. |
+| `check` | Report upstream updates and local accepted-hash drift without importing or reviewing; optional names scope both reports. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
-| `status`, `record`, `merge` | skillctrl's accepted hashes and saved-intent workflow. `status` checks local acceptance, while `check` checks upstream updates. |
-| `plan`, `prompt`, `schema`, `ci`, `schedule` | Inspection and optional automation. |
+| `status`, `record`, `merge` | skillctrl's accepted hashes and saved-intent workflow. `status` checks local acceptance offline, while `check` also checks upstream updates. |
+| `ci`, `schedule` | Optional automation; `ci plan` selects fixed-commit inputs and `ci prompt` provides reviewer instructions. |
 
 Acquisition runs in a disposable directory and home, so installer-owned global
 locks do not replace or relocate the project's root `skills-lock.json`. Only
@@ -151,11 +151,19 @@ configured reviewer toolchain and model, independently of CI.
 accepted lock. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
+Only the named managed skills advance; other managed hashes remain unchanged.
 
-`plan` selects changes between commits for a CI job. `prompt` exposes the
-embedded review instructions so an external job can pass them to its agent.
-`schema` prints a machine-readable command summary. These integration helpers
-are not needed for ordinary local skill management.
+`ci plan` selects from fixed commits for a CI job without fetching upstreams.
+`ci prompt` prints the embedded review instructions after preparation, for the
+external job to pass to its reviewer. These helpers live under `ci` and are not
+needed for local updates, which use the embedded instructions directly.
+
+`check` keeps upstream changes in `updates` and local drift in `local`.
+Local drift compares skill-directory hashes with the accepted lock; it does not
+run a model to assess whether the current instructions satisfy the intent.
+Use `status` for the same local check without network access. CI uses fixed
+commits rather than current working files or newly fetched originals so another
+job can recompute the exact review input.
 
 `ci` separates preparation, agent-output validation, and publication for a
 pull-request workflow. `schedule` prepares upstream updates and can publish a
@@ -204,7 +212,11 @@ skillctrl merge combined \
 skillctrl update combined
 ```
 
-The repositories above are placeholders.
+The repositories above are placeholders. Only the merged target's intent
+(`combined.md`) guides integration. Input skills' local intent documents are not
+read, merged, or removed; include their required behavior explicitly in the
+target intent when it must survive integration. Inputs are fetched upstream
+originals, not existing locally adapted skill copies.
 The full input list replaces the target's previous registrations. Each input
 records its own source, skill name, path, and original tree hash (and a commit when available). Existing
 single-source registrations retain their format.

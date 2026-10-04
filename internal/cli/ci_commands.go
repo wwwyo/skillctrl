@@ -31,8 +31,10 @@ func planFromEnv() (lock.Plan, error) {
 func newCICommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "ci",
-		Short: "Run the credential-free validation steps used by CI",
-		Long: "ci exposes the four phases of intent verification:\n" +
+		Short: "Select, verify, and publish skill changes in CI",
+		Long: "ci exposes selection and the phases of intent verification:\n" +
+			"  plan     select the skills from fixed commits\n" +
+			"  prompt   print the instructions passed to the external reviewer\n" +
 			"  prepare  bind the trusted toolchain to the selected head\n" +
 			"  export   validate edits made inside the reviewer sandbox and export artifacts\n" +
 			"  apply    validate the artifact and record accepted hashes\n" +
@@ -40,6 +42,8 @@ func newCICommand() *cobra.Command {
 			"Only apply and publish need write access; export runs where the reviewer ran.",
 	}
 	command.AddCommand(
+		newPlanCommand(),
+		newPromptCommand(),
 		newCIStep("prepare", func(dir, directory string, plan lock.Plan) error {
 			return adapt.Prepare(dir, plan, os.Getenv("CHECKER_SOURCE"), directory)
 		}),
@@ -204,6 +208,50 @@ func newScheduleStep(name string, run func(dir, directory string, plan lock.Plan
 			if err := run(dir, directory, plan); err != nil {
 				return fail(dir, err)
 			}
+			return nil
+		},
+	}
+}
+
+func newPlanCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "plan",
+		Short: "Compute the skill selection for a base and head commit",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, args []string) error {
+			base, _ := command.Flags().GetString("base")
+			head, _ := command.Flags().GetString("head")
+			since, _ := command.Flags().GetString("since")
+			if base == "" {
+				return fail("", fmt.Errorf("plan requires --base"))
+			}
+			repo, err := repository(command)
+			if err != nil {
+				return fail("", err)
+			}
+			if head == "" {
+				head = "HEAD"
+			}
+			plan, err := lock.Compare(repo, base, head, since)
+			if err != nil {
+				return fail(repo, err)
+			}
+			return emit(plan)
+		},
+	}
+	command.Flags().String("base", "", "base commit to compare from (required)")
+	command.Flags().String("head", "HEAD", "commit to compare to")
+	command.Flags().String("since", "", "commit to read commit messages from")
+	return command
+}
+
+func newPromptCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "prompt",
+		Short: "Print the intent review contract embedded in this binary",
+		Args:  cobra.NoArgs,
+		RunE: func(command *cobra.Command, args []string) error {
+			fmt.Fprint(os.Stdout, adapt.Prompt)
 			return nil
 		},
 	}

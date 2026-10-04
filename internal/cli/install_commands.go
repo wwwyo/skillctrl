@@ -78,40 +78,6 @@ func newStatusCommand() *cobra.Command {
 	}
 }
 
-func newSchemaCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "schema",
-		Short: "Describe the command surface and output contract",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, args []string) error {
-			return emit(map[string]any{
-				"commands": map[string]string{
-					"add":      "source --skill name [--skill name]",
-					"merge":    "name --from owner/repo:skill [--from owner/repo:skill]",
-					"update":   "[names...]",
-					"remove":   "names...",
-					"record":   "names...",
-					"status":   "",
-					"list":     "",
-					"check":    "[names...]",
-					"find":     "query... [--owner owner]",
-					"plan":     "--base <commit> [--head <commit>] [--since <commit>]",
-					"ci":       "prepare|export|apply|publish <directory>",
-					"schedule": "prepare|restore|publish <directory>",
-				},
-				"sources": "GitHub owner/repo or HTTPS repository URL",
-				"options": []string{"--repo", "--dry-run", "--worktree-provider", "--adapter"},
-				"output":  "JSON; logs on stderr; exit 2 means unresolved adaptation",
-				"merge": map[string]any{
-					"requires":  "non-empty .agents/skillctrl/intents/<name>.md",
-					"sources":   "repeatable --from; replaces the target's sources array",
-					"originals": upstream.SourceDirectory + "/<index>/ inside the target skill; immutable during review",
-				},
-			})
-		},
-	}
-}
-
 func newFindCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:     "find query...",
@@ -337,50 +303,6 @@ func newRecordCommand() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "record", "", args)
-		},
-	}
-}
-
-func newPlanCommand() *cobra.Command {
-	command := &cobra.Command{
-		Use:   "plan",
-		Short: "Compute the skill selection for a base and head commit",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, args []string) error {
-			base, _ := command.Flags().GetString("base")
-			head, _ := command.Flags().GetString("head")
-			since, _ := command.Flags().GetString("since")
-			if base == "" {
-				return fail("", fmt.Errorf("plan requires --base"))
-			}
-			repo, err := repository(command)
-			if err != nil {
-				return fail("", err)
-			}
-			if head == "" {
-				head = "HEAD"
-			}
-			plan, err := lock.Compare(repo, base, head, since)
-			if err != nil {
-				return fail(repo, err)
-			}
-			return emit(plan)
-		},
-	}
-	command.Flags().String("base", "", "base commit to compare from (required)")
-	command.Flags().String("head", "HEAD", "commit to compare to")
-	command.Flags().String("since", "", "commit to read commit messages from")
-	return command
-}
-
-func newPromptCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "prompt",
-		Short: "Print the intent review contract embedded in this binary",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, args []string) error {
-			fmt.Fprint(os.Stdout, adapt.Prompt)
-			return nil
 		},
 	}
 }

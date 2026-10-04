@@ -57,7 +57,7 @@ func newListCommand() *cobra.Command {
 
 func newCheckCommand() *cobra.Command {
 	return &cobra.Command{
-		Use: "check [names...]", Short: "Check upstream updates without importing or reviewing", Args: cobra.ArbitraryArgs,
+		Use: "check [names...]", Short: "Check upstream updates and local accepted hashes without changing files", Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			repo, err := repository(command)
 			if err != nil {
@@ -75,6 +75,17 @@ func newCheckCommand() *cobra.Command {
 			if dry {
 				return emit(map[string]any{"repo": repo, "command": "check", "skills": names, "dry_run": true})
 			}
+			local, err := install.Selection(repo)
+			if err != nil {
+				return fail(repo, err)
+			}
+			if len(names) > 0 {
+				outside := func(name string) bool { return !slices.Contains(names, name) }
+				local.Skills = slices.DeleteFunc(local.Skills, outside)
+				local.ReviewSkills = slices.DeleteFunc(local.ReviewSkills, outside)
+				local.NeedsReview = len(local.ReviewSkills) > 0
+				local.LockChanged = len(local.Skills) > 0
+			}
 			directory, err := os.MkdirTemp("", "skillctrl-check-")
 			if err != nil {
 				return fail(repo, err)
@@ -85,7 +96,10 @@ func newCheckCommand() *cobra.Command {
 				return fail(repo, err)
 			}
 			slices.Sort(updates)
-			return emit(map[string]any{"repo": repo, "updates": updates})
+			return emit(map[string]any{"repo": repo, "updates": updates, "local": map[string]any{
+				"skills": local.Skills, "review_skills": local.ReviewSkills,
+				"needs_review": local.NeedsReview, "lock_changed": local.LockChanged,
+			}})
 		},
 	}
 }

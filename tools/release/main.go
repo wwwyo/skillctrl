@@ -117,7 +117,7 @@ class Skillctrl < Formula
 
   test do
     assert_match "skillctrl version v#{version}", shell_output("#{bin}/skillctrl --version")
-    assert_match '"commands"', shell_output("#{bin}/skillctrl schema")
+    assert_match "prepare", shell_output("#{bin}/skillctrl ci --help")
   end
 end
 `)

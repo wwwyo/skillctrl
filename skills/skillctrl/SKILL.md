@@ -34,8 +34,7 @@ wants completed, or silently replace another skill manager's registrations.
 1. Read the target repository's agent instructions. Default to that repository,
    not a personal dotfiles checkout or a home directory. If several targets are
    plausible and the choice changes where files are written, clarify the target.
-2. Check the installed CLI with `skillctrl --version`, `skillctrl --help`, and
-   `skillctrl schema`. Consult command help for version-specific options. If the
+2. Check the installed CLI with `skillctrl --version` and `skillctrl --help`. Consult command help for version-specific options. If the
    binary is missing, use the repository's tool manager and a pinned release;
    the installation instructions are at https://github.com/wwwyo/skillctrl.
 3. Use an absolute target path in `--repo` for management commands. The CLI's
@@ -188,8 +187,9 @@ task; they have different side effects from local management commands.
 ## Acquisition adapters
 
 Use the shared `find/add/list/check/update/remove` commands. `install`, `search`,
-`ls`, and `rm` are aliases. `status` reports local acceptance; `check` reports
-upstream changes without importing or reviewing. Default acquisition uses the
+`ls`, and `rm` are aliases. `status` reports local acceptance offline; `check`
+reports upstream updates and local accepted-hash drift without importing or
+reviewing. CI-only helpers are `ci plan` and `ci prompt`. Default acquisition uses the
 pinned `skills` executable. Select `--adapter gh` for GitHub CLI or `--adapter git`
 for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in
 disposable staging and the project lock remains at root `skills-lock.json`.

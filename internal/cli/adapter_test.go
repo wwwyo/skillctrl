@@ -108,8 +108,37 @@ func TestCheckReportsUpstreamChangesWithoutImport(t *testing.T) {
 	before := h.git("status", "--porcelain")
 	result := h.run(0, "check", "manual")
 	equal(t, list(result["updates"]), []string{"manual"}, "upstream updates")
+	local := result["local"].(map[string]any)
+	if local["lock_changed"] != false || len(list(local["skills"])) != 0 {
+		t.Fatalf("accepted local content reported drift: %v", local)
+	}
 	if h.git("status", "--porcelain") != before || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || h.log() != "" {
 		t.Fatal("check changed project state or invoked reviewer")
+	}
+}
+
+func TestCheckReportsSelectedLocalDriftWithoutAcceptingIt(t *testing.T) {
+	h := newHarness(t)
+	h.run(0, "add", "fixture/source", "--skill", "new-skill")
+	h.commitAll()
+	h.write(".agents/skills/manual/SKILL.md", manifest("manual", "manual local edit"))
+	h.write(".agents/skills/new-skill/SKILL.md", manifest("new-skill", "new skill local edit"))
+	h.write("notes.md", "unrelated staged notes\n")
+	h.git("add", "--", "notes.md")
+	index, accepted := h.read(".fixture-git/index"), h.read(".agents/skillctrl/intents/lock.json")
+	before := h.git("status", "--porcelain")
+	result := h.run(0, "check", "manual")
+	equal(t, list(result["updates"]), []string{}, "unchanged originals")
+	local := result["local"].(map[string]any)
+	equal(t, list(local["skills"]), []string{"manual"}, "selected local drift")
+	equal(t, list(local["review_skills"]), []string{"manual"}, "selected intent review")
+	if local["needs_review"] != true || local["lock_changed"] != true {
+		t.Fatalf("local drift not reported: %v", local)
+	}
+	local = h.run(0, "check")["local"].(map[string]any)
+	equal(t, list(local["skills"]), []string{"manual", "new-skill"}, "all local drift")
+	if h.git("status", "--porcelain") != before || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(accepted, h.read(".agents/skillctrl/intents/lock.json")) || h.log() != "" {
+		t.Fatal("check changed files, staging, acceptance, or invoked a reviewer")
 	}
 }
 
