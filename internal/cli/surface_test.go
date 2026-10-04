@@ -94,6 +94,27 @@ func TestBareInvocationShowsHelp(t *testing.T) {
 	}
 }
 
+func TestCIPromptReportsOutputFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "prompt.txt")
+	if err := os.WriteFile(path, []byte("existing instructions\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer output.Close()
+	command := exec.Command(binaryPath(t), "ci", "prompt")
+	command.Stdout = output
+	var stderr strings.Builder
+	command.Stderr = &stderr
+	err = command.Run()
+	exit, ok := err.(*exec.ExitError)
+	if !ok || exit.ExitCode() != 1 || stderr.Len() == 0 {
+		t.Fatalf("prompt write failure was hidden: %v, stderr %q", err, stderr.String())
+	}
+}
+
 // TestHelpIsDiscoverable keeps the documented surface reachable without a
 // repository, since a new user has nothing but the binary.
 func TestHelpIsDiscoverable(t *testing.T) {

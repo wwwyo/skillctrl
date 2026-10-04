@@ -251,8 +251,8 @@ func newPromptCommand() *cobra.Command {
 		Short: "Print the intent review contract embedded in this binary",
 		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			fmt.Fprint(os.Stdout, adapt.Prompt)
-			return nil
+			_, err := fmt.Fprint(os.Stdout, adapt.Prompt)
+			return err
 		},
 	}
 }
