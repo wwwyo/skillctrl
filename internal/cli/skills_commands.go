@@ -11,17 +11,7 @@ import (
 )
 
 func adapterName(command *cobra.Command) string {
-	name, err := command.Flags().GetString("adapter")
-	if err != nil {
-		name, _ = command.Root().PersistentFlags().GetString("adapter")
-	}
-	if name == "" {
-		name = os.Getenv("SKILLCTRL_ADAPTER")
-	}
-	if name == "" {
-		name = "skills"
-	}
-	return name
+	return command.Root().PersistentFlags().Lookup("adapter").Value.String()
 }
 
 func selectedAdapter(command *cobra.Command) (upstream.Adapter, error) {

@@ -110,7 +110,7 @@ func New() *cobra.Command {
 	root.PersistentFlags().String("worktree-provider", "",
 		"worktree isolation backend for add, merge, update and remove: git or orca")
 
-	root.PersistentFlags().String("adapter", "", "skills backend: skills (default), gh, or git; also SKILLCTRL_ADAPTER")
+	registerAdapterFlag(root)
 	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Intent management:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
 	root.SetHelpCommandGroupID("automation")
 	root.AddCommand(

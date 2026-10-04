@@ -231,3 +231,65 @@ func TestFailuresAreJSONOnStderr(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
+	environment := []string{}
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "SKILLCTRL_ADAPTER=") {
+			environment = append(environment, value)
+		}
+	}
+	for _, args := range [][]string{
+		{"list"}, {"status"}, {"record", "chosen"},
+		{"--dry-run", "find", "review"},
+		{"--dry-run", "add", "owner/repo", "--skill", "chosen"},
+		{"--dry-run", "merge", "combined", "--from", "owner/repo:chosen"},
+		{"--dry-run", "update"}, {"--dry-run", "remove", "chosen"},
+		{"check"}, {"ci", "prompt"}, {"ci", "plan", "--base", "HEAD"},
+		{"ci", "configure"}, {"ci", "prepare", "/nonexistent-artifacts"},
+		{"ci", "export", "/nonexistent-artifacts"}, {"ci", "apply", "/nonexistent-artifacts"},
+		{"ci", "publish", "/nonexistent-artifacts"},
+		{"schedule", "prepare", "/nonexistent-artifacts"},
+		{"schedule", "restore", "/nonexistent-artifacts"},
+		{"schedule", "publish", "/nonexistent-artifacts"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			for _, source := range []string{"flag", "environment"} {
+				arguments, env := args, environment
+				if source == "flag" {
+					arguments = append([]string{"--adapter=nonsense"}, args...)
+				} else {
+					env = append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense")
+				}
+				stdout, stderr, code := runBinary(t, env, arguments...)
+				if code != 1 || stdout != "" || !strings.Contains(stderr, "expected skills, gh, or git") {
+					t.Fatalf("%s %v: exit %d, stdout %q, stderr %q", source, args, code, stdout, stderr)
+				}
+			}
+		})
+	}
+	for _, value := range []string{"", "SKILLS", "gh ", "skills,gh"} {
+		stdout, stderr, code := runBinary(t, environment, "ci", "prompt", "--adapter="+value)
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "expected skills, gh, or git") {
+			t.Fatalf("invalid value %q: exit %d, stdout %q, stderr %q", value, code, stdout, stderr)
+		}
+	}
+	for _, name := range []string{"skills", "gh", "git"} {
+		stdout, stderr, code := runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense"), "ci", "prompt", "--adapter", name)
+		if code != 0 || !strings.Contains(stdout, "# Skill intent review") {
+			t.Fatalf("explicit adapter %s did not override environment: %d %s", name, code, stderr)
+		}
+		stdout, stderr, code = runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER="+name), "ci", "prompt")
+		if code != 0 || !strings.Contains(stdout, "# Skill intent review") {
+			t.Fatalf("environment adapter %s failed: %d %s", name, code, stderr)
+		}
+	}
+	stdout, stderr, code := runBinary(t, environment, "--help")
+	if code != 0 || !strings.Contains(stdout, "--adapter skills|gh|git") || !strings.Contains(stdout, "(default skills)") {
+		t.Fatalf("enum help: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runBinary(t, environment, "__complete", "--adapter", "")
+	if code != 0 || stdout != "skills\ngh\ngit\n:4\n" {
+		t.Fatalf("enum completion: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}

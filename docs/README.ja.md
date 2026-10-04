@@ -97,6 +97,8 @@ skillctrl remove chosen-skill
 パッケージの `skills` CLI を呼び、`--adapter gh` は `gh skill install` を
 呼びます。`--adapter git` で従来の直接 Git 取得も選べます。
 `SKILLCTRL_ADAPTER` で既定値を設定でき、明示した flag が優先されます。
+`--adapter` の値は `skills`・`gh`・`git` に限定します。無効な flag 値や、実際に
+使われる `SKILLCTRL_ADAPTER` の値は、ローカル操作や dry run でも実行前に拒否します。
 依存コマンドがなければエラーにし、別の adapter へ勝手に切り替えません。
 ツールは mise で管理し、repo では `skills` 1.7.0 と `gh` 2.101.0 を固定しています。
 

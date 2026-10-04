@@ -107,7 +107,9 @@ default `skills` adapter invokes the pinned `skills` CLI (the same package used
 by `npx skills`); `--adapter gh` invokes `gh skill install`. `--adapter git`
 retains the direct Git importer for existing integrations. Set
 `SKILLCTRL_ADAPTER` to choose a default; an explicit flag takes precedence.
-Missing tools are errors, not automatic fallbacks. Install the adapter tools
+`--adapter` accepts only `skills`, `gh`, or `git`. Invalid flag values and invalid
+effective `SKILLCTRL_ADAPTER` values are rejected before command execution, even
+for local-only commands and dry runs. Missing tools are errors, not automatic fallbacks. Install the adapter tools
 with mise; the repository pins `skills` 1.7.0 and `gh` 2.101.0 with a seven-day
 release cooldown. The skills executable must be on PATH; skillctrl does not
 use an unpinned `npx` download.

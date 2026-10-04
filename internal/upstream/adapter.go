@@ -32,17 +32,26 @@ type Adapter interface {
 	Export(request ExportRequest) (map[string]any, error)
 }
 
+// ValidateAdapter checks the supported backend names without acquiring content.
+func ValidateAdapter(name string) error {
+	switch name {
+	case "skills", "gh", "git":
+		return nil
+	default:
+		return fmt.Errorf("unknown adapter: %s (expected skills, gh, or git)", name)
+	}
+}
+
 // NewAdapter selects an explicit backend; a missing dependency is an error,
 // never a silent change of installation semantics.
 func NewAdapter(name string) (Adapter, error) {
-	switch name {
-	case "skills", "gh":
-		return &commandAdapter{name: name}, nil
-	case "git":
-		return NewGitAdapter(), nil
-	default:
-		return nil, fmt.Errorf("unknown adapter: %s (expected skills, gh, or git)", name)
+	if err := ValidateAdapter(name); err != nil {
+		return nil, err
 	}
+	if name == "git" {
+		return NewGitAdapter(), nil
+	}
+	return &commandAdapter{name: name}, nil
 }
 
 type gitAdapter struct{ repositories map[string]*Repository }
