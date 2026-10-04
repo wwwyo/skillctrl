@@ -258,3 +258,8 @@ Native source tracking with a missing path is refused before export (`TestComman
 | Re-merge retains handwritten references, removes obsolete originals, and rejects colliding names or unregistered reference overlap | `TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions` |
 | Legacy numeric layouts update in place; explicit merge migrates sources and routing | `TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences` |
 | Scheduled validation independently checks named and numeric snapshots, hashes, identities, and output preservation | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
+
+The public scheduled restore command recomputes the artifact plan without
+`SKILL_PLAN`; publication still requires the verified environment plan.
+`TestNamedScheduleRestoreRecomputesPlanWithoutEnvironmentPlan` exercises the
+documented prepare/restore sequence through the built binary.

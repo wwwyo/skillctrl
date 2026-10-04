@@ -196,10 +196,10 @@ func newScheduleStep(name string, run func(dir, directory string, plan lock.Plan
 			if err := os.MkdirAll(directory, 0o755); err != nil {
 				return fail(dir, err)
 			}
-			// prepare derives its own plan from the fetched originals; the later
-			// phases consume the plan the workflow bound to the immutable input.
+			// Preparation and restoration derive their plans from immutable inputs;
+			// only publication consumes the verified plan passed by the workflow.
 			var plan lock.Plan
-			if name != "prepare" {
+			if name == "publish" {
 				plan, err = planFromEnv()
 				if err != nil {
 					return fail(dir, err)
