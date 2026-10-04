@@ -94,6 +94,9 @@ func MergeWithAdapter(dir, name string, inputs []Input, directory string, adapte
 	if err := validateInputs(inputs); err != nil {
 		return "", "", err
 	}
+	if _, err := referencePaths(inputs); err != nil {
+		return "", "", err
+	}
 	return install(dir, directory, importRequest{command: "merge", selected: []string{name}, inputs: inputs}, adapter)
 }
 

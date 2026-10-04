@@ -176,7 +176,7 @@ func TestMergedSourcesFromDifferentRepositoriesFollowRelocations(t *testing.T) {
 	if err != nil || !strings.Contains(string(data), "moved/second/SKILL.md") {
 		t.Fatalf("second repository relocation was not recorded: %s %v", data, err)
 	}
-	info, err := os.Stat(filepath.Join(target, "combined", SourceDirectory, "1/run.sh"))
+	info, err := os.Stat(filepath.Join(target, "combined", SourceDirectory, "second/run.sh"))
 	if err != nil || info.Mode().Perm()&0o111 == 0 {
 		t.Fatal("executable mode was not preserved for an upstream input")
 	}

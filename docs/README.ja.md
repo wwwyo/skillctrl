@@ -175,9 +175,11 @@ skillctrl merge --name combined \
 skillctrl update combined
 ```
 
-取得元は説明用の仮名です。原本は `.skillctrl-sources/0/`、`.skillctrl-sources/1/`
+取得元は説明用の仮名です。原本は `references/first-skill/`、`references/second-skill/`
 に保存し、root の `SKILL.md` から参照します。reference・script と相対参照も保持します。
-原本の manifest は独立した skill として検索しません。`merge` を再実行すると更新元の
+原本の manifest は独立した skill として検索しません。異なる取得元でも元の skill 名が
+同じ場合は取得前にエラーにします（大文字小文字も区別しません）。手書きの reference は
+保持します。旧形式は update 時に配置を保持し、merge の再実行で新しい配置に切り替えます。`merge` を再実行すると更新元の
 一覧を置き換えて routing を再生成します。`update` は現在の root を保持して原本を更新します。
 
 統合方針を調整したい場合だけ、別操作で intent を保存して明示的に適用します。

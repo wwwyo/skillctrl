@@ -251,3 +251,10 @@ Native source tracking with a missing path is refused before export (`TestComman
 | Explicit intent application runs even when only intent changed | `TestIntentApplyExplicitlyReviewsChangedIntentOnly` |
 | Pure merge generates links to complete originals without intent, AI, or acceptance; re-merge refreshes ordering | `TestPureMergeProducesRoutingWithoutIntent` |
 | Empty intent, escaping names, and linked intent files are rejected without changing project state | `TestIntentSetRejectsUnsafePathsAndEmptyInput` |
+
+| Named reference behavior | Observable coverage |
+| --- | --- |
+| Merge routes to references under original skill names; originals stay immutable and executable modes survive updates | `TestPureMergeProducesRoutingWithoutIntent`, `TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging`, `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
+| Re-merge retains handwritten references, removes obsolete originals, and rejects colliding names or unregistered reference overlap | `TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions` |
+| Legacy numeric layouts update in place; explicit merge migrates sources and routing | `TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences` |
+| Scheduled validation independently checks named and numeric snapshots, hashes, identities, and output preservation | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |

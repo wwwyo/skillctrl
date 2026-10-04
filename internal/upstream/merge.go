@@ -13,7 +13,10 @@ import (
 
 // SourceDirectory holds immutable originals inside a merged skill. Keeping the
 // originals in the skill tree binds review and CI to the same fetched inputs.
-const SourceDirectory = ".skillctrl-sources"
+const SourceDirectory = "references"
+
+// LegacySourceDirectory is the original numeric snapshot layout.
+const LegacySourceDirectory = ".skillctrl-sources"
 
 // Input identifies one GitHub skill contributing to a merged skill.
 type Input struct {
@@ -36,6 +39,9 @@ func ParseInputs(values []string) ([]Input, error) {
 		inputs = append(inputs, Input{Source: identifier, Skill: value[at+1:]})
 	}
 	if err := validateInputs(inputs); err != nil {
+		return nil, err
+	}
+	if _, err := referencePaths(inputs); err != nil {
 		return nil, err
 	}
 	return inputs, nil
@@ -99,9 +105,51 @@ func sources(entry map[string]any, name string) ([]map[string]any, error) {
 	return []map[string]any{entry}, nil
 }
 
+func referencePaths(inputs []Input) ([]string, error) {
+	paths := make([]string, len(inputs))
+	seen := map[string]bool{}
+	for index, input := range inputs {
+		key := strings.ToLower(input.Skill)
+		if seen[key] {
+			return nil, fmt.Errorf("upstream skill names collide in references: %s", input.Skill)
+		}
+		seen[key] = true
+		paths[index] = SourceDirectory + "/" + input.Skill
+	}
+	return paths, nil
+}
+
+// SourcePaths returns registered snapshot locations relative to the merged skill.
+// Existing registrations without a layout marker retain their numeric locations.
+func SourcePaths(entry map[string]any, name string) ([]string, error) {
+	values, err := sources(entry, name)
+	if err != nil {
+		return nil, err
+	}
+	layout, marked := entry["sourceLayout"]
+	if marked && layout != SourceDirectory {
+		return nil, fmt.Errorf("invalid source layout: %s", name)
+	}
+	if marked {
+		if entry["sources"] == nil {
+			return nil, fmt.Errorf("source layout requires merged inputs: %s", name)
+		}
+		inputs := make([]Input, len(values))
+		for index, value := range values {
+			inputs[index] = Input{Skill: field(value, "skill")}
+		}
+		return referencePaths(inputs)
+	}
+	paths := make([]string, len(values))
+	for index := range values {
+		paths[index] = LegacySourceDirectory + "/" + strconv.Itoa(index)
+	}
+	return paths, nil
+}
+
 func containsSourceDirectory(path string) bool {
 	for _, component := range strings.Split(path, "/") {
-		if strings.EqualFold(component, SourceDirectory) {
+		if strings.EqualFold(component, SourceDirectory) || strings.EqualFold(component, LegacySourceDirectory) {
 			return true
 		}
 	}
@@ -123,8 +171,44 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 			inputs = append(inputs, Input{Source: field(value, "source"), Skill: field(value, "skill")})
 		}
 	}
-	if err := os.RemoveAll(filepath.Join(target, SourceDirectory)); err != nil {
-		return nil, err
+	paths := make([]string, len(inputs))
+	if configure {
+		paths, err = referencePaths(inputs)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		paths, err = SourcePaths(previous, name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	owned := map[string]bool{}
+	if len(original) > 0 {
+		oldPaths, err := SourcePaths(previous, name)
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range oldPaths {
+			owned[path] = true
+		}
+	}
+	for _, path := range paths {
+		if _, err := os.Lstat(filepath.Join(target, path)); err == nil && !owned[path] {
+			return nil, fmt.Errorf("refusing to overwrite an unregistered reference: %s", path)
+		} else if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	for path := range owned {
+		if err := os.RemoveAll(filepath.Join(target, path)); err != nil {
+			return nil, err
+		}
+	}
+	if len(original) > 0 && previous["sourceLayout"] == nil {
+		if err := os.RemoveAll(filepath.Join(target, LegacySourceDirectory)); err != nil {
+			return nil, err
+		}
 	}
 	array := make([]any, 0, len(inputs))
 	for index, input := range inputs {
@@ -145,8 +229,8 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		force := maps.Clone(prior)
 		delete(force, "skillFolderHash")
 		delete(force, "computedHash")
-		relative := name + "/" + SourceDirectory + "/" + strconv.Itoa(index)
-		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: input.Source, Skill: input.Skill, Name: relative, Target: filepath.Join(target, SourceDirectory, strconv.Itoa(index)), Directory: directory, Previous: force})
+		relative := name + "/" + paths[index]
+		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: input.Source, Skill: input.Skill, Name: relative, Target: filepath.Join(target, paths[index]), Directory: directory, Previous: force})
 		if err != nil {
 			return nil, err
 		}
@@ -158,18 +242,19 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		array = append(array, exported)
 	}
 	manifest := filepath.Join(target, "SKILL.md")
-	if !configure {
+	writeRouting := configure
+	if !writeRouting {
 		_, err := os.Stat(manifest)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
-		configure = os.IsNotExist(err)
+		writeRouting = os.IsNotExist(err)
 	}
-	if configure {
+	if writeRouting {
 		var routing strings.Builder
 		fmt.Fprintf(&routing, "---\nname: %s\ndescription: Route tasks to the registered upstream skills.\n---\n\n# %s\n\nChoose the applicable skills from the linked manifests below and follow their instructions. Resolve each skill's relative resources from its own source directory. When several skills apply, use each applicable skill; surface conflicting instructions rather than silently choosing one.\n\n", name, name)
 		for index, input := range inputs {
-			fmt.Fprintf(&routing, "- [%s](%s/%d/SKILL.md) — %s:%s\n", input.Skill, SourceDirectory, index, input.Source, input.Skill)
+			fmt.Fprintf(&routing, "- [%s](%s/SKILL.md) — %s:%s\n", input.Skill, paths[index], input.Source, input.Skill)
 		}
 		seed := routing.String()
 		if err := os.WriteFile(manifest, []byte(seed), 0o644); err != nil {
@@ -184,6 +269,9 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		delete(result, key)
 	}
 	result["sources"] = array
+	if configure {
+		result["sourceLayout"] = SourceDirectory
+	}
 	return result, nil
 }
 
@@ -204,30 +292,45 @@ func ValidateMergedImport(dir, base, tree, name string, previous, current map[st
 	if _, ok := previous["sources"]; !ok || len(oldSources) != len(newSources) {
 		return fmt.Errorf("scheduled update changed upstream identity: %s", name)
 	}
-	prefix := ".agents/skills/" + name + "/" + SourceDirectory + "/"
-	children, err := gitx.Output(dir, "ls-tree", tree+":"+strings.TrimSuffix(prefix, "/"))
+	if current["sourceLayout"] != previous["sourceLayout"] {
+		return fmt.Errorf("scheduled update changed source layout: %s", name)
+	}
+	paths, err := SourcePaths(current, name)
 	if err != nil {
-		return fmt.Errorf("imported source snapshots do not match the sources array: %s", name)
+		return err
 	}
-	snapshots := map[string]string{}
-	for _, row := range strings.Split(strings.TrimSpace(string(children)), "\n") {
-		metadata, child, found := strings.Cut(row, "\t")
-		fields := strings.Fields(metadata)
-		if !found || len(fields) != 3 || fields[0] != "040000" || fields[1] != "tree" {
-			return fmt.Errorf("imported source snapshot is not a directory: %s", name)
+	prefix := ".agents/skills/" + name + "/"
+	arguments := []string{"ls-tree", "-z", tree, "--"}
+	for _, path := range paths {
+		arguments = append(arguments, prefix+path)
+	}
+	listing, err := gitx.Output(dir, arguments...)
+	if err != nil {
+		return err
+	}
+	snapshots := map[string]treeFile{}
+	for _, row := range strings.Split(string(listing), "\x00") {
+		if row == "" {
+			continue
 		}
-		snapshots[child] = fields[2]
-	}
-	if len(snapshots) != len(newSources) {
-		return fmt.Errorf("imported source snapshots do not match the sources array: %s", name)
+		metadata, path, found := strings.Cut(row, "\t")
+		fields := strings.Fields(metadata)
+		if !found || len(fields) != 3 {
+			return fmt.Errorf("invalid imported source snapshot: %s", name)
+		}
+		snapshots[path] = treeFile{mode: fields[0], kind: fields[1], oid: fields[2]}
 	}
 	for index, value := range newSources {
 		old := oldSources[index]
 		if field(value, "source") != field(old, "source") || field(value, "skill") != field(old, "skill") {
 			return fmt.Errorf("scheduled update changed upstream identity: %s", name)
 		}
-		if snapshots[strconv.Itoa(index)] == "" || snapshots[strconv.Itoa(index)] != field(value, "skillFolderHash") {
+		snapshot, found := snapshots[prefix+paths[index]]
+		if !found || snapshot.oid != field(value, "skillFolderHash") {
 			return fmt.Errorf("imported source differs from its original hash: %s", name)
+		}
+		if snapshot.kind != "tree" || snapshot.mode != "040000" {
+			return fmt.Errorf("imported source snapshot is not a directory: %s", name)
 		}
 	}
 	out, err := gitx.Output(dir, "diff", "--name-only", "-z", "--no-renames", base, tree, "--", ".agents/skills/"+name+"/")
@@ -235,7 +338,17 @@ func ValidateMergedImport(dir, base, tree, name string, previous, current map[st
 		return err
 	}
 	for _, path := range strings.Split(string(out), "\x00") {
-		if path != "" && !strings.HasPrefix(path, prefix) {
+		if path == "" {
+			continue
+		}
+		allowed := false
+		for _, snapshot := range paths {
+			if strings.HasPrefix(path, prefix+snapshot+"/") {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
 			return fmt.Errorf("upstream import changed merged output: %s", name)
 		}
 	}

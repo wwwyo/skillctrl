@@ -212,9 +212,13 @@ skillctrl update combined
 ```
 
 The repositories above are placeholders. The generated root `SKILL.md` routes
-tasks to `.skillctrl-sources/0/SKILL.md`, `.skillctrl-sources/1/SKILL.md`, and so
+tasks to `references/first-skill/SKILL.md`, `references/second-skill/SKILL.md`, and so
 on. Each original retains its bundled resources and relative resource paths.
-Snapshots are excluded from independent skill discovery. Explicitly running
+Snapshots are excluded from independent skill discovery. Distinct source skill
+names are required (case-insensitively); collisions are rejected before fetching.
+Handwritten reference files remain untouched. Legacy numeric snapshots keep
+their locations on update; explicitly re-running merge moves registered originals
+to named references and regenerates routing. Explicitly running
 `merge` again replaces the ordered source list and regenerates routing; `update`
 refreshes originals while preserving the current root entrypoint.
 

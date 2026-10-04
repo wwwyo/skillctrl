@@ -141,7 +141,7 @@ regenerates routing. `update` refreshes snapshots while preserving current root
 output. Neither command invokes AI or advances accepted hashes.
 
 Complete original directories are stored under the merged skill's
-`.skillctrl-sources/<index>/`. They are immutable during review and are excluded
+`references/<upstream-skill-name>/`. They are immutable during review and are excluded
 from skillctrl's discovery. Do not rewrite or remove them to make an update pass.
 Review the integrated entrypoint, resource links, and source licenses. Report
 the returned working copy and distinguish a prepared merge from publication.

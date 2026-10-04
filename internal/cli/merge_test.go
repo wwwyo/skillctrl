@@ -19,18 +19,18 @@ func mergeHarness(t *testing.T) *harness {
 set -euo pipefail
 . ` + h.base + `/reviewer.env
 echo review >> "$SKILLCTRL_FIXTURE_LOG"
-input=.agents/skills/combined/.skillctrl-sources
-grep -q 'upstream v1' "$input/0/SKILL.md"
-test -f "$input/1/SKILL.md"
+input=.agents/skills/combined/references
+grep -q 'upstream v1' "$input/manual/SKILL.md"
+test -f "$input/new-skill/SKILL.md"
 result="${@: -1}"
 result="${result##*Write completion JSON to: }"
 if [ -n "${FIXTURE_UNRESOLVED:-}" ]; then
   printf '{"accepted":[],"unresolved":["combined"]}' > "$result"
 else
   printf -- '---\nname: combined\ndescription: Combined workflow.\n---\nrepository-local merged behavior\n' > .agents/skills/combined/SKILL.md
-  cat "$input/0/SKILL.md" "$input/1/SKILL.md" >> .agents/skills/combined/SKILL.md
+  cat "$input/manual/SKILL.md" "$input/new-skill/SKILL.md" >> .agents/skills/combined/SKILL.md
   if [ -n "${FIXTURE_SCOPE:-}" ]; then
-    echo forged-original >> "$input/0/SKILL.md"
+    echo forged-original >> "$input/manual/SKILL.md"
   fi
   printf '{"accepted":["combined"],"unresolved":[]}' > "$result"
 fi

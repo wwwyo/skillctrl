@@ -317,17 +317,30 @@ func acceptedAtTree(dir string, plan lock.Plan, directory, tree string) ([]strin
 		if before == "" || after == "" {
 			continue
 		}
-		original, err := gitx.Output(dir, "ls-tree", before, "--", upstream.SourceDirectory)
+
+		paths := []string{upstream.LegacySourceDirectory}
+		referenceFiles, err := gitx.Output(dir, "ls-tree", "-r", "--name-only", "-z", before, "--", upstream.SourceDirectory)
 		if err != nil {
 			return nil, err
 		}
-		candidate, err := gitx.Output(dir, "ls-tree", after, "--", upstream.SourceDirectory)
+		for _, path := range strings.Split(string(referenceFiles), "\x00") {
+			parts := strings.Split(path, "/")
+			if len(parts) == 3 && parts[2] == "SKILL.md" {
+				paths = append(paths, parts[0]+"/"+parts[1])
+			}
+		}
+		original, err := gitx.Output(dir, append([]string{"ls-tree", before, "--"}, paths...)...)
+		if err != nil {
+			return nil, err
+		}
+		candidate, err := gitx.Output(dir, append([]string{"ls-tree", after, "--"}, paths...)...)
 		if err != nil {
 			return nil, err
 		}
 		if !bytes.Equal(original, candidate) {
 			return nil, fmt.Errorf("repair changed immutable upstream originals: %s", name)
 		}
+
 	}
 	for _, name := range result.Accepted {
 		if _, ok := plan.InputTrees[name]; !ok {

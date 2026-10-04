@@ -166,7 +166,7 @@ func parseLock(data []byte) (*Record, error) {
 			return nil, fmt.Errorf("invalid upstream skill record")
 		}
 		if object["sourceType"] == "github" || object["sources"] != nil {
-			if _, err := sources(object, name); err != nil {
+			if _, err := SourcePaths(object, name); err != nil {
 				return nil, err
 			}
 		} else if field(object, "sourceType") == "" || field(object, "source") == "" {
