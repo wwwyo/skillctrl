@@ -34,7 +34,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | The reviewer runs isolated, and its output is exported | `internal/adapt.ReviewLocal` | `TestInstallerLifecycle/reviewer_is_isolated_and_its_output_is_exported` |
 | A skill without an intent is recorded without invoking the reviewer | `internal/install.Adapt` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | Repeated names collapse however they are ordered | `internal/install.Names` | `TestNamesRejectsEscapes` |
-| `remove` deletes the registration but keeps the intent file | `internal/install.Import` | `TestInstallerLifecycle/remove_keeps_the_intent_file` |
+| `remove` deletes the skill, its intent, and registrations | `internal/install.Import` | `TestInstallerLifecycle/remove_deletes_the_selected_intent` |
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | `record` accepts a manual edit without a worktree or staging change | `internal/cli.runRecord` | `TestInstallerLifecycle/record_preserves_staging_in_the_main_checkout`, `TestWorkingTreePreserveStaging` |
 

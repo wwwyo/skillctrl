@@ -191,7 +191,7 @@ func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "remove names...",
 		Aliases: []string{"rm"},
-		Short:   "Remove imported skills and their upstream registration, keeping intent files",
+		Short:   "Remove skills, saved intents, and upstream registrations",
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "remove", "", args)

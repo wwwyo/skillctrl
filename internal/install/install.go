@@ -176,11 +176,43 @@ func Import(repo, target, upstreamLock string) error {
 	if err != nil {
 		return err
 	}
+	ordered := slices.Sorted(maps.Keys(names))
+	intentRemovals := []string{}
+	for _, name := range ordered {
+		if afterSet[name] {
+			continue
+		}
+		// Validate the entire path before importing anything; removal must not
+		// follow an intent directory link outside this repository.
+		for _, relative := range []string{".agents", ".agents/skillctrl", strings.TrimSuffix(lock.Intents, "/")} {
+			info, err := os.Lstat(filepath.Join(repo, relative))
+			if os.IsNotExist(err) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("intent path must be a real directory: %s", relative)
+			}
+		}
+		path := filepath.Join(repo, lock.Intents, name+".md")
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("intent must be a regular file: %s", name)
+		}
+		intentRemovals = append(intentRemovals, path)
+	}
 	claude := filepath.Join(repo, filepath.FromSlash(ClaudeDir))
 	if err := os.MkdirAll(claude, 0o755); err != nil {
 		return err
 	}
-	ordered := slices.Sorted(maps.Keys(names))
 	for _, name := range ordered {
 		link := filepath.Join(claude, name)
 		if info, err := os.Lstat(link); err == nil && info.Mode()&os.ModeSymlink == 0 {
@@ -218,6 +250,11 @@ func Import(repo, target, upstreamLock string) error {
 			if err := os.Symlink(expected, link); err != nil {
 				return err
 			}
+		}
+	}
+	for _, path := range intentRemovals {
+		if err := os.Remove(path); err != nil {
+			return err
 		}
 	}
 	if _, err := os.Stat(upstreamLock); err == nil {

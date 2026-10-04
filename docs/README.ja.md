@@ -113,7 +113,7 @@ skillctrl check chosen-skill
 | `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・意図の再適用を担当。 |
 | `list` / `ls` | 手書きを含む project の skill 一覧。 |
 | `check` | 原本の更新確認。取り込みと reviewer 実行はしません。 |
-| `remove` / `rm` | ローカルの実体と登録を削除。ネットワークや adapter コマンドは不要。 |
+| `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
 | `status`, `record`, `merge` | skillctrl 独自の受理 hash と保存した意図の管理。status は手元の受理状態、check は更新元の変更を確認します。 |
 | `plan`, `prompt`, `schema`, `ci`, `schedule` | 検査と任意の自動化。 |
 
@@ -125,6 +125,16 @@ SKILL.md に残します。GitHub CLI は一時 home に切り替える前に既
 backend の仕様に従います。切替で原本が変われば再適応します。command adapter が
 取得 commit を提供しない場合、存在しない commit を記録しません。
 CI は任意です。意図の再適用には CI とは別に reviewer とモデルの設定が必要です。
+
+`record NAME` は現在の skill ディレクトリ全体の hash を受け入れ済み lock に記録します。
+本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
+手動で編集して確認した内容を承認する操作であり、意図を満たすかの検証ではありません。
+
+`plan` は CI 用に commit 間のレビュー対象を選び、`prompt` は外部の agent に渡す
+レビュー指示を表示します。`schema` は機械向けのコマンド一覧です。通常のローカル操作には不要です。
+`ci` は PR の検証・修復・公開、`schedule` は upstream 更新の準備と検証後の
+更新 PR 作成を担います。workflow の導入やタイマーの起動はせず、外部の CI や scheduler
+から各段階を呼び出す必要があります。
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 2 は再適応の一部が
 未確定、exit 1 は失敗です。上記のローカルコマンドは作業内容を作業ディレクトリに
@@ -214,6 +224,17 @@ agent は原本を変更せず、保存した意図に従って統合後の本�
   再計算した plan と照合します。対象 skill 以外の変更、accepted / unresolved
   の不完全な分割、未確定 skill の変更、機密情報の混入（report・result・patch・
   変更 blob のすべて）を検査してからだけ hash を記録します。
+
+## 開発中の CLI を実行する
+
+この repo 内で mise が有効なら、`skillctrl` は `tools/dev/skillctrl` を実行します。
+毎回現在の checkout をビルドし、元の作業ディレクトリ・引数・終了コードを保って
+実行するため、ソースの変更をそのまま検証できます。ビルドには Go の cache を使います。
+shell で mise を有効にしていない場合は、次のように実行します。
+
+```sh
+mise exec -- skillctrl --help
+```
 
 詳細な設計は [README.md](../README.md)、CI での使い方と trust boundary は
 [docs/ci.md](ci.md)、確認済みのテストとの対応表は [docs/parity.md](parity.md)

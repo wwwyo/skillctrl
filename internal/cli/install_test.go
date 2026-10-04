@@ -12,6 +12,41 @@ import (
 
 func unmarshal(data []byte, target any) error { return json.Unmarshal(data, target) }
 
+func TestRemoveRefusesLinkedIntentPathsBeforeChangingSkills(t *testing.T) {
+	for _, kind := range []string{"file", "directory"} {
+		t.Run(kind, func(t *testing.T) {
+			h := newHarness(t)
+			h.run(0, "add", "fixture/source", "--skill", "new-skill")
+			h.write(".agents/skillctrl/intents/new-skill.md", "keep the new skill intent\n")
+			external := t.TempDir()
+			intent := filepath.Join(h.root, ".agents/skillctrl/intents/manual.md")
+			target := filepath.Join(external, "manual.md")
+			if err := os.WriteFile(target, []byte("external intent\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "directory" {
+				intent = filepath.Dir(intent)
+				target = external
+			}
+			if err := os.RemoveAll(intent); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, intent); err != nil {
+				t.Fatal(err)
+			}
+			h.commitAll()
+			before := h.git("status", "--porcelain")
+			h.run(1, "remove", "manual", "new-skill")
+			if h.git("status", "--porcelain") != before {
+				t.Fatal("rejected removal changed project files")
+			}
+			if readAll(t, filepath.Join(external, "manual.md")) != "external intent\n" {
+				t.Fatal("removal changed an external intent")
+			}
+		})
+	}
+}
+
 func TestUpstreamOperationsIgnoreHandwrittenSkills(t *testing.T) {
 	for _, withIntent := range []bool{false, true} {
 		t.Run(map[bool]string{false: "without intent", true: "with intent"}[withIntent], func(t *testing.T) {
@@ -340,9 +375,18 @@ func TestInstallerLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("remove keeps the intent file", func(t *testing.T) {
+	t.Run("remove deletes the selected intent", func(t *testing.T) {
+		h.write(".agents/skillctrl/intents/new-skill.md", "local requirements for the new skill\n")
 		h.commitAll()
+		before := status()
+		h.run(0, "--dry-run", "remove", "new-skill")
+		if status() != before {
+			t.Fatal("dry-run remove changed project files")
+		}
 		h.run(0, "remove", "new-skill")
+		if _, err := os.Lstat(filepath.Join(h.root, ".agents/skillctrl/intents/new-skill.md")); !os.IsNotExist(err) {
+			t.Fatalf("remove retained the selected intent: %v", err)
+		}
 		if _, ok := h.lockedSkills()["new-skill"]; ok {
 			t.Fatal("removed skill stayed in the accepted lock")
 		}
@@ -353,7 +397,7 @@ func TestInstallerLifecycle(t *testing.T) {
 			t.Fatal("remove deleted an unrelated skill")
 		}
 		if _, err := os.Stat(filepath.Join(h.root, ".agents/skillctrl/intents/manual.md")); err != nil {
-			t.Fatal("remove deleted the intent document")
+			t.Fatal("remove deleted an unrelated intent document")
 		}
 	})
 

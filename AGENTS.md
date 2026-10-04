@@ -20,6 +20,11 @@ mise exec -- go vet ./...
 mise exec -- go build .
 ```
 
+With mise active, `skillctrl` runs `tools/dev/skillctrl`, which builds and executes
+the current checkout. Use `mise exec -- skillctrl <args>` when shell activation
+is unavailable. The launcher preserves the caller's working directory and exit
+status; it does not replace the global installation.
+
 Read `docs/requirements.md` before implementation or release changes. Write code comments, CLI messages, help, adaptation prompts, public documentation, PR descriptions, and review reports in English. The prose in `docs/README.ja.md` is Japanese; comments in its code examples are English. Preserve the original safety invariants and lock compatibility. Do not copy personal skill bodies, intent documents, credentials, or dotfiles-specific configuration into this repository.
 
 Code explains how; tests specify observable behavior; commit messages explain why. Use GoDoc for documentation comments and explain non-obvious rejected alternatives in ordinary comments.

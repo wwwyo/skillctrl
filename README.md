@@ -94,7 +94,7 @@ skillctrl status
 # accept a deliberate manual edit
 skillctrl record chosen-skill
 
-# drop the upstream registration; the intent file stays
+# remove the skill, its saved intent, and registrations
 skillctrl remove chosen-skill
 ```
 
@@ -125,7 +125,7 @@ skillctrl check chosen-skill
 | `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and reapply saved intent. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
 | `list` / `ls` | Read project skill directories, including handwritten skills. |
 | `check` | Fetch and compare upstream originals without importing or reviewing. |
-| `remove` / `rm` | Remove project content and registration locally; no network or adapter executable is needed. |
+| `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
 | `status`, `record`, `merge` | skillctrl's accepted hashes and saved-intent workflow. `status` checks local acceptance, while `check` checks upstream updates. |
 | `plan`, `prompt`, `schema`, `ci`, `schedule` | Inspection and optional automation. |
 
@@ -146,6 +146,22 @@ hashes, and CI validation are shared by all adapters.
 
 CI is optional: these commands work locally, and intent adaptation needs a
 configured reviewer toolchain and model, independently of CI.
+
+`record NAME` hashes the current whole skill directory and updates only the
+accepted lock. It runs no reviewer, changes no skill content, and leaves the
+Git index alone. Use it after deliberately editing and checking a managed skill;
+it records your acceptance rather than verifying that the saved intent is met.
+
+`plan` selects changes between commits for a CI job. `prompt` exposes the
+embedded review instructions so an external job can pass them to its agent.
+`schema` prints a machine-readable command summary. These integration helpers
+are not needed for ordinary local skill management.
+
+`ci` separates preparation, agent-output validation, and publication for a
+pull-request workflow. `schedule` prepares upstream updates and can publish a
+draft update PR after validation. Neither installs a workflow nor starts a
+timer: an external CI platform or scheduler must call the phases described in
+[docs/ci.md](docs/ci.md).
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `2` means
 adaptation finished with unresolved skills, exit `1` means failure. These local
@@ -256,6 +272,13 @@ mise exec -- go test ./...
 mise exec -- go vet ./...
 mise exec -- go build .
 ```
+
+With mise active in this repository, `skillctrl` resolves to `tools/dev/skillctrl`.
+The launcher builds the current checkout before every invocation and forwards
+arguments, the caller's working directory, and the exit status to that binary.
+Go's build cache keeps unchanged builds fast. The local binary is ignored by
+Git; the launcher does not replace a globally installed version. Without shell
+activation, run `mise exec -- skillctrl --help`.
 
 Read [docs/requirements.md](docs/requirements.md) before changing behavior,
 [docs/ci.md](docs/ci.md) before wiring it into CI, and

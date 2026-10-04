@@ -112,7 +112,7 @@ Important behavior:
 
 - `update` without names refreshes all registered skills; use it only when the
   requested scope is all skills. An unchanged upstream original is skipped.
-- `remove` keeps the saved intent document; explain any remaining intent.
+- `remove` deletes the skill, its saved intent document, and registrations.
 - `--dry-run` checks basic arguments and reports command metadata without making
   changes. It does not fetch or inspect source content, confirm that the selected
   skills exist upstream, check for overlapping pending edits, or prove that adaptation
