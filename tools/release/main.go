@@ -117,7 +117,7 @@ class Skillctrl < Formula
 
   test do
     assert_match "skillctrl version v#{version}", shell_output("#{bin}/skillctrl --version")
-    assert_match '"commands"', shell_output("#{bin}/skillctrl schema")
+    assert_match "hash", shell_output("#{bin}/skillctrl record --help")
   end
 end
 `)
@@ -152,7 +152,7 @@ func archive(path, binary string) (err error) {
 	for _, item := range []struct {
 		name, source string
 		mode         int64
-	}{{"LICENSE", "LICENSE", 0o644}, {"skillctrl", binary, 0o755}} {
+	}{{"LICENSE", "LICENSE", 0o644}, {"THIRD_PARTY_NOTICES", "THIRD_PARTY_NOTICES", 0o644}, {"skillctrl", binary, 0o755}} {
 		file, openErr := os.Open(item.source)
 		if openErr != nil {
 			return openErr

@@ -7,180 +7,132 @@
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[日本語](docs/README.ja.md) · [Requirements](docs/requirements.md) · [CI integration](docs/ci.md) · [Parity](docs/parity.md)
+[日本語](docs/ja/README.md) · [Command details](docs/usage.md) · [CI integration](docs/ci.md)
 
-Manage agent skills in a Git repository without losing the intent behind your
-local adaptations.
-
-A skill is installed from somewhere else, then edited to fit your machine. The
-next update overwrites those edits, and nothing records what they were for.
-`skillctrl` keeps the reason next to the skill: when an upstream release changes
-a skill you have edited, the change is re-applied to your version instead of
-replacing it, and the hashes of what you have actually accepted are recorded in
-Git.
-
-English is the default for output, code comments, documentation, and review reports.
-The linked Japanese README provides a translated introduction.
-
-## Install
-
-```sh
-# Go
-go install github.com/wwwyo/skillctrl@latest
-
-# mise (GitHub release backend)
-mise use -g github:wwwyo/skillctrl@latest
-
-# Homebrew
-brew tap wwwyo/tap
-brew install wwwyo/tap/skillctrl
-```
-
-All three paths install the same command and report the same version. A
-`go install` build and a release archive are not byte-identical, because the
-release archive pins its version through linker flags. `skillctrl --version`
-prints the version in either case.
-
-## Set up a repository
-
-`skillctrl` works on a Git repository that has a skills directory. Create the
-two paths it reads:
-
-```
-.agents/skills/<name>/                  imported and adapted skills
-.agents/skillctrl/intents/<name>.md     what your customization must keep doing
-```
-
-The two lock files are created by the tool. `.agents/.skill-lock.json` records
-where each skill came from; `.agents/skillctrl/intents/lock.json` records the
-accepted hash of each whole upstream-managed skill directory. Only skills
-registered in the upstream lock are included in accepted hashes, `status`, and
-automatic intent review. Handwritten skills are excluded even if they have an
-intent document; their intentional edits need no second acceptance record.
-Existing handwritten hash entries are removed the next time an installer,
-`record`, or CI phase writes the accepted lock. `status` remains read-only and
-reports pending cleanup through `lock_changed` without selecting those skills.
+Manage agent skills in a Git repository while keeping the intent behind your
+local customizations. skillctrl tracks upstream originals and the content you
+have verified; your editor or existing agent makes the changes.
 
 ## Work with skills
 
-```sh
-# search the public index; installs nothing
-skillctrl find browser --owner vercel-labs
+### Keep your intent alongside the skill
 
-# import a skill
-skillctrl add vercel-labs/agent-browser --skill agent-browser
+An imported skill often needs different instructions for your project. Save the
+behavior you want to preserve in `.agents/skillctrl/intents/<name>.md`, then edit
+the skill directly. For example: "Keep instructions concise and require tests
+before completing code changes." The intent gives you or your agent a basis for
+reviewing future changes, instead of preserving a patch that may stop making sense.
 
-# ... then write .agents/skillctrl/intents/agent-browser.md
+The [skillctrl skill](.agents/skills/skillctrl/SKILL.md) guides your agent through finding,
+installing, creating, improving, updating, and removing skills. Its authoring
+guide is loaded when needed; separate discovery and creation skills are unnecessary.
+The CLI itself never starts an AI agent.
 
-# refresh it; the skill body is repaired to satisfy the saved intent
-skillctrl update agent-browser
+### Make acceptance deliberate
 
-# what still differs from the accepted hashes
-skillctrl status
-
-# accept a deliberate manual edit
-skillctrl record agent-browser
-
-# drop the upstream registration; the intent file stays
-skillctrl remove agent-browser
-```
-
-Results are JSON on stdout; logs and errors go to stderr. Exit `2` means
-adaptation finished with unresolved skills, exit `1` means failure. These local
-commands leave the work in the working directory and never commit, push, or open
-a pull request. The `ci` and `schedule` phases are the deliberate exception: they
-exist to commit a validated repair, push it, and report on the pull request, and
-they are documented separately in [docs/ci.md](docs/ci.md).
-
-## Agent skill
-
-The distributable [skillctrl skill](skills/skillctrl/SKILL.md) guides agents through
-discovery, named imports, customization, updates, and removal. It includes an
-on-demand authoring guide for creating and improving skills, without requiring
-separate `find-skills` or `skill-creator` installations.
-
-Once this package is published in the repository, import it into your chosen
-skills repository:
+`add` imports and registers originals. `record NAME` saves the current hash of
+that skill's complete directory after you have checked it, including references,
+scripts, and executable modes. It changes the accepted lock, not the skill.
+Only skills with both upstream registration and saved intent enter this lock;
+handwritten skills and uncustomized imports need no second acceptance step.
 
 ```sh
-skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl --skill skillctrl
+skillctrl add owner/repo:chosen-skill
+mkdir -p .agents/skillctrl/intents
+# Write the intent and edit the skill with your editor or existing agent
+# Verify the behavior and inspect the complete skill directory
+skillctrl record chosen-skill
+skillctrl check chosen-skill
 ```
 
-The CLI must already be installed and the target must contain `.agents/skills/`.
-Inspect the working copy returned in the command's JSON output before integrating
-the result. The source package lives in `skills/`; installed skills live in the
-target's `.agents/skills/`. The skill and CLI are separate artifacts.
+`check` reports local differences without changing files or contacting upstreams.
+It does not decide whether a skill meets its intent, and reported drift alone is
+not a command failure. Editing content never advances the accepted hash automatically.
+The intent document itself is outside the hash.
 
-## Merge upstream skills
+### Update originals, then review the adaptation
 
-One managed skill can track multiple upstream inputs in a `sources` array.
-First save the integration policy in
-`.agents/skillctrl/intents/combined.md` and prepare a clean checkout through your
-repository's normal workflow. Then select the inputs explicitly:
+`update NAME` fetches the registered original. If it has not changed, your local
+adaptation is preserved. If it has changed, inspect the imported diff, adapt the
+skill to its saved intent, verify it, and explicitly record the result:
 
 ```sh
-skillctrl merge combined \
-  --from owner/discovery:find-skills \
-  --from owner/authoring:skill-creator
-
-# Checks every registered original and adapts the merged skill when needed
-skillctrl update combined
+skillctrl update chosen-skill
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+# Edit and verify the updated skill against its intent
+skillctrl record chosen-skill
 ```
 
-The repositories above are placeholders.
-The full input list replaces the target's previous registrations. Each input
-records its own source, skill name, commit, path, and original tree hash. Existing
-single-source registrations retain their format.
+Commands operate in the current repository in place. Unrelated edits and staging
+are preserved; an import refuses to replace a skill containing pending edits.
+Use `cd` to select another repository.
 
-Originals live in `.agents/skills/combined/.skillctrl-sources/<index>/` so resource
-names cannot collide and review can use the complete inputs. The reviewer keeps
-those originals intact and integrates their behavior into the current entrypoint
-according to the intent. Conflicts remain unresolved with the old accepted hash.
-Changing an intent alone does not re-run integration; deliberately edit and verify
-the merged skill when applying a new policy to unchanged originals.
+### Combine sources without losing their identities
 
-Use the `repo` returned by `merge` or `update` for subsequent inspection. The
-result is one repository-local skill, and can be distributed as that directory.
-Its snapshot manifests are excluded from skillctrl's discovery. Older binaries
-cannot manage multi-source lock entries. The optional reviewer toolchain and
-models must be configured as described in [CI integration](docs/ci.md).
+`merge` puts complete originals under one skill and generates a root `SKILL.md`
+that routes to `references/<upstream-skill-name>/`. Each original keeps its
+resources and source registration. Customize the routing and its intent directly;
+later `update` refreshes the originals while preserving your root entrypoint.
+Explicitly running `merge` again replaces the source list and regenerates routing.
 
-## What it will and will not do
+```sh
+skillctrl merge owner/first:first-skill owner/second:second-skill --name combined
+```
 
-- **Originals are read from Git, not installed.** Tracked files come straight
-  out of a shallow clone. No upstream installer, script, or hook runs. Binary
-  content and executable bits are preserved; an import containing a symlink, a
-  submodule, a `.gitignore` or `.gitattributes`, or a file your repository would
-  ignore is refused, and a name that does not resolve uniquely is not guessed.
-- **An unchanged original is never re-imported.** That is what keeps an
-  adaptation alive across an update that did not touch it.
-- **The accepted hash covers the whole skill directory** - body, references,
-  scripts, and executable mode - and never the intent document. Changing or
-  deleting an intent is a decision in itself and never triggers adaptation on its
-  own. An ambiguous skill is left untouched with its old hash and reported as
-  unresolved. A deleted skill with a surviving intent is reported, not restored.
-- **The working directory you point at is not always left alone.** `add`,
-  `update`, and `remove` refuse a dirty checkout. If the target is already a
-  linked worktree, that worktree is the working copy and is modified. If it is a
-  main checkout, a detached worktree is created in a temporary directory and the
-  main checkout is left untouched. `--worktree-provider orca` delegates worktree
-  creation to Orca.
-- **Isolation flags do not hide files.** Intent review runs the agent with no
-  session, no context files, no skills, no extensions, no prompt templates, and
-  no auto-approval. Those stop discovery and unattended action; they do not stop
-  the agent from reading files in the checkout it was told to review. The agent's
-  toolchain is resolved in the directory prepared for the run - never in your
-  shell's directory and never in the repository under review - and the resolved
-  values take precedence over inherited ones.
-- **Local repair edits the working tree; CI repair does not.** `skillctrl
-  update` lets the reviewer edit the working directory and leaves the result
-  there for you to inspect. `skillctrl ci apply` applies a validated patch to the
-  Git index only.
-- **Agent output is untrusted.** A separate, credential-free path re-derives the
-  plan and refuses an edit outside the selected skills, an incomplete
-  accepted/unresolved partition, a changed unresolved skill, or the inference
-  credential appearing in a report, result, patch, or staged blob. See
-  [docs/ci.md](docs/ci.md) for the exact contract.
+`add` and `merge` share `owner/repo:skill` inputs. Single-skill `add --name NAME`
+can choose a local name while tracking the original upstream name. Inputs above
+are placeholders; use inspected sources.
+
+Acquisition defaults to the separately installed, pinned `skills` CLI.
+`--adapter gh` and `--adapter git` select GitHub CLI or direct Git instead.
+Root `skills-lock.json` keeps native registrations. Alias/merge tracking and extra
+provenance stay in `.agents/skillctrl/upstreams.json`; accepted hashes stay in
+`.agents/skillctrl/intents/lock.json`.
+Use `find`, `list`, and `remove` for discovery, inspection, and cleanup.
+See [command details](docs/usage.md) for adapters, locks, and edge cases.
+
+## Set up with your agent
+
+Give your agent this prompt in the target repository:
+
+```text
+Read https://raw.githubusercontent.com/wwwyo/skillctrl/main/docs/start.md and install the skillctrl CLI and skill in this repository.
+```
+
+[docs/start.md](docs/start.md) covers CLI installation, acquisition dependencies,
+the skill package, and checking whether your agent can load it.
+
+## Manual installation
+
+From the target Git repository, install an exact CLI version with a seven-day cooldown:
+
+```sh
+mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+mise exec -- skillctrl --help
+```
+
+Before importing, require help to show `list`, `check`, `record`, and
+`--adapter skills|gh|git`, with no `--repo`, `--worktree-provider`, or `intent`
+command. If no compatible release meets the cooldown, stop. See
+[setup](docs/start.md) for Go and Homebrew alternatives and the full compatibility check.
+
+Install the default adapter through mise with an exact pin and seven-day cooldown,
+preserving existing compatible pins, then import the package with the default adapter:
+
+```sh
+mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
+mkdir -p .agents/skills
+mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
+```
+
+CLI and skill are separate artifacts. Results are JSON on stdout; diagnostics
+go to stderr. Exit `0` means success and `1` means failure.
+
+## Optional automation
+
+CI checks the JSON from `check`; a scheduler calls `update`. Both use the same
+review, edit, and `record NAME` flow as local work. Your external workflow runs
+its agent and opens the draft PR. See [CI integration](docs/ci.md).
 
 ## Development
 
@@ -191,10 +143,12 @@ mise exec -- go vet ./...
 mise exec -- go build .
 ```
 
-Read [docs/requirements.md](docs/requirements.md) before changing behavior,
-[docs/ci.md](docs/ci.md) before wiring it into CI, and
-[docs/releasing.md](docs/releasing.md) before cutting a release.
-[docs/parity.md](docs/parity.md) maps every behavior to the test that pins it
-and names what is not covered.
+Here, `mise exec -- skillctrl` builds and runs the current checkout without
+replacing a global installation. Read [requirements](docs/requirements.md),
+[behavior coverage](docs/parity.md), and [release instructions](docs/releasing.md)
+for development details. Licensed under [MIT](LICENSE).
 
-Licensed under the [MIT license](LICENSE).
+The distributable skill is itself managed here in `.agents/skills/skillctrl/`:
+`.agents/skillctrl/upstreams.json` tracks its discovery and authoring inputs, and
+`.agents/skillctrl/intents/skillctrl.md` records the integration policy.
+Use the same `update skillctrl`, direct editing, `record skillctrl`, and `check skillctrl` flow.

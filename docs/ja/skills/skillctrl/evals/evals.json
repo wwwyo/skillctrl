@@ -1,0 +1,41 @@
+{
+  "skill_name": "skillctrl",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/tmp/project 用のブラウザ操作 skill が欲しいですが、まだ候補を選んでいません。使うコマンドと確認手順を説明してください。これは読み取り専用の計画を立てる課題なので、ネットワーク検索、導入、コマンド実行はしないでください。",
+      "expected_output": "候補の探索と取得元の内容確認を計画する。候補を選び、導入を依頼されてから、名前を指定してリポジトリ内に取り込む。",
+      "files": [],
+      "expectations": [
+        "具体的な用途の検索語を使って skillctrl find を提案する。",
+        "人気だけで判断せず、候補の skill 本文と関連 scripts を確認する。",
+        "候補の探索依頼を、導入の許可として扱わない。",
+        "取り込み前に cd /tmp/project を提案し、--repo や --global を使わない。"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/tmp/project で skillctrl update browser を実行しました。成功し、{\"repo\":\"/tmp/project\",\"skills\":[\"browser\"]} と報告されました。取り込んだ skill は保存した intent を満たさなくなり、check は local.lock_changed=true を報告しています。次に何を確認し、何をすべきですか。これは読み取り専用の計画を立てる課題なので、コマンドを実行したりファイルを変更したりしないでください。",
+      "expected_output": "選んだリポジトリの skill と保存した intent を確認し、直接編集して検証する手順を提案する。内容が intent を満たしてから record を使う。",
+      "files": [],
+      "expectations": [
+        "/tmp/project を確認先にし、worktree の作成や移動を提案しない。",
+        "update は原本を取り込み、AI の起動や記録済み lock の更新は行わないと説明する。",
+        "skill 全体と保存した intent を読み、既存の agent やエディタで直接編集することを提案する。",
+        "検証後にだけ record browser を使う。削除した intent コマンドや、不一致を消すためだけの record を提案しない。"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "繰り返し使っているリリースのチェックリストを、release-check という公開 skill にしてください。このリポジトリでは配布用パッケージを skills/ に置きます。別の端末へコピーしても使える必要があります。ファイル構成、確認方法、hash 記録の手順を説明してください。この計画を立てる課題では、ファイルの書き込みやコマンド実行はしないでください。",
+      "expected_output": "移植できる skill パッケージと現実的な評価計画を示し、配布用の原本とリポジトリ内に導入した skill を区別する。",
+      "files": [],
+      "expectations": [
+        "配布用の入口を skills/release-check/SKILL.md に置き、frontmatter の name を一致させる。",
+        "作業に固有の起動条件と、観察可能な完了条件を定義する。",
+        "移植性を確認し、現実的な評価ケースを含める。",
+        "配布用の原本を、.agents/skills に導入済みであるかのように record しない。"
+      ]
+    }
+  ]
+}

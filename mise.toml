@@ -1,2 +1,10 @@
 [tools]
 go = "1.27.1"
+"npm:skills" = "1.7.0"
+gh = "2.101.0"
+
+[env]
+_.path = "tools/dev"
+
+[settings]
+minimum_release_age = "7d"

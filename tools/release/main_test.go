@@ -12,7 +12,7 @@ import (
 
 func TestArchiveIsRepeatableAndInstallable(t *testing.T) {
 	t.Chdir(t.TempDir())
-	for name, data := range map[string]string{"LICENSE": "MIT fixture\n", "binary": "binary fixture\n"} {
+	for name, data := range map[string]string{"LICENSE": "MIT fixture\n", "THIRD_PARTY_NOTICES": "BSD fixture\n", "binary": "binary fixture\n"} {
 		if err := os.WriteFile(name, []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -42,7 +42,7 @@ func TestArchiveIsRepeatableAndInstallable(t *testing.T) {
 	for _, want := range []struct {
 		name, data string
 		mode       int64
-	}{{"LICENSE", "MIT fixture\n", 0o644}, {"skillctrl", "binary fixture\n", 0o755}} {
+	}{{"LICENSE", "MIT fixture\n", 0o644}, {"THIRD_PARTY_NOTICES", "BSD fixture\n", 0o644}, {"skillctrl", "binary fixture\n", 0o755}} {
 		header, err := tape.Next()
 		if err != nil {
 			t.Fatal(err)

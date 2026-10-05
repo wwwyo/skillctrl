@@ -9,6 +9,7 @@
 package upstream
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,10 +30,15 @@ import (
 )
 
 // Lock is the repository-relative upstream lock path.
-const Lock = ".agents/.skill-lock.json"
+const Lock = "skills-lock.json"
 
-// Version is the only upstream lock version understood by this release.
-const Version = 3
+// LegacyLock is read only when the project lock is absent. Successful imports
+// migrate it to Lock; an existing project lock always takes precedence.
+const LegacyLock = ".agents/.skill-lock.json"
+
+// Version is the project lock version used by the skills CLI. Version 3
+// registrations written by older skillctrl releases remain readable.
+const Version = 1
 
 var (
 	sourcePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -60,38 +66,89 @@ func Source(value string) (string, error) {
 // Record is the upstream lock. Skill entries stay as decoded maps so that
 // fields written by other tools survive an update untouched.
 type Record struct {
-	Version int            `json:"version"`
-	Skills  map[string]any `json:"skills"`
+	Version  int                        `json:"version"`
+	Skills   map[string]any             `json:"skills"`
+	Extra    map[string]json.RawMessage `json:"-"`
+	original []byte
+	native   *Record
+	tracking *Record
 }
 
-// Load reads existing source records while retaining their original Git tree
-// hashes.
-func Load(dir string) (*Record, error) {
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(Lock)))
-	if errors.Is(err, os.ErrNotExist) {
-		return &Record{Version: Version, Skills: map[string]any{}}, nil
+// MarshalJSON retains unknown top-level fields written by another tool.
+func (record Record) MarshalJSON() ([]byte, error) {
+	fields := maps.Clone(record.Extra)
+	if fields == nil {
+		fields = map[string]json.RawMessage{}
 	}
+	version, err := json.Marshal(record.Version)
 	if err != nil {
 		return nil, err
 	}
-	return parseLock(data)
+	skills, err := jsonfmt.Compact(record.Skills)
+	if err != nil {
+		return nil, err
+	}
+	fields["version"], fields["skills"] = version, skills
+	return jsonfmt.Compact(fields)
 }
 
-// Read loads source registrations from a fixed Git tree rather than the
+// ManagedSkills selects the GitHub registrations skillctrl can update. Other
+// providers remain in the shared project lock without entering intent review.
+func (record *Record) ManagedSkills() map[string]any {
+	managed := map[string]any{}
+	for name, raw := range record.Skills {
+		entry := raw.(map[string]any)
+		if entry["sourceType"] == "github" || entry["sources"] != nil {
+			managed[name] = raw
+		}
+	}
+	return managed
+}
+
+// loadNative reads the project lock, falling back to the old repository-local path.
+func loadNative(dir string) (*Record, error) {
+	for _, relative := range []string{Lock, LegacyLock} {
+		path := filepath.Join(dir, filepath.FromSlash(relative))
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("upstream lock must be a regular file: %s", relative)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return parseLock(data)
+	}
+	return &Record{Version: Version, Skills: map[string]any{}}, nil
+}
+
+// readNative loads native registrations from a fixed Git tree rather than the
 // working copy, so CI selection cannot depend on unstaged edits.
-func Read(dir, ref string) (*Record, error) {
-	listing, err := gitx.Output(dir, "ls-tree", ref, "--", Lock)
-	if err != nil {
-		return nil, err
+func readNative(dir, ref string) (*Record, error) {
+	for _, relative := range []string{Lock, LegacyLock} {
+		listing, err := gitx.Output(dir, "ls-tree", ref, "--", relative)
+		if err != nil {
+			return nil, err
+		}
+		if len(listing) == 0 {
+			continue
+		}
+		if !strings.HasPrefix(string(listing), "100644 blob ") && !strings.HasPrefix(string(listing), "100755 blob ") {
+			return nil, fmt.Errorf("upstream lock must be a regular file: %s", relative)
+		}
+		data, err := gitx.Output(dir, "show", ref+":"+relative)
+		if err != nil {
+			return nil, err
+		}
+		return parseLock(data)
 	}
-	if len(listing) == 0 {
-		return &Record{Version: Version, Skills: map[string]any{}}, nil
-	}
-	data, err := gitx.Output(dir, "show", ref+":"+Lock)
-	if err != nil {
-		return nil, err
-	}
-	return parseLock(data)
+	return &Record{Version: Version, Skills: map[string]any{}}, nil
 }
 
 func parseLock(data []byte) (*Record, error) {
@@ -99,7 +156,7 @@ func parseLock(data []byte) (*Record, error) {
 	if err := json.Unmarshal(data, &value); err != nil {
 		return nil, fmt.Errorf("unsupported upstream lock; expected version %d", Version)
 	}
-	if value.Version != Version || value.Skills == nil {
+	if (value.Version != Version && value.Version != 3) || value.Skills == nil {
 		return nil, fmt.Errorf("unsupported upstream lock; expected version %d", Version)
 	}
 	for name, entry := range value.Skills {
@@ -110,11 +167,21 @@ func parseLock(data []byte) (*Record, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid upstream skill record")
 		}
-		if _, err := sources(object, name); err != nil {
-			return nil, err
+		if object["sourceType"] == "github" || object["sources"] != nil {
+			if _, err := SourcePaths(object, name); err != nil {
+				return nil, err
+			}
+		} else if field(object, "sourceType") == "" || field(object, "source") == "" {
+			return nil, fmt.Errorf("invalid upstream skill record")
 		}
 	}
-	return &Record{Version: Version, Skills: value.Skills}, nil
+	if err := json.Unmarshal(data, &value.Extra); err != nil {
+		return nil, err
+	}
+	delete(value.Extra, "version")
+	delete(value.Extra, "skills")
+	value.original = bytes.Clone(data)
+	return &value, nil
 }
 
 // field reads a string field from a record entry.
@@ -144,31 +211,47 @@ func gitControlName(name string) bool {
 
 // Repository inspects one shallow clone and exports selected skill directories.
 type Repository struct {
-	source string
-	path   string
-	commit string
-	files  map[string]treeFile
-	skills map[string][]string
+	source   string
+	path     string
+	commit   string
+	revision string
+	files    map[string]treeFile
+	skills   map[string][]string
 }
 
 // New clones a repository without checking out a working tree. The clone is
 // shallow, and the environment drops the inference credential so a hostile
 // remote configuration cannot exfiltrate it.
 func New(identifier, directory string) (*Repository, error) {
+	return newRepository(identifier, directory, "")
+}
+
+func newRepository(identifier, directory, ref string) (*Repository, error) {
 	source, err := Source(identifier)
 	if err != nil {
 		return nil, err
 	}
 	env := removeEnv(gitx.Environment("GIT_TERMINAL_PROMPT=0"), "OPENCODE_API_KEY")
-	if err := gitx.SafeEnv("", env, "clone", "--quiet", "--depth", "1", "--no-checkout", "--",
-		"https://github.com/"+source+".git", directory); err != nil {
+	arguments := []string{"clone", "--quiet", "--depth", "1", "--no-checkout"}
+	if ref != "" {
+		if err := gitx.SafeRun("", "check-ref-format", "--branch", ref); err != nil {
+			return nil, fmt.Errorf("invalid upstream ref")
+		}
+		arguments = append(arguments, "--branch", ref)
+	}
+	arguments = append(arguments, "--", "https://github.com/"+source+".git", directory)
+	if err := gitx.SafeEnv("", env, arguments...); err != nil {
 		return nil, err
 	}
 	head, err := gitx.Safe(directory, "rev-parse", "HEAD")
 	if err != nil {
 		return nil, err
 	}
-	listing, err := gitx.Safe(directory, "ls-tree", "-rz", "HEAD")
+	return inspectRepository(source, directory, "HEAD", gitx.Trimmed(head))
+}
+
+func inspectRepository(source, directory, revision, commit string) (*Repository, error) {
+	listing, err := gitx.Safe(directory, "ls-tree", "-rz", revision)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +270,7 @@ func New(identifier, directory string) (*Repository, error) {
 		}
 		files[name] = treeFile{mode: fields[0], kind: fields[1], oid: fields[2]}
 	}
-	repository := &Repository{source: source, path: directory, commit: gitx.Trimmed(head), files: files}
+	repository := &Repository{source: source, path: directory, commit: commit, revision: revision, files: files}
 	if err := repository.indexSkills(); err != nil {
 		return nil, err
 	}
@@ -224,20 +307,9 @@ func (r *Repository) indexSkills() error {
 	}
 	r.skills = map[string][]string{}
 	for name, oid := range manifests {
-		text := strings.ReplaceAll(string(blobs[oid]), "\r\n", "\n")
-		if !strings.HasPrefix(text, "---\n") {
-			continue
-		}
-		frontmatter, _, found := strings.Cut(text, "\n---")
+		label, found := manifestName(blobs[oid])
 		if !found {
 			continue
-		}
-		var label string
-		for _, line := range strings.Split(frontmatter, "\n") {
-			if key, value, ok := strings.Cut(line, "name:"); ok && strings.TrimSpace(key) == "" {
-				label = strings.Trim(strings.TrimSpace(value), "\"'")
-				break
-			}
 		}
 		if Name(label) {
 			r.skills[label] = append(r.skills[label], name)
@@ -251,6 +323,23 @@ func (r *Repository) indexSkills() error {
 		slices.Sort(r.skills[name])
 	}
 	return nil
+}
+
+func manifestName(content []byte) (string, bool) {
+	text := strings.ReplaceAll(string(content), "\r\n", "\n")
+	if !strings.HasPrefix(text, "---\n") {
+		return "", false
+	}
+	frontmatter, _, found := strings.Cut(text, "\n---")
+	if !found {
+		return "", false
+	}
+	for _, line := range strings.Split(frontmatter, "\n") {
+		if key, value, ok := strings.Cut(line, "name:"); ok && strings.TrimSpace(key) == "" {
+			return strings.Trim(strings.TrimSpace(value), "\"'"), true
+		}
+	}
+	return "", true
 }
 
 // Select keeps the recorded path when it is still valid, and otherwise requires
@@ -273,30 +362,45 @@ func (r *Repository) Export(destination, name, target string, previous map[strin
 }
 
 func (r *Repository) export(destination, name, destinationName, target string, previous map[string]any) (map[string]any, error) {
-	manifest, err := r.Select(name, field(previous, "skillPath"))
+	result, files, contents, err := r.inspectExport(destination, name, destinationName, previous)
 	if err != nil {
 		return nil, err
+	}
+	if files != nil {
+		if err := writeExport(target, files, contents); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) inspectExport(destination, name, destinationName string, previous map[string]any) (map[string]any, map[string]treeFile, map[string][]byte, error) {
+	manifest, err := r.Select(name, field(previous, "skillPath"))
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	folder := path.Dir(manifest)
 	if folder == "" {
 		folder = "."
 	}
 	prefix := ""
-	tree := "HEAD^{tree}"
+	revision := r.revision
+	tree := revision + "^{tree}"
 	if folder != "." {
 		prefix = folder + "/"
-		tree = "HEAD:" + folder
+		tree = revision + ":" + folder
 	}
 	out, err := gitx.Safe(r.path, "rev-parse", tree)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	oid := gitx.Trimmed(out)
-	if field(previous, "source") == r.source && field(previous, "skillPath") == manifest &&
+	previousSource, _ := Source(field(previous, "source"))
+	if strings.EqualFold(previousSource, r.source) && field(previous, "skillPath") == manifest &&
 		field(previous, "skillFolderHash") == oid {
 		// An unchanged original must not be re-imported: doing so would discard
 		// the maintainer's adaptation and force a review of identical content.
-		return previous, nil
+		return previous, nil, nil, nil
 	}
 	files := map[string]treeFile{}
 	for name, entry := range r.files {
@@ -306,65 +410,84 @@ func (r *Repository) export(destination, name, destinationName, target string, p
 	}
 	for name, entry := range files {
 		if name != path.Clean(name) || name == "" || strings.HasPrefix(name, "/") {
-			return nil, fmt.Errorf("unsafe upstream file path")
+			return nil, nil, nil, fmt.Errorf("unsafe upstream file path")
 		}
 		for _, part := range strings.Split(name, "/") {
 			if part == ".." || gitControlName(part) {
-				return nil, fmt.Errorf("unsafe upstream file path")
+				return nil, nil, nil, fmt.Errorf("unsafe upstream file path")
 			}
 		}
 		if gitControlName(path.Base(name)) {
-			return nil, fmt.Errorf("upstream skill contains Git rules that could alter accepted content: %s", name)
+			return nil, nil, nil, fmt.Errorf("upstream skill contains Git rules that could alter accepted content: %s", name)
 		}
 		if entry.kind != "blob" || (entry.mode != "100644" && entry.mode != "100755") {
-			return nil, fmt.Errorf("upstream skill contains a symlink or submodule: %s", name)
+			return nil, nil, nil, fmt.Errorf("upstream skill contains a symlink or submodule: %s", name)
 		}
 	}
 	if err := rejectIgnored(destination, destinationName, files); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	contents, err := readBlobs(r.path, values(files))
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	if err := os.RemoveAll(target); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
-		return nil, err
-	}
-	for name, entry := range files {
-		destination := filepath.Join(target, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
-			return nil, err
-		}
-		mode := os.FileMode(0o644)
-		if entry.mode == "100755" {
-			mode = 0o755
-		}
-		if err := os.WriteFile(destination, contents[entry.oid], mode); err != nil {
-			return nil, err
-		}
-		if err := os.Chmod(destination, mode); err != nil {
-			return nil, err
-		}
+	computedHash := contentHash(files, contents)
+	if strings.EqualFold(previousSource, r.source) &&
+		(field(previous, "skillPath") == "" || field(previous, "skillPath") == manifest) &&
+		field(previous, "skillFolderHash") == "" && field(previous, "computedHash") == computedHash {
+		return previous, nil, nil, nil
 	}
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	result := maps.Clone(previous)
 	if result == nil {
 		result = map[string]any{}
 	}
+	delete(result, "nativeExport")
+	delete(result, "nativeName")
+	if !strings.EqualFold(previousSource, r.source) {
+		delete(result, "ref")
+	}
 	result["source"] = r.source
 	result["sourceType"] = "github"
 	result["sourceUrl"] = "https://github.com/" + r.source + ".git"
 	result["skillPath"] = manifest
 	result["skillFolderHash"] = oid
+	result["computedHash"] = computedHash
 	result["sourceCommit"] = r.commit
 	if existing, ok := result["installedAt"].(string); !ok || existing == "" {
 		result["installedAt"] = now
 	}
 	result["updatedAt"] = now
-	return result, nil
+	if declared, _ := manifestName(contents[files["SKILL.md"].oid]); Name(declared) && declared != destinationName {
+		result["nativeName"] = declared
+	}
+	return result, files, contents, nil
+}
+
+func writeExport(target string, files map[string]treeFile, contents map[string][]byte) error {
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return err
+	}
+	for name, entry := range files {
+		destination := filepath.Join(target, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if entry.mode == "100755" {
+			mode = 0o755
+		}
+		if err := os.WriteFile(destination, contents[entry.oid], mode); err != nil {
+			return err
+		}
+		if err := os.Chmod(destination, mode); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func values(files map[string]treeFile) []string {
@@ -400,18 +523,24 @@ func rejectIgnored(destination, name string, files map[string]treeFile) error {
 // result to the caller's worktree. A failure anywhere leaves the caller's
 // checkout untouched.
 func Install(dir, command string, selected []string, identifier, directory string) (target, lock string, err error) {
-	return install(dir, command, selected, identifier, directory, nil)
+	return InstallWithAdapter(dir, command, selected, identifier, directory, NewGitAdapter())
 }
 
 // Merge prepares a skill whose upstream registrations are stored as an array.
 func Merge(dir, name string, inputs []Input, directory string) (target, lock string, err error) {
-	if err := validateInputs(inputs); err != nil {
-		return "", "", err
-	}
-	return install(dir, "merge", []string{name}, "", directory, inputs)
+	return MergeWithAdapter(dir, name, inputs, directory, NewGitAdapter())
 }
 
-func install(dir, command string, selected []string, identifier, directory string, inputs []Input) (target, lock string, err error) {
+type importRequest struct {
+	command    string
+	selected   []string
+	source     string
+	inputs     []Input
+	outputName string
+}
+
+func install(dir, directory string, request importRequest, adapter Adapter) (target, lock string, err error) {
+	command, selected, identifier, inputs, outputName := request.command, request.selected, request.source, request.inputs, request.outputName
 	value, err := Load(dir)
 	if err != nil {
 		return "", "", err
@@ -421,20 +550,26 @@ func install(dir, command string, selected []string, identifier, directory strin
 		return "", "", err
 	}
 	if len(selected) == 0 {
-		selected = slices.Sorted(maps.Keys(value.Skills))
+		selected = slices.Sorted(maps.Keys(value.ManagedSkills()))
 	}
-	repositories := map[string]*Repository{}
-	for _, name := range selected {
-		if !Name(name) {
+	for index, requested := range selected {
+		name := requested
+		if command == "add" && outputName != "" {
+			name = outputName
+		}
+		if !Name(requested) || !Name(name) {
 			return "", "", fmt.Errorf("skill names must be plain directory names")
 		}
 		previous, _ := value.Skills[name].(map[string]any)
 		if previous == nil {
 			previous = map[string]any{}
 		}
+		if len(previous) > 0 && previous["sourceType"] != "github" && previous["sources"] == nil && command != "remove" {
+			return "", "", fmt.Errorf("only GitHub upstream sources are supported: %s", name)
+		}
 		_, multiple := previous["sources"]
 		if command == "merge" || command == "update" && multiple {
-			exported, mergeErr := mergeSkill(dir, name, filepath.Join(target, name), previous, inputs, repositories, directory)
+			exported, mergeErr := mergeSkill(dir, name, filepath.Join(target, name), previous, inputs, adapter, directory)
 			if mergeErr != nil {
 				return "", "", mergeErr
 			}
@@ -466,6 +601,9 @@ func install(dir, command string, selected []string, identifier, directory strin
 			}
 		}
 		origin := identifier
+		if command == "add" && len(inputs) > 0 {
+			origin = inputs[index].Source
+		}
 		if command != "add" {
 			origin = field(previous, "source")
 		}
@@ -473,22 +611,21 @@ func install(dir, command string, selected []string, identifier, directory strin
 		if err != nil {
 			return "", "", err
 		}
-		repository, ok := repositories[source]
-		if !ok {
-			repository, err = New(source, filepath.Join(directory, fmt.Sprintf("repo-%d", len(repositories))))
-			if err != nil {
-				return "", "", err
-			}
-			repositories[source] = repository
+		skill := requested
+		if command == "update" && field(previous, "skill") != "" {
+			skill = field(previous, "skill")
 		}
-		exported, err := repository.Export(dir, name, filepath.Join(target, name), previous)
+		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: source, Skill: skill, Name: name, Target: filepath.Join(target, name), Directory: directory, Previous: previous})
 		if err != nil {
 			return "", "", err
+		}
+		if command == "add" && (outputName != "" || previous["skill"] != nil) {
+			exported["skill"] = skill
 		}
 		value.Skills[name] = exported
 	}
 	lock = filepath.Join(directory, "upstream.json")
-	if err := jsonfmt.WriteFile(lock, value); err != nil {
+	if err := value.writePrepared(directory, lock); err != nil {
 		return "", "", err
 	}
 	return target, lock, nil

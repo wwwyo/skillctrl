@@ -454,7 +454,6 @@ func TestLoadRejectsUnsupportedLocks(t *testing.T) {
 		`{"version":2,"skills":{}}`,
 		`{"version":3}`,
 		`{"version":3,"skills":{"../escape":{"sourceType":"github","source":"o/r"}}}`,
-		`{"version":3,"skills":{"a":{"sourceType":"npm","source":"o/r"}}}`,
 		`{"version":3,"skills":{"a":{"source":"o/r"}}}`,
 		`not json`,
 	} {

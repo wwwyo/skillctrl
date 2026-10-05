@@ -62,13 +62,21 @@ func (f *fixture) commit() string {
 	return f.git("rev-parse", "HEAD")
 }
 
-func (f *fixture) plan(t *testing.T, base, since string) lock.Plan {
+func (f *fixture) selection(t *testing.T) lock.Selection {
 	t.Helper()
-	plan, err := lock.Compare(f.dir, base, "HEAD", since)
+	current, err := lock.Snapshot(f.dir, "HEAD")
 	if err != nil {
-		t.Fatalf("compare: %v", err)
+		t.Fatal(err)
 	}
-	return plan
+	recorded, err := lock.Read(f.dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registered, err := upstream.Read(f.dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return lock.Select(current, recorded, mustIntents(t, f.dir), registered.ManagedSkills())
 }
 
 func (f *fixture) record(t *testing.T, names ...string) {
@@ -85,7 +93,7 @@ func (f *fixture) record(t *testing.T, names ...string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := lock.Record(f.dir, current, recorded, names, registered.Skills); err != nil {
+	if _, err := lock.Record(f.dir, current, recorded, names, lock.IntentRegistered(registered.ManagedSkills(), mustIntents(t, f.dir))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -114,47 +122,47 @@ func TestHashesDetectUnrecordedEdits(t *testing.T) {
 	f.write(".agents/skillctrl/intents/manual.md", "prefer the default browser")
 	f.write(upstream.Lock, `{"version":3,"skills":{"manual":{"source":"fixture/source","sourceType":"github"}}}`)
 	f.write("AGENTS.md", "environment policy")
-	first := f.commit()
+	f.commit()
 
-	if got := f.plan(t, first, "").Skills; len(got) != 1 || got[0] != "manual" {
+	if got := f.selection(t).Skills; len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("first plan: %v", got)
 	}
 	f.record(t, "manual")
-	base := f.commit()
-	if f.plan(t, base, "").NeedsReview {
+	f.commit()
+	if f.selection(t).NeedsReview {
 		t.Fatal("accepted hashes must not trigger review")
 	}
 
 	f.write("AGENTS.md", "changed environment policy")
-	policy := f.commit()
-	if got := f.plan(t, base, "").Skills; len(got) != 0 {
+	f.commit()
+	if got := f.selection(t).Skills; len(got) != 0 {
 		t.Fatalf("policy change must not select a skill: %v", got)
 	}
-	if f.plan(t, policy, "").NeedsReview {
+	if f.selection(t).NeedsReview {
 		t.Fatal("policy change must not trigger review")
 	}
 
 	f.write(".agents/skills/manual/references/usage.md", "updated by another installer")
-	changed := f.commit()
-	if got := f.plan(t, policy, "").Skills; len(got) != 1 || got[0] != "manual" {
+	f.commit()
+	if got := f.selection(t).Skills; len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("unrecorded edit: %v", got)
 	}
 	f.record(t, "manual")
 	f.commit()
-	if f.plan(t, base, changed).NeedsReview {
+	if f.selection(t).NeedsReview {
 		t.Fatal("accepted reference edit must not trigger review")
 	}
 
 	f.write(".agents/skillctrl/intents/manual.md", "prefer another browser")
-	reviewed := f.commit()
-	if got := f.plan(t, reviewed, "").Skills; len(got) != 0 {
+	f.commit()
+	if got := f.selection(t).Skills; len(got) != 0 {
 		t.Fatalf("intent-only change must not select a skill: %v", got)
 	}
 	if err := os.Remove(filepath.Join(f.dir, ".agents/skillctrl/intents/manual.md")); err != nil {
 		t.Fatal(err)
 	}
-	noIntent := f.commit()
-	if got := f.plan(t, reviewed, "").Skills; len(got) != 0 {
+	f.commit()
+	if got := f.selection(t).Skills; len(got) != 0 {
 		t.Fatalf("intent deletion must not select a skill: %v", got)
 	}
 
@@ -162,22 +170,22 @@ func TestHashesDetectUnrecordedEdits(t *testing.T) {
 	if err := os.Remove(filepath.Join(f.dir, ".agents/skills/manual/SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
-	removed := f.commit()
-	if got := f.plan(t, noIntent, "").ReviewSkills; len(got) != 1 || got[0] != "manual" {
+	f.commit()
+	if got := f.selection(t).ReviewSkills; len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("removed skill with surviving intent: %v", got)
 	}
 	if err := os.Remove(filepath.Join(f.dir, ".agents/skillctrl/intents/manual.md")); err != nil {
 		t.Fatal(err)
 	}
 	f.commit()
-	selection := f.plan(t, removed, "")
-	equal(t, selection.Skills, []string{"manual"}, "removed skill selection")
+	selection := f.selection(t)
+	equal(t, selection.Skills, []string{}, "removed skill without intent is excluded")
 	if selection.NeedsReview {
 		t.Fatal("removed skill without intent needs no review")
 	}
 	f.record(t, "manual")
-	empty := f.commit()
-	if f.plan(t, empty, "").NeedsReview {
+	f.commit()
+	if f.selection(t).NeedsReview {
 		t.Fatal("empty lock must not trigger review")
 	}
 }
@@ -215,6 +223,7 @@ func TestRecordPreservesUnrelatedEntries(t *testing.T) {
 func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
 	f := newFixture(t)
 	f.write(".agents/skills/imported/SKILL.md", "accepted upstream content")
+	f.write(".agents/skillctrl/intents/imported.md", "keep imported behavior")
 	f.write(".agents/skills/local/SKILL.md", "intentional local edit")
 	f.write(".agents/skillctrl/intents/local.md", "a local intent does not opt into upstream management")
 	f.write(upstream.Lock, `{"version":3,"skills":{"imported":{"source":"fixture/source","sourceType":"github"}}}`)
@@ -229,11 +238,10 @@ func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.write(lock.Lock, string(data))
-	head := f.commit()
-	plan := f.plan(t, head, "")
+	f.commit()
+	plan := f.selection(t)
 	equal(t, plan.Skills, []string{}, "handwritten edits are not selected")
 	equal(t, plan.ReviewSkills, []string{}, "handwritten intents are not reviewed")
-	equal(t, sortedKeys(plan.InputTrees), []string{"imported"}, "review inputs")
 	if !plan.LockChanged {
 		t.Fatal("legacy handwritten hashes must request lock cleanup")
 	}
@@ -249,17 +257,17 @@ func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
 	if got := f.git("diff", "--name-only"); got != lock.Lock {
 		t.Fatalf("cleanup changed files outside the accepted lock: %s", got)
 	}
-	cleaned := f.commit()
-	if f.plan(t, cleaned, "").LockChanged {
+	f.commit()
+	if f.selection(t).LockChanged {
 		t.Fatal("cleaned lock still reports drift")
 	}
 
 	f.write(upstream.Lock, `{"version":3,"skills":{}}`)
-	if f.plan(t, cleaned, "").LockChanged {
-		t.Fatal("CI selection used an uncommitted upstream registration change")
+	if f.selection(t).LockChanged {
+		t.Fatal("fixed-tree selection used an uncommitted upstream registration change")
 	}
-	unregistered := f.commit()
-	plan = f.plan(t, unregistered, "")
+	f.commit()
+	plan = f.selection(t)
 	if !plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 {
 		t.Fatalf("removing an upstream registration must only clean its hash: %+v", plan)
 	}
@@ -277,9 +285,9 @@ func TestHandwrittenRepositoryNeedsNoLockOrReview(t *testing.T) {
 	f := newFixture(t)
 	f.write(".agents/skills/local/SKILL.md", "intentional content")
 	f.write(".agents/skillctrl/intents/local.md", "intentional requirements")
-	head := f.commit()
-	plan := f.plan(t, head, "")
-	if plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 || len(plan.InputTrees) != 0 {
+	f.commit()
+	plan := f.selection(t)
+	if plan.LockChanged || plan.NeedsReview || len(plan.Skills) != 0 {
 		t.Fatalf("handwritten-only repository entered upstream management: %+v", plan)
 	}
 }
@@ -396,4 +404,13 @@ func sortedKeys(values map[string]string) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func mustIntents(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	names, err := lock.IntentsAt(dir, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return names
 }

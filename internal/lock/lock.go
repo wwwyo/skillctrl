@@ -1,9 +1,8 @@
 // Package lock records accepted skill trees and selects the hashes that still
-// need adaptation.
+// differ from acceptance.
 //
-// Two locks exist by design. The upstream lock describes where a skill came
-// from; the accepted lock in this package records what the maintainer has
-// accepted for an upstream-managed skill. Handwritten skills remain outside
+// Upstream tracking describes where a skill came from; the accepted lock in this package records what the maintainer has
+// accepted for an upstream-managed skill with saved intent. Other skills remain outside
 // this management. Only Git tree object IDs are stored, so a hash covers the
 // whole skill directory including body, references, scripts, and executable
 // bits, and never covers the intent document itself.
@@ -24,7 +23,7 @@ import (
 )
 
 // Repository-relative locations. These are part of the on-disk contract and are
-// shared with the CI workflow, so they are constants rather than flags.
+// shared with the installer, so they are constants rather than flags.
 const (
 	Skills  = ".agents/skills/"
 	Intents = ".agents/skillctrl/intents/"
@@ -38,28 +37,17 @@ type Entry struct {
 	Skills  map[string]string `json:"skills"`
 }
 
-// Plan is the immutable selection handed to adaptation and to CI.
-type Plan struct {
-	Base         string            `json:"base"`
-	Head         string            `json:"head"`
-	Comparison   string            `json:"comparison"`
-	Skills       []string          `json:"skills"`
-	ReviewSkills []string          `json:"review_skills"`
-	InputTrees   map[string]string `json:"input_trees"`
-	NeedsReview  bool              `json:"needs_review"`
-	LockChanged  bool              `json:"lock_changed"`
+// Selection reports local hash differences for registered skills with saved intent.
+type Selection struct {
+	Skills       []string `json:"skills"`
+	ReviewSkills []string `json:"review_skills"`
+	NeedsReview  bool     `json:"needs_review"`
+	LockChanged  bool     `json:"lock_changed"`
 }
 
-// Empty returns a plan with the collection fields initialized, so that a plan
-// round-trips through JSON without turning empty lists into null. CI compares
-// stored plans against recomputed ones, and null versus [] would read as a
-// mismatch.
+// Empty returns an accepted lock with an initialized skills map.
 func Empty() Entry {
 	return Entry{Version: Version, Skills: map[string]string{}}
-}
-
-func emptyPlan() Plan {
-	return Plan{Skills: []string{}, ReviewSkills: []string{}, InputTrees: map[string]string{}}
 }
 
 // Entry is one result of a Git tree listing.
@@ -172,17 +160,41 @@ func Read(dir, ref string) (Entry, error) {
 	return Parse(out)
 }
 
-// Select chooses the differing hashes. Intent files supply review criteria, not
-// another baseline: a skill whose hash already matches the accepted lock is
-// never reviewed again, and a changed intent alone never triggers a run.
-// Handwritten skills are excluded even when they have an intent document.
-func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Plan {
-	plan := emptyPlan()
+// IntentRegistered limits acceptance to upstream-managed skills with saved intent.
+func IntentRegistered(registered map[string]any, intents map[string]bool) map[string]any {
+	eligible := map[string]any{}
+	for name, entry := range registered {
+		if intents[name] {
+			eligible[name] = entry
+		}
+	}
+	return eligible
+}
+
+// IntentsAt reads intent names from a fixed Git tree.
+func IntentsAt(dir, ref string) (map[string]bool, error) {
+	tree, err := entries(dir, ref, Intents, false)
+	if err != nil {
+		return nil, err
+	}
+	intents := map[string]bool{}
+	for path, entry := range tree {
+		if entry.kind == "blob" && strings.HasSuffix(path, ".md") && path != Intents+"README.md" {
+			intents[strings.TrimSuffix(strings.TrimPrefix(path, Intents), ".md")] = true
+		}
+	}
+	return intents, nil
+}
+
+// Select reports differing hashes for registered skills with saved intent.
+// Intent documents do not participate in skill hashes.
+func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Selection {
+	registered = IntentRegistered(registered, intents)
+	plan := Selection{Skills: []string{}, ReviewSkills: []string{}}
 	names := make([]string, 0, len(current.Skills)+len(recorded.Skills))
 	for name := range current.Skills {
 		if _, ok := registered[name]; ok {
 			names = append(names, name)
-			plan.InputTrees[name] = current.Skills[name]
 		}
 	}
 	for name := range recorded.Skills {
@@ -209,61 +221,23 @@ func Select(current, recorded Entry, intents map[string]bool, registered map[str
 	return plan
 }
 
-// Compare builds a full plan for CI, comparing skill hashes only against the
-// accepted lock at head.
-func Compare(dir, base, head, since string) (Plan, error) {
-	current, err := Snapshot(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	recorded, err := Read(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	comparison := base
-	if since != "" && exists(dir, since+"^{commit}") {
-		comparison = since
-	}
-	tree, err := entries(dir, head, Intents, false)
-	if err != nil {
-		return Plan{}, err
-	}
-	intents := map[string]bool{}
-	for path := range tree {
-		if strings.HasSuffix(path, ".md") && path != Intents+"README.md" {
-			intents[strings.TrimSuffix(strings.TrimPrefix(path, Intents), ".md")] = true
-		}
-	}
-	registered, err := upstream.Read(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	plan := Select(current, recorded, intents, registered.Skills)
-	plan.Base = base
-	plan.Head = head
-	plan.Comparison = comparison
-	return plan, nil
-}
-
-func exists(dir, object string) bool {
-	return gitx.Run(dir, "cat-file", "-e", object) == nil
-}
-
 // WorkingTree hashes selected working files through a private index so that the
 // caller's staging area and commits are never touched. Reading uncommitted state
-// is required for `status` and `record` in a main checkout with pending edits.
+// is required for `check` and `record` in a main checkout with pending edits.
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}
-		registered, err := entries(dir, "HEAD", upstream.Lock, false)
-		if err != nil {
-			return "", err
-		}
-		_, tracked := registered[upstream.Lock]
-		if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(upstream.Lock))); err == nil || tracked {
-			paths = append(paths, upstream.Lock)
-		} else if !os.IsNotExist(err) {
-			return "", err
+		for _, relative := range []string{upstream.Lock, upstream.LegacyLock, upstream.Tracking} {
+			registered, err := entries(dir, "HEAD", relative, false)
+			if err != nil {
+				return "", err
+			}
+			_, tracked := registered[relative]
+			if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(relative))); err == nil || tracked {
+				paths = append(paths, relative)
+			} else if !os.IsNotExist(err) {
+				return "", err
+			}
 		}
 	}
 	directory, err := os.MkdirTemp("", "skillctrl-index-")
@@ -287,18 +261,18 @@ func WorkingTree(dir string, paths ...string) (string, error) {
 	return gitx.Trimmed(out), nil
 }
 
-// Record advances only explicitly accepted hashes and preserves every other
-// registered entry. Unregistered skills are pruned without review; a skill
-// that disappeared from the tree has its named entry removed.
-func Record(dir string, current, recorded Entry, names []string, registered map[string]any) (Entry, error) {
+// Record advances only explicitly accepted hashes and preserves other eligible
+// entries. Callers supply upstream registrations filtered by saved intent.
+// Ineligible entries are pruned; a missing accepted skill has its entry removed.
+func Record(dir string, current, recorded Entry, names []string, eligible map[string]any) (Entry, error) {
 	values := copySkills(recorded.Skills)
 	for name := range values {
-		if _, ok := registered[name]; !ok {
+		if _, ok := eligible[name]; !ok {
 			delete(values, name)
 		}
 	}
 	for _, name := range names {
-		if _, ok := registered[name]; !ok {
+		if _, ok := eligible[name]; !ok {
 			continue
 		}
 		if hash, ok := current.Skills[name]; ok {

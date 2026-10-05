@@ -43,17 +43,32 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown flag", []string{"status", "--nonsense"}, "unknown flag"},
-		{"unknown command", []string{"install"}, "unknown command"},
-		{"add without a source", []string{"add"}, "accepts 1 arg"},
-		{"add without a skill", []string{"add", "owner/repo"}, "required flag"},
-		{"merge without a name", []string{"merge"}, "accepts 1 arg"},
-		{"merge without sources", []string{"merge", "combined"}, "required flag"},
-		{"malformed merge source", []string{"merge", "combined", "--from", "owner/repo"}, "owner/repo:skill"},
-		{"duplicate merge source", []string{"merge", "combined", "--from", "owner/repo:skill", "--from", "owner/repo:skill"}, "duplicate upstream"},
+		{"unknown flag", []string{"check", "--nonsense"}, "unknown flag"},
+		{"unknown command", []string{"nonexistent"}, "unknown command"},
+		{"removed schema", []string{"schema"}, "unknown command"},
+		{"root plan moved", []string{"plan"}, "unknown command"},
+		{"root prompt moved", []string{"prompt"}, "unknown command"},
+		{"add without inputs", []string{"add"}, "requires at least 1 arg"},
+		{"add skill without source", []string{"add", "--skill", "chosen"}, "requires at least 1 arg"},
+		{"empty add skill", []string{"add", "owner/repo", "--skill", ""}, "required"},
+		{"removed add from", []string{"add", "owner/repo:skill", "--from", "other/repo:skill"}, "unknown flag"},
+		{"removed merge from", []string{"merge", "owner/repo:skill", "--name", "combined", "--from", "other/repo:skill"}, "unknown flag"},
+		{"mixed add source forms", []string{"add", "owner/repo", "other/repo:skill", "--skill", "skill"}, "exactly one repository"},
+		{"qualified add source with skill", []string{"add", "owner/repo:skill", "--skill", "skill"}, "source must be"},
+		{"malformed add input", []string{"add", "owner/repo"}, "owner/repo:skill"},
+		{"merge without a name", []string{"merge", "owner/repo:skill"}, "required flag"},
+		{"positional merge name", []string{"merge", "combined", "owner/repo:skill", "--name", "other"}, "owner/repo:skill"},
+		{"invalid merge name", []string{"merge", "owner/repo:skill", "--name", "../escape"}, "valid --name"},
+		{"removed intent command", []string{"intent", "set", "chosen"}, "unknown command"},
+		{"removed worktree provider", []string{"update", "--worktree-provider", "orca"}, "unknown flag"},
+		{"merge without inputs", []string{"merge", "--name", "combined"}, "requires at least 1 arg"},
+		{"malformed merge input", []string{"merge", "--name", "combined", "owner/repo"}, "owner/repo:skill"},
+		{"duplicate merge input", []string{"merge", "--name", "combined", "owner/repo:skill", "owner/repo:skill"}, "duplicate upstream"},
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
-		{"plan without a base", []string{"plan"}, "requires --base"},
-		{"extra arguments", []string{"status", "extra"}, "unknown command"},
+		{"removed CI", []string{"ci"}, "unknown command"},
+		{"removed schedule", []string{"schedule"}, "unknown command"},
+		{"removed status", []string{"status"}, "unknown command"},
+		{"removed repo flag", []string{"check", "--repo", "/another-repository"}, "unknown flag"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -98,7 +113,10 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "schema", "plan"} {
+	if strings.Contains(stdout, "\n  ci ") || strings.Contains(stdout, "\n  schedule ") || strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") || strings.Contains(stdout, "--repo") {
+		t.Fatalf("help advertises removed local orchestration:\n%s", stdout)
+	}
+	for _, command := range []string{"add", "merge", "update", "remove", "record", "find", "list", "check"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}
@@ -107,61 +125,22 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("add --help failed")
 	}
-	if !strings.Contains(stdout, "--skill") || !strings.Contains(stdout, "--repo") {
+	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "skillctrl add owner/repo:skill...") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
 	}
+	stdout, _, code = runBinary(t, nil, "merge", "--help")
+	if code != 0 || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--name") || !strings.Contains(stdout, "skillctrl merge owner/repo:skill... --name NAME") {
+		t.Fatalf("merge help does not describe positional inputs:\n%s", stdout)
+	}
+
 }
 
-// TestSchemaDescribesTheContract keeps the machine-readable description of the
-// commands and the exit codes in step with the command tree.
-func TestSchemaDescribesTheContract(t *testing.T) {
-	stdout, _, code := runBinary(t, nil, "schema")
-	if code != 0 {
-		t.Fatal("schema failed")
-	}
-	var schema struct {
-		Commands map[string]string `json:"commands"`
-		Options  []string          `json:"options"`
-		Output   string            `json:"output"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &schema); err != nil {
-		t.Fatalf("schema is not one JSON document: %v\n%s", err, stdout)
-	}
-	for _, command := range []string{"add", "merge", "update", "remove", "record", "status", "find", "plan"} {
-		if _, ok := schema.Commands[command]; !ok {
-			t.Fatalf("schema omits %s", command)
-		}
-	}
-	if !strings.Contains(schema.Output, "exit 2") {
-		t.Fatalf("schema omits the unresolved exit code: %q", schema.Output)
-	}
-}
-
-// TestDryRunIsRefusedWhereItCannotBeHonored keeps a flag from implying a
-// guarantee the tool cannot make. The CI phases write the index, a lock, and a
-// remote pull request, so they refuse rather than silently doing the work.
-func TestDryRunIsRefusedWhereItCannotBeHonored(t *testing.T) {
-	for _, phase := range [][]string{
-		{"ci", "prepare", "/nonexistent-artifacts"}, {"ci", "export", "/nonexistent-artifacts"},
-		{"ci", "apply", "/nonexistent-artifacts"}, {"ci", "publish", "/nonexistent-artifacts"},
-		{"ci", "configure"}, {"schedule", "prepare", "/nonexistent-artifacts"},
-		{"schedule", "restore", "/nonexistent-artifacts"}, {"schedule", "publish", "/nonexistent-artifacts"},
-	} {
-		arguments := append([]string{"--dry-run"}, phase...)
-		stdout, stderr, code := runBinary(t, nil, arguments...)
-		if code != 1 {
-			t.Fatalf("%v exited %d want 1", phase, code)
-		}
-		if strings.TrimSpace(stdout) != "" {
-			t.Fatalf("%v wrote to stdout: %q", phase, stdout)
-		}
-		if !strings.Contains(stderr, "--dry-run applies to") {
-			t.Fatalf("%v did not explain the refusal: %q", phase, stderr)
-		}
-	}
-	// The installer commands keep the meaning the flag advertises.
-	if _, _, code := runBinary(t, nil, "--dry-run", "--repo", "/nonexistent", "update"); code != 1 {
-		t.Fatalf("a dry-run update outside a repository should fail cleanly, got %d", code)
+// TestDryRunRequiresARepository keeps target validation active in dry runs.
+func TestDryRunRequiresARepository(t *testing.T) {
+	command := exec.Command(binaryPath(t), "--dry-run", "update")
+	command.Dir = t.TempDir()
+	if output, err := command.CombinedOutput(); err == nil || !strings.Contains(string(output), "current repository must contain") {
+		t.Fatalf("a dry-run update outside a repository did not fail cleanly: %v\n%s", err, output)
 	}
 }
 
@@ -210,7 +189,8 @@ func TestInjectedVersionWins(t *testing.T) {
 // stdout free for results.
 func TestFailuresAreJSONOnStderr(t *testing.T) {
 	h := newHarness(t)
-	stdout, stderr, code := h.try("status", "--repo", filepath.Join(h.root, "missing"))
+	h.write(".agents/skillctrl/intents/lock.json", "invalid lock\n")
+	stdout, stderr, code := h.try("check")
 	if code != 1 {
 		t.Fatalf("exit %d want 1", code)
 	}
@@ -226,5 +206,94 @@ func TestFailuresAreJSONOnStderr(t *testing.T) {
 	}
 	if _, err := os.Stat(h.git("rev-parse", "--git-dir")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
+	environment := []string{}
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "SKILLCTRL_ADAPTER=") {
+			environment = append(environment, value)
+		}
+	}
+	for _, args := range [][]string{
+		{"list"}, {"record", "chosen"},
+		{"--dry-run", "find", "review"},
+		{"--dry-run", "add", "owner/repo", "--skill", "chosen"},
+		{"--dry-run", "merge", "owner/repo:chosen", "--name", "combined"},
+		{"--dry-run", "update"}, {"--dry-run", "remove", "chosen"},
+		{"check"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			for _, source := range []string{"flag", "environment"} {
+				arguments, env := args, environment
+				if source == "flag" {
+					arguments = append([]string{"--adapter=nonsense"}, args...)
+				} else {
+					env = append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense")
+				}
+				stdout, stderr, code := runBinary(t, env, arguments...)
+				if code != 1 || stdout != "" || !strings.Contains(stderr, "expected skills, gh, or git") {
+					t.Fatalf("%s %v: exit %d, stdout %q, stderr %q", source, args, code, stdout, stderr)
+				}
+			}
+		})
+	}
+	for _, value := range []string{"", "SKILLS", "gh ", "skills,gh"} {
+		stdout, stderr, code := runBinary(t, environment, "--dry-run", "find", "review", "--adapter="+value)
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "expected skills, gh, or git") {
+			t.Fatalf("invalid value %q: exit %d, stdout %q, stderr %q", value, code, stdout, stderr)
+		}
+	}
+	for _, name := range []string{"skills", "gh", "git"} {
+		stdout, stderr, code := runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense"), "--dry-run", "find", "review", "--adapter", name)
+		if code != 0 || !strings.Contains(stdout, `"dry_run":true`) {
+			t.Fatalf("explicit adapter %s did not override environment: %d %s", name, code, stderr)
+		}
+		stdout, stderr, code = runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER="+name), "--dry-run", "find", "review")
+		if code != 0 || !strings.Contains(stdout, `"dry_run":true`) {
+			t.Fatalf("environment adapter %s failed: %d %s", name, code, stderr)
+		}
+	}
+	stdout, stderr, code := runBinary(t, environment, "--help")
+	if code != 0 || !strings.Contains(stdout, "--adapter skills|gh|git") || !strings.Contains(stdout, "(default skills)") {
+		t.Fatalf("enum help: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	stdout, stderr, code = runBinary(t, environment, "__complete", "--adapter", "")
+	if code != 0 || stdout != "skills\ngh\ngit\n:4\n" {
+		t.Fatalf("enum completion: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
+
+// TestCurrentRepositoryIncludesSubdirectories pins targeting even before any
+// skills are installed, when a nested working directory has its own files.
+func TestCurrentRepositoryIncludesSubdirectories(t *testing.T) {
+	for _, withSkills := range []bool{true, false} {
+		t.Run(map[bool]string{true: "installed", false: "empty"}[withSkills], func(t *testing.T) {
+			h := newHarness(t)
+			if !withSkills {
+				if err := os.RemoveAll(filepath.Join(h.root, ".agents/skills")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			nested := filepath.Join(h.root, "nested")
+			if err := os.MkdirAll(nested, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command(h.binary, "list")
+			command.Dir = nested
+			command.Env = h.env
+			output, err := command.Output()
+			if err != nil {
+				t.Fatalf("list from nested directory: %v", err)
+			}
+			var result map[string]any
+			if err := json.Unmarshal(output, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result["repo"] != h.root {
+				t.Fatalf("nested directory selected a different repository: %s", output)
+			}
+		})
 	}
 }

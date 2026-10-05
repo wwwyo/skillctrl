@@ -7,7 +7,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -35,42 +34,10 @@ func BuildVersion() string {
 	return Version
 }
 
-// dryRunRejection explains why the CI phases refuse --dry-run. Those phases
-// write the Git index, a lock file, and a remote pull request; there is no
-// partial execution to offer, and silently ignoring the flag would let a caller
-// believe nothing was published.
-const dryRunRejection = "--dry-run applies to find, add, merge, update, remove, and record; " +
-	"this phase writes the index, the lock, and the remote repository"
-
-// rejectDryRun refuses a phase that has no defined dry-run semantics before it
-// can perform any side effect.
-func rejectDryRun(command *cobra.Command) error {
-	if dry, _ := command.Flags().GetBool("dry-run"); dry {
-		return fmt.Errorf(dryRunRejection)
-	}
-	return nil
-}
-
-// ExitUnresolved reports adaptation that could not be completed. It is a
-// distinct exit code because the work is not lost: the change stays in the
-// worktree and the old hash is retained so the next run retries.
-const ExitUnresolved = 2
-
-// exitError carries a chosen exit code out of a command.
-type exitError struct {
-	code int
-}
-
-func (e exitError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
-
 // Execute runs the command tree and returns the process exit code.
 func Execute() int {
 	root := New()
 	if err := root.Execute(); err != nil {
-		var code exitError
-		if errors.As(err, &code) {
-			return code.code
-		}
 		if silent, ok := err.(silenceError); ok {
 			// The failure was already reported as JSON on stderr.
 			_ = silent
@@ -93,9 +60,9 @@ func New() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "skillctrl",
 		Short: "Manage agent skills while preserving locally recorded intent",
-		Long: "skillctrl installs and updates skills in a Git repository and re-adapts them\n" +
-			"to the intent recorded in .agents/skillctrl/intents/. Upstream originals are\n" +
-			"read straight from Git objects; no upstream installer, script, or hook runs.",
+		Long: "skillctrl imports and registers skills through the selected acquisition adapter.\n" +
+			"Edit skills and intent files directly, then use record to compute and save verified skill hashes.\n" +
+			"Use the same commands locally and in external automation.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -104,25 +71,31 @@ func New() *cobra.Command {
 	root.SetErr(os.Stderr)
 	root.CompletionOptions.DisableDefaultCmd = true
 
-	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
 	root.PersistentFlags().Bool("dry-run", false,
-		"report what would happen without changing anything; applies to find, add, merge, update, remove, and record")
-	root.PersistentFlags().String("worktree-provider", "",
-		"worktree isolation backend for add, merge, update and remove: git or orca")
+		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
 
+	registerAdapterFlag(root)
+	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Local acceptance:"}, &cobra.Group{ID: "help", Title: "Help:"})
+	root.SetHelpCommandGroupID("help")
 	root.AddCommand(
-		newStatusCommand(),
-		newSchemaCommand(),
+		newListCommand(),
+		newCheckCommand(),
 		newFindCommand(),
 		newAddCommand(),
 		newMergeCommand(),
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),
-		newPlanCommand(),
-		newCICommand(),
-		newScheduleCommand(),
-		newPromptCommand(),
 	)
+	for _, command := range root.Commands() {
+		switch command.Name() {
+		case "find", "add", "merge", "list", "check", "update", "remove":
+			command.GroupID = "skills"
+		case "record":
+			command.GroupID = "intent"
+		default:
+			command.GroupID = "help"
+		}
+	}
 	return root
 }
