@@ -7,7 +7,7 @@
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](../../go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-[English](../../README.md) · [skill の日本語訳](skills/skillctrl.md) · [移植・公開の要件](../requirements.md) · [CI での使い方](../ci.md) · [対応表](../parity.md)
+[English](../../README.md) · [skill の日本語訳](skills/skillctrl/SKILL.md) · [移植・公開の要件](../requirements.md) · [CI での使い方](../ci.md) · [対応表](../parity.md)
 
 agent skill を Git リポジトリで管理しながら、ローカルで加えた適応の「意図」を
 失わないようにするための CLI です。
@@ -19,6 +19,17 @@ AI の起動や worktree の作成を行いません。取得時には受理 has
 
 出力・コードコメント・公開文書・レビューは英語を標準とし、この README は
 日本語で概要を案内します。
+
+## AI に導入を任せる
+
+対象リポジトリで、使っている AI に次の prompt を渡します。
+
+```text
+https://raw.githubusercontent.com/wwwyo/skillctrl/main/docs/start.md を読み、このリポジトリに skillctrl CLI と skill を導入してください。
+```
+
+AI 向けの導入手順は [docs/start.md](../start.md) だけで完結します。
+[日本語訳](start.md)もあります。手動で導入する場合は、以下の手順を使います。
 
 ## インストール
 

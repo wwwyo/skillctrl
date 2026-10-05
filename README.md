@@ -21,7 +21,18 @@ accepted content hashes.
 English is the default for output, code comments, documentation, and review reports.
 The linked Japanese README provides a translated introduction.
 
-## Install
+## Set up with your agent
+
+Give your agent this prompt in the target repository:
+
+```text
+Read https://raw.githubusercontent.com/wwwyo/skillctrl/main/docs/start.md and install the skillctrl CLI and skill in this repository.
+```
+
+[docs/start.md](docs/start.md) contains the complete agent setup procedure.
+For manual setup, continue below.
+
+## Manual installation
 
 ```sh
 # Go

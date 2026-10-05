@@ -29,43 +29,6 @@ an explicit install, edit, update, or removal request authorizes that operation.
 Do not make skill discovery a prerequisite for an ordinary task the user just
 wants completed, or silently replace another skill manager's registrations.
 
-## Establish the target
-
-1. Read the target repository's agent instructions. Default to that repository,
-   not a personal dotfiles checkout or a home directory. If several targets are
-   plausible and the choice changes where files are written, clarify the target.
-2. Check the installed CLI with `skillctrl --version` and `skillctrl --help`. Consult command help for version-specific options. If the
-   binary is missing, use the repository's tool manager and a pinned release;
-   the installation instructions are at https://github.com/wwwyo/skillctrl.
-3. Run management commands from the target repository. Use `cd` to select a
-   different repository before invoking skillctrl. It has no `--repo` or
-   `--global` option; a repository may separately expose its skills through shared
-   agent configuration.
-4. The Git repository must contain `.agents/skills/`. For an authorized setup,
-   create that directory if needed. Pending edits are allowed: the CLI preserves
-   unrelated files and caller staging. Imports that would replace a skill directory
-   with pending edits are refused; preserve that customization before replacing it.
-   Never reset or commit user edits merely to run the CLI.
-
-```sh
-cd /absolute/path/to/project
-skillctrl check
-```
-
-The managed paths inside the target are:
-
-```text
-.agents/skills/<name>/                  skill body and bundled resources
-.agents/skillctrl/intents/<name>.md     local customization requirements
-skills-lock.json                      upstream registration at repository root
-.agents/skillctrl/intents/lock.json     accepted content hashes, maintained by CLI
-```
-
-The root project lock is shared with the skills CLI. Existing version-1 locks
-stay in place with their other-provider entries and unknown fields preserved.
-A legacy `.agents/.skill-lock.json` is read only when the root lock is absent;
-a successful import migrates it. Read-only commands never move it.
-
 ## Find and inspect
 
 Translate the need into specific task keywords. Search without modifying the

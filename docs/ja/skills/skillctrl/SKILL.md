@@ -7,7 +7,7 @@ compatibility: "管理コマンドには Git と skillctrl CLI が必要。検�
 
 # skillctrl
 
-これは配布用 [SKILL.md](../../../skills/skillctrl/SKILL.md) の日本語訳です。
+これは配布用 [SKILL.md](../../../../skills/skillctrl/SKILL.md) の日本語訳です。
 
 ユーザーが選んだ Git リポジトリで、skill の導入から更新・削除までを管理する。
 用途に合う既存 skill があれば優先し、ユーザー固有のワークフローや適切な取得元がない場合は、
@@ -21,7 +21,7 @@ compatibility: "管理コマンドには Git と skillctrl CLI が必要。検�
 | skill を探す、利用できる機能を調べる | 候補を検索して内容を確認する。導入は依頼された場合だけ行う。 |
 | 選んだ skill を導入する | 名前を指定して取り込み、リポジトリの差分を確認して報告する。 |
 | 原本を追跡しながら複数の skill を統合する | 入力を明示して routing を作る。必要な場合に統合の intent と routing を編集する。 |
-| skill を作る、指示を改善する | [作成ガイド](../../../skills/skillctrl/references/authoring.md)を読み、skill を作成・評価する。 |
+| skill を作る、指示を改善する | [作成ガイド](references/authoring.md)を読み、skill を作成・評価する。 |
 | 更新後もカスタマイズを維持する | intent を書き、skill を編集・検証してから、確認済みの内容の hash を記録する。 |
 | 導入済み skill を更新・削除する | 指定された名前を更新・削除し、結果を確認する。 |
 | 未記録の変更を説明する、手動編集の hash を記録する | `check` で hash の差分を調べ、skill ディレクトリ全体を確認してから記録する。 |
@@ -30,44 +30,6 @@ compatibility: "管理コマンドには Git と skillctrl CLI が必要。検�
 導入・編集・更新・削除を明示的に依頼された場合は、その操作を実行できる。
 通常の作業を完了するための前提として skill 探索を挟んだり、
 別の skill 管理ツールの登録を黙って置き換えたりしない。
-
-## 操作するリポジトリを決める
-
-1. 対象リポジトリの agent 向け指示を読む。対象はそのリポジトリとし、
-   個人の dotfiles やホームディレクトリを既定の操作先にしない。
-   候補が複数あり、選択によって書き込み先が変わる場合は対象を確認する。
-2. `skillctrl --version` と `skillctrl --help` で、導入済み CLI を確認する。
-   バージョンごとのオプションは各コマンドの help を参照する。
-   バイナリがなければ、リポジトリのツール管理方式でリリースを固定して導入する。
-   導入手順は https://github.com/wwwyo/skillctrl にある。
-3. 管理コマンドは対象リポジトリで実行する。別のリポジトリを操作する場合は、
-   skillctrl の実行前に `cd` で移動する。`--repo` と `--global` は提供しない。
-   リポジトリの skill を agent の共有設定から参照する仕組みは、別途構成できる。
-4. Git リポジトリには `.agents/skills/` が必要。セットアップを依頼されていれば、
-   必要に応じて作成する。未コミットの編集があっても使える。
-   CLI は無関係なファイルと呼び出し元の staging を保持する。
-   未コミットの編集がある skill ディレクトリを置き換える取り込みは拒否されるので、
-   置き換える前にカスタマイズを保全する。CLI を実行するためだけにユーザーの編集を
-   reset したり commit したりしない。
-
-```sh
-cd /absolute/path/to/project
-skillctrl check
-```
-
-対象リポジトリで管理するパスは次のとおり。
-
-```text
-.agents/skills/<name>/                  skill body and bundled resources
-.agents/skillctrl/intents/<name>.md     local customization requirements
-skills-lock.json                      upstream registration at repository root
-.agents/skillctrl/intents/lock.json     accepted content hashes, maintained by CLI
-```
-
-root のプロジェクト用 lock は skills CLI と共有する。既存の version 1 の lock は、
-他の provider の登録と未知のフィールドを保持し、同じ場所で管理する。
-旧 `.agents/.skill-lock.json` は root に lock がない場合だけ読み、
-取り込みが成功したときに移行する。読み取り専用コマンドでは移動しない。
 
 ## 候補を検索して内容を確認する
 

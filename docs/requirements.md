@@ -32,6 +32,8 @@ The existing implementation is in the dotfiles checkout used to start this task:
 
 ## Distribution
 
+- Keep docs/start.md as a self-contained AI setup procedure for the CLI, acquisition dependencies, repository-local skill installation, and activation verification. README provides the user-facing setup prompt and manual instructions. Keep initial repository/tool setup out of the runtime skill. Collect Japanese translations under docs/ja/.
+
 - Public repository `wwwyo/skillctrl`, module `github.com/wwwyo/skillctrl`, MIT copyright 2026 wwwyo.
 - Root main package so `go install github.com/wwwyo/skillctrl@v0.1.0` works. Use `github.com/spf13/cobra` for the CLI command tree, flags, help, and argument validation (explicit user request). Pin the newest stable release published at least seven days before installation; v1.10.2 currently meets that condition. Prefer the standard library for other functionality; external dependencies must be exact and older than seven days at installation.
 - Release assets and checksums for macOS/Linux amd64/arm64, with truthful platform documentation. Use a tagged reproducible release workflow and meaningful CI.
