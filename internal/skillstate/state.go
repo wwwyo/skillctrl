@@ -59,7 +59,7 @@ func Parse(data []byte) (*Record, error) {
 	}
 	for name, entry := range record.Upstreams {
 		if _, ok := entry.(map[string]any); name == "" || !ok {
-			return nil, fmt.Errorf("invalid upstream skill record")
+			return nil, fmt.Errorf("invalid upstream skill record: %q", name)
 		}
 	}
 	if err := validateHashes(record.AcceptedHashes); err != nil {
@@ -123,6 +123,28 @@ func load(read func(string) ([]byte, error)) (*Record, error) {
 			return nil, err
 		}
 		record.AcceptedHashes = legacy.Skills
+		var extra map[string]json.RawMessage
+		if err := json.Unmarshal(data, &extra); err != nil {
+			return nil, err
+		}
+		if record.Extra == nil {
+			record.Extra = map[string]json.RawMessage{}
+		}
+		for key, value := range extra {
+			if key == "version" || key == "skills" {
+				continue
+			}
+			if key == "upstreams" || key == "acceptedHashes" {
+				return nil, fmt.Errorf("legacy accepted metadata conflicts with skillctrl lock: %s", key)
+			}
+			if previous, exists := record.Extra[key]; exists {
+				var a, b any
+				if json.Unmarshal(previous, &a) != nil || json.Unmarshal(value, &b) != nil || !sameJSON(a, b) {
+					return nil, fmt.Errorf("conflicting legacy lock metadata: %s", key)
+				}
+			}
+			record.Extra[key] = value
+		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}

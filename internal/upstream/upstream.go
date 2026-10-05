@@ -160,21 +160,8 @@ func parseLock(data []byte) (*Record, error) {
 	if (value.Version != Version && value.Version != 3) || value.Skills == nil {
 		return nil, fmt.Errorf("unsupported upstream lock; expected version %d", Version)
 	}
-	for name, entry := range value.Skills {
-		if !Name(name) {
-			return nil, fmt.Errorf("invalid upstream skill record")
-		}
-		object, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("invalid upstream skill record")
-		}
-		if object["sourceType"] == "github" || object["sources"] != nil {
-			if _, err := SourcePaths(object, name); err != nil {
-				return nil, err
-			}
-		} else if field(object, "sourceType") == "" || field(object, "source") == "" {
-			return nil, fmt.Errorf("invalid upstream skill record")
-		}
+	if err := ValidateRegistrations(value.Skills); err != nil {
+		return nil, err
 	}
 	if err := json.Unmarshal(data, &value.Extra); err != nil {
 		return nil, err
@@ -183,6 +170,27 @@ func parseLock(data []byte) (*Record, error) {
 	delete(value.Extra, "skills")
 	value.original = bytes.Clone(data)
 	return &value, nil
+}
+
+// ValidateRegistrations checks skill names and source identities before import.
+func ValidateRegistrations(skills map[string]any) error {
+	for name, entry := range skills {
+		if !Name(name) {
+			return fmt.Errorf("invalid upstream skill record")
+		}
+		object, ok := entry.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid upstream skill record")
+		}
+		if object["sourceType"] == "github" || object["sources"] != nil {
+			if _, err := SourcePaths(object, name); err != nil {
+				return err
+			}
+		} else if field(object, "sourceType") == "" || field(object, "source") == "" {
+			return fmt.Errorf("invalid upstream skill record")
+		}
+	}
+	return nil
 }
 
 // field reads a string field from a record entry.

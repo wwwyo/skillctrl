@@ -26,7 +26,7 @@ func legacyState(t *testing.T, h *harness) {
 	h.run(0, "add", "fixture/source:new-skill", "--name", "local-name")
 	value := privateState(t, h)
 	h.write(skillstate.LegacyUpstreams, mustJSON(map[string]any{"version": 1, "skills": value.Upstreams, "future": map[string]any{"preserve": true}}))
-	h.write(skillstate.LegacyAccepted, mustJSON(map[string]any{"version": 2, "skills": value.AcceptedHashes}))
+	h.write(skillstate.LegacyAccepted, mustJSON(map[string]any{"version": 2, "skills": value.AcceptedHashes, "futureAccepted": map[string]any{"preserve": true}}))
 	if err := os.Remove(filepath.Join(h.root, skillstate.Lock)); err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +76,9 @@ func TestUnifiedLockMigration(t *testing.T) {
 			if err := json.Unmarshal(value.Extra["future"], &extra); err != nil || extra["preserve"] != true {
 				t.Fatal("migration discarded unknown metadata")
 			}
+			if err := json.Unmarshal(value.Extra["futureAccepted"], &extra); err != nil || extra["preserve"] != true {
+				t.Fatal("migration discarded unknown legacy accepted metadata")
+			}
 			for _, path := range []string{skillstate.LegacyUpstreams, skillstate.LegacyAccepted} {
 				if _, err := os.Stat(filepath.Join(h.root, path)); !os.IsNotExist(err) {
 					t.Fatalf("legacy file remains: %s", path)
@@ -97,6 +100,21 @@ func TestUnifiedLockMigration(t *testing.T) {
 }
 
 func TestUnifiedLockFailureAndPrecedence(t *testing.T) {
+	t.Run("conflicting legacy metadata fails without replacing either file", func(t *testing.T) {
+		h := newHarness(t)
+		legacyState(t, h)
+		var accepted map[string]any
+		if err := json.Unmarshal(h.read(skillstate.LegacyAccepted), &accepted); err != nil {
+			t.Fatal(err)
+		}
+		accepted["future"] = map[string]any{"preserve": false}
+		h.write(skillstate.LegacyAccepted, mustJSON(accepted))
+		before := h.git("status", "--porcelain")
+		h.run(1, "record")
+		if before != h.git("status", "--porcelain") {
+			t.Fatal("metadata conflict partially migrated state")
+		}
+	})
 	t.Run("malformed legacy acceptance blocks acquisition before import", func(t *testing.T) {
 		h := newHarness(t)
 		legacyState(t, h)

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/wwwyo/skillctrl/internal/install"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 func newRepo(t *testing.T) string {
@@ -42,6 +44,47 @@ func newRepo(t *testing.T) string {
 		t.Fatalf("git commit: %v\n%s", err, out)
 	}
 	return dir
+}
+
+// TestImportRejectsInvalidPreparedProvenance guards the staged-data boundary:
+// an invalid source must be refused before any existing skill is replaced.
+func TestImportRejectsInvalidPreparedProvenance(t *testing.T) {
+	for _, registration := range []string{
+		`{"../escape":{"source":"fixture/source","sourceType":"github"}}`,
+		`{"manual":{"source":"../escape","sourceType":"github"}}`,
+		`{"manual":{"sources":[]}}`,
+	} {
+		t.Run(registration, func(t *testing.T) {
+			repo, stage := newRepo(t), t.TempDir()
+			target := filepath.Join(stage, "skills")
+			if err := os.MkdirAll(filepath.Join(target, "manual"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(target, "manual/SKILL.md"), []byte("replacement\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			native := filepath.Join(stage, "skills-lock.json")
+			if err := os.WriteFile(native, []byte(`{"version":1,"skills":{}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			private := `{"version":1,"upstreams":` + registration + `,"acceptedHashes":{}}`
+			if err := os.WriteFile(filepath.Join(stage, upstream.PreparedTracking), []byte(private), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := install.Import(repo, target, native); err == nil {
+				t.Fatal("invalid prepared provenance was accepted")
+			}
+			body, err := os.ReadFile(filepath.Join(repo, ".agents/skills/manual/SKILL.md"))
+			if err != nil || string(body) != "body\n" {
+				t.Fatal("failed validation replaced the original")
+			}
+			for _, relative := range []string{skillstate.Lock, "skills-lock.json", ".claude"} {
+				if _, err := os.Lstat(filepath.Join(repo, relative)); !os.IsNotExist(err) {
+					t.Fatalf("failed import created %s", relative)
+				}
+			}
+		})
+	}
 }
 
 func TestPrepareSkillsRefusesSymlinkedAncestorsWithoutWritingOutside(t *testing.T) {

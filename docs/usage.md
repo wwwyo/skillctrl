@@ -45,6 +45,9 @@ lock write combines them and removes both old files without accepting new conten
 `check` and dry runs never migrate files. Once present, the unified lock takes
 precedence over old files, including registrations deliberately removed from it.
 Older skillctrl releases do not read the unified lock; keep the new CLI after migration.
+Run provenance-changing operations one at a time per repository. Concurrent
+`add`, `merge`, `update`, `remove`, or native registration edits are unsupported;
+an import can replace provenance prepared before those edits.
 
 ## Work with skills
 

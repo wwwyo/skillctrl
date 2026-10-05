@@ -164,6 +164,9 @@ func Import(repo, target, upstreamLock string) error {
 		if err != nil {
 			return err
 		}
+		if err := upstream.ValidateRegistrations(private.Upstreams); err != nil {
+			return err
+		}
 		if err := skillstate.ValidateDestination(repo); err != nil {
 			return err
 		}
