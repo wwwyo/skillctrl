@@ -47,17 +47,13 @@ func newListCommand() *cobra.Command {
 
 func newCheckCommand() *cobra.Command {
 	return &cobra.Command{
-		Use: "check [names...]", Short: "Check upstream updates and local accepted hashes without changing files", Args: cobra.ArbitraryArgs,
+		Use: "check [names...]", Short: "Check local accepted hashes offline without changing files", Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			repo, err := repository(command)
 			if err != nil {
 				return fail(repo, err)
 			}
 			names, err := install.Names(args)
-			if err != nil {
-				return fail(repo, err)
-			}
-			adapter, err := selectedAdapter(command)
 			if err != nil {
 				return fail(repo, err)
 			}
@@ -76,17 +72,7 @@ func newCheckCommand() *cobra.Command {
 				local.NeedsReview = len(local.ReviewSkills) > 0
 				local.LockChanged = len(local.Skills) > 0
 			}
-			directory, err := os.MkdirTemp("", "skillctrl-check-")
-			if err != nil {
-				return fail(repo, err)
-			}
-			defer os.RemoveAll(directory)
-			updates, err := upstream.Check(repo, names, directory, adapter)
-			if err != nil {
-				return fail(repo, err)
-			}
-			slices.Sort(updates)
-			return emit(map[string]any{"repo": repo, "updates": updates, "local": map[string]any{
+			return emit(map[string]any{"repo": repo, "local": map[string]any{
 				"skills": local.Skills, "review_skills": local.ReviewSkills,
 				"needs_review": local.NeedsReview, "lock_changed": local.LockChanged,
 			}})

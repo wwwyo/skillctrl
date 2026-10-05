@@ -66,8 +66,8 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 			originalLock := h.read("skills-lock.json")
 			h.write(".agents/skills/new-skill/SKILL.md", manifest("new-skill", "local adaptation"))
 			result := h.run(0, "--adapter", backend, "check", "new-skill")
-			if len(list(result["updates"])) != 0 {
-				t.Fatalf("unchanged original reported update: %v", result)
+			if result["local"].(map[string]any)["lock_changed"] != false {
+				t.Fatalf("intent-free skill reported local drift: %v", result)
 			}
 			h.run(0, "--adapter", backend, "update", "new-skill")
 			if !strings.Contains(string(h.read(".agents/skills/new-skill/SKILL.md")), "local adaptation") {
@@ -100,17 +100,34 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 	}
 }
 
-func TestCheckReportsUpstreamChangesWithoutImport(t *testing.T) {
+func TestCheckIgnoresUpstreamChangesAndUnavailableAdapters(t *testing.T) {
 	h := newHarness(t)
 	h.upstreamSkill("manual", "canonical-manual", "upstream v2; generic browser")
 	h.originGit("add", "-A")
 	h.originGit("commit", "-qm", "new original")
+	if err := os.RemoveAll(h.origin); err != nil {
+		t.Fatal(err)
+	}
+	for _, backend := range []string{"skills", "gh"} {
+		path := filepath.Join(h.binDir, backend)
+		h.writeFile(path, "#!/bin/sh\necho invoked >> '"+h.base+"/adapter.log'\nexit 19\n")
+		if err := os.Chmod(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	before := h.git("status", "--porcelain")
-	result := h.run(0, "check", "manual")
-	equal(t, list(result["updates"]), []string{"manual"}, "upstream updates")
-	local := result["local"].(map[string]any)
-	if local["lock_changed"] != false || len(list(local["skills"])) != 0 {
-		t.Fatalf("accepted local content reported drift: %v", local)
+	for _, backend := range []string{"skills", "gh", "git"} {
+		result := h.run(0, "--adapter", backend, "check", "manual")
+		if _, exists := result["updates"]; exists {
+			t.Fatalf("local check reports upstream state: %v", result)
+		}
+		local := result["local"].(map[string]any)
+		if local["lock_changed"] != false || len(list(local["skills"])) != 0 {
+			t.Fatalf("accepted local content reported drift: %v", local)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(h.base, "adapter.log")); !os.IsNotExist(err) {
+		t.Fatalf("check invoked an acquisition adapter: %v", err)
 	}
 	if h.git("status", "--porcelain") != before || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || h.log() != "" {
 		t.Fatal("check changed project state or invoked reviewer")
@@ -128,7 +145,6 @@ func TestCheckReportsSelectedLocalDriftWithoutAcceptingIt(t *testing.T) {
 	index, accepted := h.read(".fixture-git/index"), h.read(".agents/skillctrl/intents/lock.json")
 	before := h.git("status", "--porcelain")
 	result := h.run(0, "check", "manual")
-	equal(t, list(result["updates"]), []string{}, "unchanged originals")
 	local := result["local"].(map[string]any)
 	equal(t, list(local["skills"]), []string{"manual"}, "selected local drift")
 	equal(t, list(local["review_skills"]), []string{"manual"}, "selected intent review")

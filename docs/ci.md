@@ -236,6 +236,11 @@ with the same default as local commands. Install the selected command through
 mise in the acquisition job. The trusted restore/validation job checks the
 prepared immutable input and needs neither installer nor model credentials.
 
+`check` and `ci plan` do not contact upstreams. `check` reports current local
+accepted-hash drift; CI selection uses fixed Git trees. An upstream release
+alone cannot make the accepted lock differ. Acquire it through an explicit
+`update` or scheduled `schedule prepare` before reviewing that input.
+
 Selection and accepted hashes include only skills with both a registered upstream
 and saved intent. Intent-free scheduled imports can still produce an update PR,
 but do not enroll those skills in the accepted lock or require model review. Local

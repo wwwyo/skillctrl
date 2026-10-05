@@ -175,7 +175,7 @@ proves no phase reaches the remote repository under `--dry-run`.
 | Behavior | Go code | Test |
 | --- | --- | --- |
 | Every command is discoverable in help | `internal/cli.New` | `TestHelpIsDiscoverable` |
-| Check reports selected local accepted-hash drift and upstream updates without accepting or reviewing | `internal/cli.newCheckCommand`, `internal/install.Selection` | `TestCheckReportsSelectedLocalDriftWithoutAcceptingIt`, `TestCheckReportsUpstreamChangesWithoutImport` |
+| Check reports selected local accepted-hash drift offline without accepting or reviewing | `internal/cli.newCheckCommand`, `internal/install.Selection` | `TestCheckReportsSelectedLocalDriftWithoutAcceptingIt`, `TestCheckIgnoresUpstreamChangesAndUnavailableAdapters` |
 | The bare invocation shows help | `internal/cli.New` | `TestBareInvocationShowsHelp` |
 | An argument or flag error exits non-zero with an explanation and a clean stdout | `internal/cli.Execute` | `TestArgumentErrorsAreReported` |
 | CI-only plan and prompt live under ci; removed top-level helpers are rejected | `internal/cli.newCICommand` | `TestHelpIsDiscoverable`, `TestArgumentErrorsAreReported`, `TestDocumentedPhaseSequence` |
@@ -229,13 +229,14 @@ is not a proof that every host's locale and ICU version produce identical hashes
 | --- | --- |
 | Both command adapters acquire in disposable staging/home, redact the inference credential, preserve downloaded CRLF bytes despite global Git attributes, and preserve caller staging and unrelated edits | `TestCommandAdaptersPreserveProjectState` |
 | Native project registration and an unchanged local adaptation survive update/check | `TestCommandAdaptersPreserveProjectState` |
-| Upstream check reports updates without import or review | `TestCheckReportsUpstreamChangesWithoutImport` |
+| Local check ignores upstream changes and succeeds with unavailable upstreams or failing acquisition adapters | `TestCheckIgnoresUpstreamChangesAndUnavailableAdapters` |
 | Failed or unknown adapters do not silently fall back or mutate project files | `TestAdapterErrorsDoNotFallBack` |
 | Common add/install, find/search, list/ls and remove/rm names plus grouped help | `TestHelpIsDiscoverable`, `TestCommandAdaptersPreserveProjectState` |
 
 Manual acquisition against the public `wwwyo/skillctrl` source succeeded with
-`skills` 1.7.0 and `gh` 2.101.0 for add/list/check; unchanged checks reported no
-updates. GitHub CLI search was also exercised. These runs do not prove every
+`skills` 1.7.0 and `gh` 2.101.0 for add/list and upstream acquisition.
+Those earlier checks preceded the offline-only check contract; current CLI
+fixtures prove local checks require neither installer nor upstream access. GitHub CLI search was also exercised. These runs do not prove every
 native discovery convention, release/ref form, or operating-system combination.
 Real model adaptation and live Orca worktree creation are separate integrations
 from acquisition; subprocess reviewer/worktree fixtures are not those live checks.
@@ -246,7 +247,7 @@ Native source tracking with a missing path is refused before export (`TestComman
 
 | Behavior | Observable coverage |
 | --- | --- |
-| Named add preserves original bytes and independent upstream identity through check/update | `TestNamedAddAndIntentLifecycle` |
+| Named add preserves original bytes and independent upstream identity through update and supports local check | `TestNamedAddAndIntentLifecycle` |
 | Intent set writes no acceptance; record requires registered upstream plus intent; intent removal prunes acceptance and keeps content/upstream | `TestNamedAddAndIntentLifecycle` |
 | Explicit intent application runs even when only intent changed | `TestIntentApplyExplicitlyReviewsChangedIntentOnly` |
 | Pure merge generates links to complete originals without intent, AI, or acceptance; re-merge refreshes ordering | `TestPureMergeProducesRoutingWithoutIntent` |

@@ -332,35 +332,6 @@ func runAdapter(name, directory, home string, args []string) error {
 	return nil
 }
 
-// Check prepares current originals without importing them or running a reviewer.
-func Check(dir string, selected []string, directory string, adapter Adapter) ([]string, error) {
-	before, err := Load(dir)
-	if err != nil {
-		return nil, err
-	}
-	_, lockPath, err := InstallWithAdapter(dir, "update", selected, "", directory, adapter)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(lockPath)
-	if err != nil {
-		return nil, err
-	}
-	after, err := parseLock(data)
-	if err != nil {
-		return nil, err
-	}
-	updates := []string{}
-	for name, entry := range after.ManagedSkills() {
-		previous, _ := json.Marshal(before.Skills[name])
-		current, _ := json.Marshal(entry)
-		if !bytes.Equal(previous, current) {
-			updates = append(updates, name)
-		}
-	}
-	return updates, nil
-}
-
 // diagnosticTail drains both streams while retaining only bounded failure context.
 type diagnosticTail struct {
 	data  []byte

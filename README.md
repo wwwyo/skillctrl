@@ -73,7 +73,7 @@ skillctrl find review --owner owner
 # list installed project skills
 skillctrl list
 
-# check upstream updates and local accepted hashes without changing files
+# check local accepted hashes offline without changing files
 skillctrl check
 
 # import a skill
@@ -124,7 +124,7 @@ skillctrl check chosen-skill
 | `find` / `search` | Search skills.sh for `skills` or `git`; use `gh skill search` for `gh`. The skills 1.7.0 find command has no JSON API, so its public index is queried directly. |
 | `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and register originals without AI or accepted hashes. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
 | `list` / `ls` | Read project skill directories, including handwritten skills. |
-| `check` | Report upstream updates and local accepted-hash drift without importing or reviewing; optional names scope both reports. |
+| `check` | Report local accepted-hash drift offline without importing or reviewing; optional names scope the report. No acquisition adapter executable is needed. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
 | `merge` | skillctrl-specific routing skill containing ordered upstream originals; no intent or AI required. |
 | `intent set/remove/apply`, `status`, `record` | skillctrl-specific intent and acceptance workflow. `status` checks local acceptance offline; `intent apply` explicitly reviews named skills. |
@@ -159,18 +159,38 @@ Only named upstream-registered skills with saved intent advance; other eligible 
 external job to pass to its reviewer. These helpers live under `ci` and are not
 needed for local `intent apply`, which uses the embedded instructions directly.
 
-`check` keeps upstream changes in `updates` and local drift in `local`.
-Local drift compares skill-directory hashes with the accepted lock; it does not
-run a model to assess whether the current instructions satisfy the intent.
-Use `status` for the same local check without network access. CI uses fixed
-commits rather than current working files or newly fetched originals so another
-job can recompute the exact review input.
+`check` reports local drift in `local` without contacting upstreams. It compares
+skill-directory hashes with the accepted lock and does not run a model to assess
+whether the current instructions satisfy the intent. Differences are reported
+in JSON, not treated as command failures. `status` reports the same local state
+for all managed skills. CI uses fixed commits so another job can recompute the
+exact review input. Upstream changes are acquired only by an explicit `update`
+or `schedule prepare`; a new upstream version alone does not change local
+acceptance or the CI plan.
 
 `ci` separates preparation, agent-output validation, and publication for a
 pull-request workflow. `schedule` prepares upstream updates and can publish a
 draft update PR after validation. Neither installs a workflow nor starts a
 timer: an external CI platform or scheduler must call the phases described in
 [docs/ci.md](docs/ci.md).
+
+To update originals deliberately, first inspect local customization, then run:
+
+```sh
+skillctrl update chosen-skill
+# Continue in the repo path returned by update
+cd /path/to/reported/repo
+git diff -- .agents/skills/chosen-skill skills-lock.json
+skillctrl intent apply chosen-skill
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
+```
+
+Single-input updates replace changed originals; merged updates refresh the
+registered references and retain the routing body. The Git diff shows the
+imported change, not a separately generated comparison of old and new upstream
+originals. Run `intent apply` only when the skill has saved intent. If you have
+reviewed the content yourself, `record chosen-skill` explicitly accepts it
+without a reviewer. Inspect the resulting changes before committing them.
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `2` means
 adaptation finished with unresolved skills, exit `1` means failure. These local
@@ -236,8 +256,8 @@ path for subsequent operations. Older binaries cannot manage multi-source entrie
 
 For a single input, `add --name local-name --skill upstream-name` changes the
 local directory and registration name, preserving original file bytes and
-frontmatter. Subsequent `update local-name` and `check local-name` resolve the
-recorded upstream name. `--name` requires exactly one selected skill; omit it
+frontmatter. Subsequent `update local-name` resolves the recorded upstream name;
+`check local-name` checks only the local accepted hash. `--name` requires exactly one selected skill; omit it
 when importing several separate skills.
 
 ## What it will and will not do

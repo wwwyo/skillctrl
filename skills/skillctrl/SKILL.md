@@ -178,7 +178,7 @@ accepted hash while keeping the skill and upstream registration. Intent-free
 imports never enroll in the accepted lock. Acquisition is always independent
 of intent. For one selected skill, `add --name local-name --skill upstream-name`
 changes the local directory/registration while preserving original frontmatter;
-update/check use the stored upstream name. `--name` cannot label several skills.
+update uses the stored upstream name; check reads only local accepted hashes. `--name` cannot label several skills.
 
 ## Report completion
 
@@ -191,9 +191,10 @@ task; they have different side effects from local management commands.
 ## Acquisition adapters
 
 Use the shared `find/add/list/check/update/remove` commands. `install`, `search`,
-`ls`, and `rm` are aliases. `status` reports local acceptance offline; `check`
-reports upstream updates and local accepted-hash drift without importing or
-reviewing. CI-only helpers are `ci plan` and `ci prompt`. Default acquisition uses the
+`ls`, and `rm` are aliases. `check` reports local accepted-hash drift offline,
+with optional skill names; `status` reports all local acceptance. Neither
+contacts upstreams or invokes an acquisition adapter or reviewer. Upstream
+acquisition belongs to explicit `update` or `schedule prepare`. CI-only helpers are `ci plan` and `ci prompt`. Default acquisition uses the
 pinned `skills` executable. Select `--adapter gh` for GitHub CLI or `--adapter git`
 for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in
 disposable staging and the project lock remains at root `skills-lock.json`.

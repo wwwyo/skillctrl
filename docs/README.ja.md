@@ -112,7 +112,7 @@ skillctrl check chosen-skill
 | `find` / `search` | `skills` / `git` は skills.sh API、`gh` は `gh skill search` で検索。skills 1.7.0 の find には JSON 出力がないため API を使います。 |
 | `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・登録を担当。AI と受理 hash 更新は行いません。 |
 | `list` / `ls` | 手書きを含む project の skill 一覧。 |
-| `check` | 原本の更新と手元の受け入れ済み hash の差分を確認。取り込み・reviewer 実行はしません。名前指定は両方に適用します。 |
+| `check` | 手元の受け入れ済み hash の差分だけをオフラインで確認。名前で対象を限定できます。upstream 参照・取り込み・reviewer 実行はしません。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
 | `merge` | skillctrl 独自の routing skill 作成。intent や AI は不要です。 |
 | `intent set/remove/apply`, `status`, `record` | skillctrl 独自の意図と受理 hash の管理。`intent apply` は指定した skill を明示的にレビューします。 |
@@ -134,12 +134,30 @@ upstream 登録と intent のある指定 skill の hash だけを更新し、�
 
 `ci plan` は固定 commit から CI のレビュー対象を選び、`ci prompt` は準備後に外部の
 agent へ渡すレビュー指示を表示します。ローカルの `intent apply` は内部の指示を直接使うため、この操作は不要です。
-`check` の結果は upstream 更新を `updates`、手元の差分を `local` に分けます。
-手元の確認は本文全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
-ネットワークなしで手元だけを確認するときは `status` を使います。
+`check` は upstream を参照せず、手元の差分だけを `local` に報告します。
+skill ディレクトリ全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
+差分があるだけでは異常終了せず、JSON で報告します。`status` は同じローカル状態を全対象について報告します。
+upstream の取得は明示的な `update` または `schedule prepare` で行います。upstream の更新だけでは手元の受理状態や CI の対象は変わりません。
 `ci` は PR の検証・修復・公開、`schedule` は upstream 更新の準備と検証後の
 更新 PR 作成を担います。workflow の導入やタイマーの起動はせず、外部の CI や scheduler
 から各段階を呼び出す必要があります。
+
+原本を更新するときは、現在のローカル調整を確認してから次を実行します。
+
+```sh
+skillctrl update chosen-skill
+# Continue in the repo path returned by update
+cd /path/to/reported/repo
+git diff -- .agents/skills/chosen-skill skills-lock.json
+skillctrl intent apply chosen-skill
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
+```
+
+単体 skill は原本が変わると本文を置き換え、merged skill は登録した references を
+更新してルート本文を保持します。Git diff は取り込み前後の差分であり、旧原本と新原本の
+比較を別途自動生成するものではありません。`intent apply` は保存した intent がある場合に
+使います。自分で内容を確認した場合は、代わりに `record chosen-skill` で明示的に受理できます。
+commit 前に最終的な変更を確認します。
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 2 は再適応の一部が
 未確定、exit 1 は失敗です。上記のローカルコマンドは作業内容を作業ディレクトリに
@@ -195,7 +213,7 @@ skillctrl intent apply combined
 
 単一の導入には `add --name local-name --skill upstream-name` を使えます。ローカルの
 ディレクトリ名・登録名を変え、原本の本文と frontmatter は保持します。
-`update local-name`・`check local-name` は登録した upstream 名を使います。
+`update local-name` は登録した upstream 名を使い、`check local-name` は手元の受理 hash だけを確認します。
 `--name` は1つの `--skill` にだけ使えます。複数の別 skill を導入するときは省略します。
 
 ## 安全の根拠
