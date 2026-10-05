@@ -297,13 +297,17 @@ func newRecordCommand() *cobra.Command {
 }
 
 func pruneAcceptance(repo string) error {
-	if _, err := os.Lstat(filepath.Join(repo, lock.Lock)); os.IsNotExist(err) {
-		if _, err := os.Lstat(filepath.Join(repo, skillstate.LegacyAccepted)); os.IsNotExist(err) {
-			if _, err := os.Lstat(filepath.Join(repo, skillstate.LegacyUpstreams)); os.IsNotExist(err) {
-				return nil
-			}
+	exists := false
+	for _, relative := range []string{skillstate.Lock, skillstate.LegacyAccepted, skillstate.LegacyUpstreams} {
+		if _, err := os.Lstat(filepath.Join(repo, relative)); !os.IsNotExist(err) {
+			exists = true
+			break
 		}
 	}
+	if !exists {
+		return nil
+	}
+
 	recorded, err := lock.Local(repo)
 	if err != nil {
 		return err

@@ -157,14 +157,23 @@ func Import(repo, target, upstreamLock string) error {
 	if trackingErr != nil && !os.IsNotExist(trackingErr) {
 		return trackingErr
 	}
+	var private *skillstate.Record
 	if trackingErr == nil {
-		if err := upstream.ValidateTracking(tracking); err != nil {
+		var err error
+		private, err = skillstate.Parse(tracking)
+		if err != nil {
 			return err
 		}
 		if err := skillstate.ValidateDestination(repo); err != nil {
 			return err
 		}
-
+		// Acquisition may take minutes. Validate current state before replacing
+		// skills, and preserve acceptance recorded during preparation.
+		latest, err := skillstate.Local(repo)
+		if err != nil {
+			return err
+		}
+		private.AcceptedHashes = latest.AcceptedHashes
 	}
 	existing := filepath.Join(repo, filepath.FromSlash(SkillsDir))
 	before, err := os.ReadDir(existing)
@@ -270,17 +279,6 @@ func Import(repo, target, upstreamLock string) error {
 		}
 	}
 	if trackingErr == nil {
-		private, err := skillstate.Parse(tracking)
-		if err != nil {
-			return err
-		}
-		// Acquisition may take minutes. Preserve acceptance recorded while it
-		// was preparing originals rather than restoring the prepared snapshot.
-		latest, err := skillstate.Local(repo)
-		if err != nil {
-			return err
-		}
-		private.AcceptedHashes = latest.AcceptedHashes
 		if err := skillstate.Write(repo, private); err != nil {
 			return err
 		}

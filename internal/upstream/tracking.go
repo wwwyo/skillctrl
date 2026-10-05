@@ -75,9 +75,6 @@ func combine(native, tracking *Record) (*Record, error) {
 	result := *native
 	result.Skills = maps.Clone(native.Skills)
 	result.native = native
-	if tracking == nil {
-		return &result, nil
-	}
 	for name, raw := range tracking.Skills {
 		entry := raw.(map[string]any)
 		if binding, bound := entry["native"]; bound {
@@ -177,10 +174,4 @@ func (record *Record) writePrepared(directory, combinedPath string) error {
 	private := *record.state
 	private.Upstreams = tracking.Skills
 	return jsonfmt.WriteFile(filepath.Join(directory, PreparedTracking), &private)
-}
-
-// ValidateTracking checks that private metadata can be imported as a record.
-func ValidateTracking(data []byte) error {
-	_, err := skillstate.Parse(data)
-	return err
 }
