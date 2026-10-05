@@ -78,7 +78,7 @@ The former CI and scheduled phase protocols are intentionally removed following
 the user's simplification decision. Their adaptation, publication, checker
 toolchain, and bundle fixtures are not part of the current contract. An external
 workflow uses `update`, direct review/editing, `record NAME`, and `check`; a fixed
-JSON predicate makes lock drift fail CI. See [CI integration](ci.md).
+JSON predicate makes lock drift fail CI. See [agent workflow guide](../.agents/skills/skillctrl/references/ci.md).
 
 ## Git plumbing
 

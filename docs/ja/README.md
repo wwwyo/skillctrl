@@ -7,7 +7,7 @@
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](../../go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-[English](../../README.md) · [コマンドの詳細](usage.md) · [CI での使い方](ci.md)
+[English](../../README.md) · [コマンドの詳細](usage.md) · [Agent workflow のガイド](skills/skillctrl/references/ci.md)
 
 ローカルでカスタマイズした意図を保ちながら、Git リポジトリで agent skill を管理します。
 skillctrl は upstream の原本と確認済みの内容を記録し、編集は普段のエディタや agent で行います。
@@ -122,9 +122,10 @@ CLI と skill は別の配布物です。stdout は JSON、stderr は診断で�
 
 ## 必要に応じて自動化する
 
-CI は `check` の JSON を判定し、scheduler は `update` を呼びます。
-確認・編集・`record NAME` はローカルと同じ手順です。
-agent の実行と draft PR の作成は外部 workflow が担当します。[CI の文書](ci.md)を参照してください。
+agent workflow は分けます。PR のチェックは `check` が報告した hash の不一致だけを審査し、
+定期更新は `update` の後に skill を調整・検証して draft PR を作ります。
+確認済みの内容は `record NAME` で受理します。
+[agent workflow のガイド](skills/skillctrl/references/ci.md)を参照してください。
 
 ## 開発する
 

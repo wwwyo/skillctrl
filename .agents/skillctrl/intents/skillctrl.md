@@ -8,7 +8,8 @@ Combine discovery from `vercel-labs/skills:find-skills` and authoring from
 `references/<upstream-skill-name>/` for comparison and update tracking. Preserve
 their licenses and bundled resources. Do not edit those snapshots during adaptation.
 
-Use the curated root procedure and `references/authoring.md` for daily operation.
+Use the curated root procedure, `references/authoring.md`, and `references/ci.md`
+for daily operation and automation.
 Upstream instructions inform adaptation; they do not override this integration
 policy, the user's scope, or repository instructions.
 
@@ -31,6 +32,12 @@ policy, the user's scope, or repository instructions.
   full benchmarking and description optimization are separate requested tasks.
 - Keep initial installation in docs/start.md, outside the installed runtime skill.
   Keep the package usable when installed independently of this source repository.
+- Keep GitHub automation guidance inside the skill's references. Use separate
+  agent workflows for PR checks and scheduled upstream updates. PR checks start
+  AI review only on accepted-hash drift, use the current intent without detecting
+  intent edits, record only verified names with evidence, and fail suspected
+  violations or unknown decisions with comments. Scheduled updates acquire and
+  adapt originals before opening a verified draft PR.
 - Keep public adapted instructions English, with faithful Japanese translations
   of the maintained guides and evaluation scenarios under docs/ja/skills/skillctrl/.
   Upstream snapshots and legal notices remain unchanged in their source language.
