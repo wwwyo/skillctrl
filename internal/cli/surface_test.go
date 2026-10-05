@@ -59,8 +59,8 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"merge without a name", []string{"merge", "owner/repo:skill"}, "required flag"},
 		{"positional merge name", []string{"merge", "combined", "owner/repo:skill", "--name", "other"}, "owner/repo:skill"},
 		{"invalid merge name", []string{"merge", "owner/repo:skill", "--name", "../escape"}, "valid --name"},
-		{"intent without file", []string{"intent", "set", "chosen"}, "required flag"},
-		{"intent apply without names", []string{"intent", "apply"}, "requires at least 1 arg"},
+		{"removed intent command", []string{"intent", "set", "chosen"}, "unknown command"},
+		{"removed worktree provider", []string{"update", "--worktree-provider", "orca"}, "unknown flag"},
 		{"merge without inputs", []string{"merge", "--name", "combined"}, "requires at least 1 arg"},
 		{"malformed merge input", []string{"merge", "--name", "combined", "owner/repo"}, "owner/repo:skill"},
 		{"duplicate merge input", []string{"merge", "--name", "combined", "owner/repo:skill", "owner/repo:skill"}, "duplicate upstream"},
@@ -132,7 +132,10 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "intent", "find", "list", "check"} {
+	if strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") {
+		t.Fatalf("help advertises removed local orchestration:\n%s", stdout)
+	}
+	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}

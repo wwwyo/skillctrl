@@ -236,52 +236,45 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if err != nil {
 		return fail(repo, err)
 	}
-	provider, _ := command.Flags().GetString("worktree-provider")
-	worktree, err := install.Worktree(repo, provider)
+	isolated, err := os.MkdirTemp("", "skillctrl-install-")
 	if err != nil {
 		return fail(repo, err)
 	}
-	isolated, err := os.MkdirTemp("", "skillctrl-install-")
-	if err != nil {
-		return fail(worktree, err)
-	}
 	defer os.RemoveAll(isolated)
-	// An empty skills directory in the main checkout has no Git tree entry, so
-	// a freshly isolated checkout needs it recreated before its first import.
-	if err := install.PrepareSkills(worktree); err != nil {
-		return fail(worktree, err)
+	if err := install.PrepareSkills(repo); err != nil {
+		return fail(repo, err)
 	}
-	if err := install.CheckSkills(filepath.Join(worktree, filepath.FromSlash(install.SkillsDir))); err != nil {
-		return fail(worktree, err)
+	if err := install.CheckSkills(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
+		return fail(repo, err)
 	}
 	var target, upstreamLock string
 	if kind == "merge" {
-		target, upstreamLock, err = upstream.MergeWithAdapter(worktree, values[0], inputs, isolated, adapter)
+		target, upstreamLock, err = upstream.MergeWithAdapter(repo, values[0], inputs, isolated, adapter)
 	} else if kind == "add" && len(inputs) > 0 {
-		target, upstreamLock, err = upstream.AddInputsWithAdapter(worktree, inputs, outputName, isolated, adapter)
+		target, upstreamLock, err = upstream.AddInputsWithAdapter(repo, inputs, outputName, isolated, adapter)
 	} else if outputName != "" {
-		target, upstreamLock, err = upstream.AddNamedWithAdapter(worktree, values[0], outputName, identifier, isolated, adapter)
+		target, upstreamLock, err = upstream.AddNamedWithAdapter(repo, values[0], outputName, identifier, isolated, adapter)
 	} else {
-		target, upstreamLock, err = upstream.InstallWithAdapter(worktree, kind, values, identifier, isolated, adapter)
+		target, upstreamLock, err = upstream.InstallWithAdapter(repo, kind, values, identifier, isolated, adapter)
 	}
 	if err != nil {
-		return fail(worktree, err)
+		return fail(repo, err)
 	}
 	if outputName != "" {
 		values = []string{outputName}
 	}
 	if err := install.CheckSkills(target); err != nil {
-		return fail(worktree, err)
+		return fail(repo, err)
 	}
-	if err := install.Import(worktree, target, upstreamLock); err != nil {
-		return fail(worktree, err)
+	if err := install.Import(repo, target, upstreamLock); err != nil {
+		return fail(repo, err)
 	}
 	if kind == "remove" {
-		if err := pruneAcceptance(worktree); err != nil {
-			return fail(worktree, err)
+		if err := pruneAcceptance(repo); err != nil {
+			return fail(repo, err)
 		}
 	}
-	return emit(map[string]any{"repo": worktree, "skills": values})
+	return emit(map[string]any{"repo": repo, "skills": values})
 }
 
 // runRecord accepts deliberate manual edits in place. It must not create a
@@ -333,4 +326,24 @@ func newRecordCommand() *cobra.Command {
 			return runInstall(command, "record", "", args)
 		},
 	}
+}
+
+func pruneAcceptance(repo string) error {
+	if _, err := os.Lstat(filepath.Join(repo, lock.Lock)); os.IsNotExist(err) {
+		return nil
+	}
+	recorded, err := lock.Local(repo)
+	if err != nil {
+		return err
+	}
+	registered, err := upstream.Load(repo)
+	if err != nil {
+		return err
+	}
+	intents, err := install.Intents(repo)
+	if err != nil {
+		return err
+	}
+	_, err = lock.Record(repo, lock.Empty(), recorded, nil, lock.IntentRegistered(registered.ManagedSkills(), intents))
+	return err
 }

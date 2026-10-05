@@ -15,7 +15,6 @@ throwaway Git repositories and fake upstreams reached through Git's
 | --- | --- | --- |
 | Dry run reports intent and writes nothing | `internal/cli.runInstall` | `TestInstallerLifecycle/dry_run_writes_nothing` |
 | Unchanged original is not re-imported, so an adaptation is never discarded | `internal/install.Import` fingerprint comparison | `TestInstallerLifecycle/unchanged_original_is_not_re-imported` |
-| A changed original is imported without review, then separately adapted with intent apply | `internal/upstream.Install`, `internal/install.Adapt` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
 | Binary content and executable modes survive an import | `internal/upstream.Export` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
 | Unrelated upstream commits are ignored | `internal/upstream.Export` original-hash comparison | `TestInstallerLifecycle/unrelated_upstream_change_is_ignored` |
 | Unknown skill in a selection is rejected atomically | `internal/upstream.Install` | `TestInstallerLifecycle/rejected_imports_are_atomic/unknown_skill` |
@@ -28,11 +27,6 @@ throwaway Git repositories and fake upstreams reached through Git's
 | `update` on an unregistered skill is refused | `internal/upstream.Install` | `TestInstallerLifecycle/rejected_imports_are_atomic/unregistered_update` |
 | A skill name that escapes the directory is refused | `internal/install.Names` | `TestInstallerLifecycle/rejected_imports_are_atomic/traversal_name`, `TestNamesRejectsEscapes` |
 | A rejected import leaves no partial change | `internal/cli.runInstall` staging order | `TestInstallerLifecycle/rejected_imports_are_atomic` |
-| Unresolved adaptation exits 2 and keeps the old hash | `internal/install.Adapt` | `TestInstallerLifecycle/unresolved_adaptation_exits_2_and_keeps_the_old_hash` |
-| Failed adaptation exits 1 and keeps the old hash | `internal/install.Adapt` | `TestInstallerLifecycle/failed_adaptation_exits_1_and_keeps_the_old_hash` |
-| A reviewer that edits outside the selection is refused | `internal/adapt.ReviewLocal`, `internal/adapt.ValidatePaths` | `TestInstallerLifecycle/reviewer_scope_violation_is_refused` |
-| The reviewer runs isolated, and its output is exported | `internal/adapt.ReviewLocal` | `TestInstallerLifecycle/reviewer_is_isolated_and_its_output_is_exported` |
-| A skill without intent is imported without reviewer or accepted hash | `internal/install.Adapt` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | Repeated names collapse however they are ordered | `internal/install.Names` | `TestNamesRejectsEscapes` |
 | `remove` deletes the skill, its intent, and registrations | `internal/install.Import` | `TestInstallerLifecycle/remove_deletes_the_selected_intent` |
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
@@ -44,18 +38,15 @@ These behaviors extend the previous single-source implementation.
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
-| All inputs are recorded in order; intent apply separately integrates a changed second input | `internal/upstream.Merge`, `internal/install.Adapt` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
 | Unchanged originals preserve output; intent-only edits do not trigger integration | `internal/upstream.mergeSkill`, `internal/lock.Select` | `TestMergeTracksEverySourceAndUpdatePreservesUnchangedOutput` |
-| Unresolved integration retains the accepted hash and can retry against the same originals | `internal/install.Adapt` | `TestMergeUnresolvedWorkKeepsAcceptedHashAndRetries` |
-| Editing immutable originals cannot advance acceptance or leave staging behind | `internal/adapt.Accepted` | `TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging` |
 | Dry run and failure in a later input do not write partial results; routing requires no saved intent | `internal/cli.runInstall`, `internal/upstream.mergeSkill` | `TestMergeDryRunAndPreparationFailureDoNotWrite` |
-| An ignored merged entrypoint is refused; the first merge in a main checkout creates its empty skills directory in the isolated worktree | `internal/upstream.mergeSkill`, `internal/install.PrepareSkills` | `TestMergeDryRunAndPreparationFailureDoNotWrite`, `TestFirstMergeInMainCheckoutRecreatesTheEmptySkillsDirectory` |
+| An ignored merged entrypoint is refused; the first merge in a main checkout uses the current empty skills directory | `internal/upstream.mergeSkill`, `internal/install.PrepareSkills` | `TestMergeDryRunAndPreparationFailureDoNotWrite`, `TestFirstMergeUsesTheMainCheckout` |
 | Malformed or duplicate source registrations are refused; legacy records are preserved | `internal/upstream.Load`, `internal/upstream.sources` | `TestSourcesArrayRejectsInvalidIdentitiesAndPreservesLegacyRecords` |
 | Inputs from separate repositories follow relocation and retain executable modes; snapshot manifests are not independently discovered | `internal/upstream.mergeSkill`, `internal/upstream.indexSkills` | `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
 | Scheduled preparation validates every original and preserves output until review | `internal/upstream.ValidateMergedImport` | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
 
-Integration inference uses the same stubbed reviewer as local adaptation. Live
-multi-source synthesis and hosted scheduled publication are unverified.
+CI inference uses an external stub reviewer. Live multi-source synthesis and
+hosted scheduled publication are unverified.
 
 ## Accepted hashes and selection
 
@@ -104,8 +95,6 @@ multi-source synthesis and hosted scheduled publication are unverified.
 | The report is bounded before it reaches GitHub | `internal/adapt.ReadReport` | `TestReadReportBounds` |
 | A closed, moved, forked, or self-targeted pull request is refused | `internal/adapt.Publish` | `TestPublishRefusesAnythingButTheCurrentPullRequest` |
 | A rerun does not post a duplicate comment | `internal/adapt.Publish` | `TestPublishReportsOnce` |
-| Restored merge content never becomes a repair input | `internal/adapt.Export`, `internal/adapt.ReviewLocal` | `TestEngineHandoffExportsOnlySelectedSkills` |
-| The reviewer runs with an isolated agent configuration | `internal/adapt.ReviewLocal` | `TestEngineHandoffExportsOnlySelectedSkills`, `TestReviewLocalUsesOnlyTheTrustedToolchain` |
 
 ## Isolation of the reviewing agent
 
@@ -115,16 +104,6 @@ accident.
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
-| The toolchain is resolved in the prepared directory, never in the caller's | `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
-| The reviewer runs in the checkout under review | `internal/adapt.ReviewLocal` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
-| Trusted values replace inherited ones | `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
-| The reviewer executable is resolved from the trusted PATH | `internal/adapt.resolveCommand` | `TestReviewerIsNotInheritedFromTheCallerPath` |
-| A credential supplied by the trusted toolchain is screened | `internal/adapt.ReviewLocal` | `TestCredentialFromTheTrustedEnvironmentIsScreened` |
-| An untrusted configuration is never evaluated | `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
-| The reviewer inherits only process basics and the inference credential - no injected runtime, write token, age key, or tracing secret | `internal/adapt.reduced`, `internal/adapt.toolchainEnvironment` | `TestReviewLocalUsesOnlyTheTrustedToolchain` |
-| The reviewer binary is resolved only from absolute entries of the trusted PATH | `internal/adapt.resolveCommand`, `internal/adapt.underTrustedPath` | `TestReviewerIsNotInheritedFromTheCallerPath` |
-| The trusted configuration decides which credential the reviewer gets | `internal/adapt.toolchainEnvironment` | `TestCredentialFromTheTrustedEnvironmentIsScreened` |
-| No review runs at all without a trusted toolchain | `internal/adapt.ReviewLocal` | `TestReviewLocalRequiresATrustedToolchain` |
 
 ## Scheduled updates
 
@@ -162,12 +141,7 @@ proves no phase reaches the remote repository under `--dry-run`.
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
-| Main-checkout isolation preserves the caller's checkout | `internal/install.Worktree` | `TestWorktreeIsolationCreatesACleanCheckout` |
-| A dirty main checkout carries current files into isolation without changing caller staging | `internal/install.Worktree` | `TestWorktreeCarriesPendingFilesWithoutChangingTheCaller` |
-| Local operations preserve unrelated staged, unstaged, deleted, and untracked files | `internal/cli.runInstall`, `internal/adapt.ReviewLocal` | `TestInstallerPreservesUnrelatedPendingEditsAndStaging` |
 | Only imports replacing skill directories with pending edits are refused, before any skill is imported | `internal/install.Import` | `TestInstallerRefusesOnlyReplacementsThatLosePendingSkillEdits` |
-| An existing linked worktree is reused | `internal/install.Worktree` | `TestWorktreeReusesAnExistingIsolationBoundary` |
-| An unknown worktree provider is refused | `internal/install.Worktree` | `TestWorktreeRejectsAnUnknownProvider` |
 | A symlink inside a skill is refused | `internal/install.CheckSkills` | `TestCheckSkillsRefusesSymlinks` |
 
 ## Command surface
@@ -196,11 +170,6 @@ proves no phase reaches the remote repository under `--dry-run`.
 - **Live `mise`.** Trusted toolchain resolution is exercised through a stub that
   reports its working directory and returns the environment. The real `mise env
   --json` output shape is trusted, not verified here.
-- **Orca worktree provider.** `--worktree-provider orca` is implemented and was
-  exercised manually during this port: a `remove` in a disposable registered
-  repository created an isolated Orca worktree and left the original checkout and
-  its staging untouched. It is not covered by an automated test, so a regression
-  there would not be caught by `go test`.
 - **`gh-aw` engine.** The sandbox handoff is driven by a harness in
   `internal/adapt/testdata/engine.cjs` that mirrors the gh-aw engine's arguments
   and steps. The real gh-aw sandbox, its AWF policy, and its credential redaction
@@ -238,24 +207,19 @@ Manual acquisition against the public `wwwyo/skillctrl` source succeeded with
 Those earlier checks preceded the offline-only check contract; current CLI
 fixtures prove local checks require neither installer nor upstream access. GitHub CLI search was also exercised. These runs do not prove every
 native discovery convention, release/ref form, or operating-system combination.
-Real model adaptation and live Orca worktree creation are separate integrations
-from acquisition; subprocess reviewer/worktree fixtures are not those live checks.
+External model adaptation is separate from acquisition. Local commands do not
+launch a model or create a worktree.
 
-Native source tracking with a missing path is refused before export (`TestCommandAdapterRejectsMissingTrackingPath`). Live Orca creation with `--base-branch` set to a full commit SHA returned that exact `baseRef` and HEAD; the clean owned worktree was then removed through Orca.
+Native source tracking with a missing path is refused before export (`TestCommandAdapterRejectsMissingTrackingPath`).
 
 ## Acquisition and explicit intent operations
 
 | Behavior | Observable coverage |
 | --- | --- |
-| Named add preserves original bytes and independent upstream identity through update and supports local check | `TestNamedAddAndIntentLifecycle` |
-| Intent set writes no acceptance; record requires registered upstream plus intent; intent removal prunes acceptance and keeps content/upstream | `TestNamedAddAndIntentLifecycle` |
-| Explicit intent application runs even when only intent changed | `TestIntentApplyExplicitlyReviewsChangedIntentOnly` |
 | Pure merge generates links to complete originals without intent, AI, or acceptance; re-merge refreshes ordering | `TestPureMergeProducesRoutingWithoutIntent` |
-| Empty intent, escaping names, and linked intent files are rejected without changing project state | `TestIntentSetRejectsUnsafePathsAndEmptyInput` |
 
 | Named reference behavior | Observable coverage |
 | --- | --- |
-| Merge routes to references under original skill names; originals stay immutable and executable modes survive updates | `TestPureMergeProducesRoutingWithoutIntent`, `TestMergeRefusesOriginalEditsAndKeepsAcceptanceAndStaging`, `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
 | Re-merge retains handwritten references, removes obsolete originals, and rejects colliding names or unregistered reference overlap | `TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions` |
 | Legacy numeric layouts update in place; explicit merge migrates sources and routing | `TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences` |
 | Scheduled validation independently checks named and numeric snapshots, hashes, identities, and output preservation | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
@@ -270,6 +234,17 @@ documented prepare/restore sequence through the built binary.
 | Behavior | Observable coverage |
 | --- | --- |
 | Add and merge share positional owner/repo:skill inputs; add preserves separate source identities, original bytes, local naming, and caller staging without review or acceptance | `TestAddInputsTracksSeparateSourcesAndNames` |
-| Intent application without saved intent fails before reviewer execution | `TestAddInputsTracksSeparateSourcesAndNames` |
 | Invalid, duplicate, colliding, or multiply named inputs fail before acquisition, including dry runs | `TestAddInputsRejectsInvalidInputsWithoutAcquisition`, `TestArgumentErrorsAreReported` |
 | Failed acquisition or overlapping pending edits prevents every input from being imported | `TestAddInputsPreparesEveryInputBeforeImporting` |
+
+## Direct editing and local mutation
+
+| Behavior | Observable coverage |
+| --- | --- |
+| Add, merge, changed update, remove, and record use the selected main checkout, preserve staging/unrelated edits, and invoke no reviewer or worktree manager | `TestLocalCommandsUseTheMainCheckoutWithoutWorktreeOrReviewerDependencies` |
+| First merge uses the selected main checkout's empty skills directory | `TestFirstMergeUsesTheMainCheckout` |
+| Direct intent editing changes eligibility; deleting intent prunes acceptance on the next record without removing the skill/upstream | `TestNamedAddAndIntentLifecycle` |
+| Removed intent commands and worktree-provider flags are rejected | `TestArgumentErrorsAreReported` |
+
+External review boundaries remain covered by `internal/adapt` and the public CLI
+phase sequence in `internal/integration`; local commands do not launch an agent.

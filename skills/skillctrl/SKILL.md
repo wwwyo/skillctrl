@@ -2,7 +2,7 @@
 name: skillctrl
 description: "Find, install, merge, create, improve, update, and remove agent skills with skillctrl while preserving local customization intent. Use when the user asks to find a skill for a task, add or manage skills in a repository, combine skills while tracking their upstreams, turn a workflow into a SKILL.md, improve an existing skill, or reconcile skill changes and accepted hashes."
 license: MIT
-compatibility: "Requires Git and the skillctrl CLI for management commands, and network access for discovery and upstream imports. Adaptation of skills with saved intent also requires the configured review agent."
+compatibility: "Requires Git and the skillctrl CLI for management commands, and network access for discovery and upstream imports. Local customization uses the existing editor or agent; management commands do not launch a model."
 ---
 
 # skillctrl
@@ -17,8 +17,8 @@ next to the skill so later upstream changes can be reconciled with it.
 | Request | Action |
 | --- | --- |
 | Find a skill or explore available capabilities | Search and inspect candidates; install only if requested |
-| Install a selected skill | Import the named skill, inspect the resulting worktree and report it |
-| Combine skills and keep tracking their originals | Merge explicit inputs into routing; save/apply integration intent only when needed |
+| Install a selected skill | Import the named skill, inspect the repository diff and report it |
+| Combine skills and keep tracking their originals | Merge explicit inputs into routing; edit the integration intent and routing only when needed |
 | Create a skill or improve its instructions | Read [authoring](references/authoring.md), then write and evaluate the skill |
 | Preserve a customization across updates | Write its intent, edit and verify the skill, then record the accepted content |
 | Refresh or remove installed skills | Update or remove the requested names, then inspect the result |
@@ -101,13 +101,13 @@ skillctrl --repo /absolute/path/to/project remove chosen-name
 ```
 
 Read stdout as JSON and stderr as diagnostics. Exit `0` is success, `1` is
-failure, and `2` means adaptation has unresolved skills. An install/update/remove
+failure. Local commands never launch a reviewer. An install/update/remove
 result's `repo` is the actual working copy: use that path for subsequent reads,
-edits, status, and recording. A linked worktree is modified in place; a main
-checkout causes the CLI to create a separate detached worktree. If the project
-uses Orca, select `--worktree-provider orca` when a new worktree is needed.
+edits, status, and recording. Commands modify the selected repository in place,
+including main checkouts and linked worktrees. They never create a worktree or
+start an AI reviewer. Use the existing agent or editor to change content directly.
 
-Inspect the returned worktree's diff, new files, links, and both locks. Check
+Inspect the repository's diff, new files, links, and both locks. Check
 the whole skill directory, including executable scripts and references. Local
 commands do not commit, push, or create a PR. Complete those steps only when
 already requested or required by the user's authorized repository workflow.
@@ -123,9 +123,9 @@ Important behavior:
   will succeed.
 - If an import rejects a symlink, submodule, Git control file, or ignored file,
   explain the rejected source content rather than bypassing the check.
-- On exit `2`, inspect the reported unresolved names and report file, keep their
-  old accepted hashes, and report the worktree that needs attention. Do not use
-  `record` merely to hide unresolved adaptation or turn a failure into success.
+- Do not record unresolved customization merely to clear a hash mismatch. Inspect
+  the intent and the whole skill, resolve the issue, then accept verified content.
+
 
 ## Merge with upstream tracking
 
@@ -160,7 +160,7 @@ desired behavior and constraints, not a patch transcript. Do not put credentials
 or machine-specific secrets in the skill or its intent.
 
 For example, an intent could require repository-local installation and reporting
-the actual worktree path. Then edit the skill to meet that intent, exercise a
+the actual repository path. Then edit the skill to meet that intent, exercise a
 representative task, and inspect all changed content before accepting it:
 
 ```sh
@@ -175,21 +175,21 @@ even if they have an intent document; do not run `record` for them or invent an
 upstream registration. Legacy handwritten hashes are pruned on the next
 accepted-lock write. Do not edit the lock JSON by hand.
 
-Save intent with `intent set chosen-name --file requirements.md`. Explicitly run
-`intent apply chosen-name` to review it, including after intent-only changes;
-review requires the configured agent. Alternatively edit and verify manually,
-then `record chosen-name`. `intent remove chosen-name` removes intent and its
-accepted hash while keeping the skill and upstream registration. Intent-free
-imports never enroll in the accepted lock. Acquisition is always independent
+Write or edit `.agents/skillctrl/intents/chosen-name.md` and the skill directly.
+Verify that the whole skill meets the intent, then run `record chosen-name`.
+Removing the intent file excludes the skill from acceptance; stale accepted hashes
+are reported by check/status and pruned on the next accepted-lock write.
+Intent-free imports never enroll in the accepted lock. Acquisition is independent
 of intent. For one selected skill, `add owner/repo:upstream-name --name local-name`
 changes the local directory/registration while preserving original frontmatter;
-update uses the stored upstream name; check reads only local accepted hashes. `--name` cannot label several skills.
+update uses the stored upstream name; check reads only local accepted hashes.
+`--name` cannot label several skills.
 
 ## Report completion
 
 State the actual working copy, selected source and names, changed paths, checks
 performed, unresolved items, and any remaining integration step. Distinguish
-files prepared in a worktree from skills enabled in the user's active agent.
+files changed in the selected repository from skills enabled in the user's active agent.
 Reserve `ci` and `schedule` publication commands for an explicit CI integration
 task; they have different side effects from local management commands.
 

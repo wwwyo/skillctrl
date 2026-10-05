@@ -1,22 +1,17 @@
 // Package install drives the user-facing commands: fetch upstream originals,
-// import them into an isolated worktree, and reconcile the accepted hashes.
+// import them into the selected repository, and reconcile the accepted hashes.
 package install
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
-	"time"
 
-	"github.com/wwwyo/skillctrl/internal/adapt"
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/lock"
 	"github.com/wwwyo/skillctrl/internal/upstream"
@@ -29,10 +24,7 @@ const (
 	UpstreamLock = upstream.Lock
 )
 
-// ProviderEnv selects the worktree isolation backend.
-const ProviderEnv = "SKILLCTRL_WORKTREE_PROVIDER"
-
-// PrepareSkills recreates empty skill directories in an isolated checkout and
+// PrepareSkills creates missing skill directories in the selected repository and
 // refuses symlinked directory ancestors.
 func PrepareSkills(repo string) error {
 	for _, relative := range []string{".agents", SkillsDir} {
@@ -405,185 +397,4 @@ func Intents(repo string) (map[string]bool, error) {
 		}
 	}
 	return intents, nil
-}
-
-// Adapt runs local adaptation and advances only its explicitly accepted hashes.
-// Unresolved work stays in the worktree with its old hash so that the next run
-// still sees the difference.
-func Adapt(repo string, plan lock.Plan, directory, prompt string, configPath, modelsPath string) ([]string, error) {
-	resolved := map[string]bool{}
-	for _, name := range plan.Skills {
-		resolved[name] = true
-	}
-	for _, name := range plan.ReviewSkills {
-		delete(resolved, name)
-	}
-	if plan.NeedsReview {
-		if err := adapt.PrepareWithPaths(repo, plan, plan.Head, directory, configPath); err != nil {
-			return nil, err
-		}
-		options := adapt.Options{
-			Dir: repo, Plan: plan, Directory: directory, Source: plan.Head,
-			Prompt: prompt, ConfigPath: configPath, ModelsPath: modelsPath,
-		}
-		accepted, err := adapt.ReviewLocal(options)
-		if err != nil {
-			return nil, err
-		}
-		for _, name := range accepted {
-			resolved[name] = true
-		}
-	}
-	tree, err := lock.WorkingTree(repo)
-	if err != nil {
-		return nil, err
-	}
-	current, err := lock.Snapshot(repo, tree)
-	if err != nil {
-		return nil, err
-	}
-	recorded, err := lock.Local(repo)
-	if err != nil {
-		return nil, err
-	}
-	names := slices.Sorted(maps.Keys(resolved))
-	registered, err := upstream.Read(repo, tree)
-	if err != nil {
-		return nil, err
-	}
-	intents, err := Intents(repo)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := lock.Record(repo, current, recorded, names, lock.IntentRegistered(registered.ManagedSkills(), intents)); err != nil {
-		return nil, err
-	}
-	var unresolved []string
-	for _, name := range plan.Skills {
-		if !resolved[name] {
-			unresolved = append(unresolved, name)
-		}
-	}
-	return unresolved, nil
-}
-
-// Worktree returns an isolated checkout containing the current working files.
-//
-// Three shapes exist: an existing linked worktree is reused, an Orca worktree
-// is created when the caller asks for it, and otherwise a detached Git worktree
-// is created in a temporary directory. The Git path is the default because it
-// works in any repository without an extra tool; the Orca path is kept for
-// callers that manage their worktrees that way.
-func Worktree(repo, provider string) (string, error) {
-	if info, err := os.Stat(filepath.Join(repo, ".git")); err == nil && !info.IsDir() {
-		return repo, nil
-	}
-	if provider == "" {
-		provider = os.Getenv(ProviderEnv)
-	}
-	if provider == "" {
-		provider = "git"
-	}
-	head, err := gitx.Output(repo, "rev-parse", "HEAD")
-	if err != nil {
-		return "", err
-	}
-	base := gitx.Trimmed(head)
-	tree, err := lock.WorkingTree(repo, ".")
-	if err != nil {
-		return "", err
-	}
-	var target string
-	ready := false
-	switch provider {
-	case "git":
-		directory, err := os.MkdirTemp("", "skillctrl-worktree-")
-		if err != nil {
-			return "", err
-		}
-		target = filepath.Join(directory, "worktree")
-		if err := gitx.Run(repo, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
-			"worktree", "add", "--detach", "--quiet", target, base); err != nil {
-			_ = os.RemoveAll(directory)
-			return "", err
-		}
-		defer func() {
-			if !ready {
-				// This checkout is owned by preparation; the caller's pending files
-				// remain in the original repository if carrying them fails.
-				if err := gitx.Run(repo, "worktree", "remove", "--force", target); err == nil {
-					_ = os.RemoveAll(directory)
-				}
-			}
-		}()
-	case "orca":
-		target, err = orcaWorktree(repo, base)
-		if err != nil {
-			return "", err
-		}
-	default:
-		return "", fmt.Errorf("unknown worktree provider: %s", provider)
-	}
-	// Applying a binary working-copy diff carries local intent and registrations
-	// into isolation without stashing, committing, or touching the caller's index.
-	patch, err := gitx.Safe(repo, "diff", "--binary", "--full-index", "--no-ext-diff", "--no-renames", base, tree)
-	if err != nil {
-		return "", err
-	}
-	if len(patch) > 0 {
-		if _, err := gitx.SafeStdin(target, patch, "apply", "--binary"); err != nil {
-			return "", err
-		}
-	}
-	ready = true
-	return target, nil
-}
-
-func orcaWorktree(repo, base string) (string, error) {
-	executable := os.Getenv("ORCA_CLI_COMMAND")
-	if executable == "" {
-		switch {
-		case os.Getenv("ORCA_DEV_REPO_ROOT") != "":
-			executable = "orca-dev"
-		case runtime.GOOS == "linux" && os.Getenv("ORCA_TERMINAL_ID") == "":
-			executable = "orca-ide"
-		default:
-			executable = "orca"
-		}
-	}
-	name := "skillctrl-" + time.Now().UTC().Format("20060102-150405")
-	out, err := exec.Command(executable, "worktree", "create", "--repo", "path:"+repo,
-		"--name", name, "--base-branch", base, "--no-parent", "--json").Output()
-	if err != nil {
-		return "", fmt.Errorf("Orca worktree creation failed")
-	}
-	path := orcaWorktreePath(out)
-	if path == "" {
-		return "", fmt.Errorf("Orca did not return an isolated worktree")
-	}
-	if info, err := os.Stat(filepath.Join(path, ".git")); err != nil || info.IsDir() {
-		return "", fmt.Errorf("Orca did not return an isolated worktree")
-	}
-	return path, nil
-}
-
-func orcaWorktreePath(out []byte) string {
-	var payload struct {
-		Result struct {
-			Worktree struct {
-				Path string `json:"path"`
-			} `json:"worktree"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(out, &payload); err != nil {
-		return ""
-	}
-	if payload.Result.Worktree.Path == "" {
-		return ""
-	}
-	absolute, err := filepath.Abs(payload.Result.Worktree.Path)
-	if err != nil {
-		return ""
-	}
-	return absolute
 }

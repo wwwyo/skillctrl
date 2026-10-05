@@ -7,7 +7,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -51,26 +50,10 @@ func rejectDryRun(command *cobra.Command) error {
 	return nil
 }
 
-// ExitUnresolved reports adaptation that could not be completed. It is a
-// distinct exit code because the work is not lost: the change stays in the
-// worktree and the old hash is retained so the next run retries.
-const ExitUnresolved = 2
-
-// exitError carries a chosen exit code out of a command.
-type exitError struct {
-	code int
-}
-
-func (e exitError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
-
 // Execute runs the command tree and returns the process exit code.
 func Execute() int {
 	root := New()
 	if err := root.Execute(); err != nil {
-		var code exitError
-		if errors.As(err, &code) {
-			return code.code
-		}
 		if silent, ok := err.(silenceError); ok {
 			// The failure was already reported as JSON on stderr.
 			_ = silent
@@ -94,7 +77,7 @@ func New() *cobra.Command {
 		Use:   "skillctrl",
 		Short: "Manage agent skills while preserving locally recorded intent",
 		Long: "skillctrl imports and registers skills through the selected acquisition adapter.\n" +
-			"Use intent apply to explicitly review them against saved intent.\n" +
+			"Edit skills and intent files directly, then use record to accept verified content.\n" +
 			"CI and scheduled automation are optional.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
@@ -107,11 +90,9 @@ func New() *cobra.Command {
 	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
 	root.PersistentFlags().Bool("dry-run", false,
 		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
-	root.PersistentFlags().String("worktree-provider", "",
-		"worktree isolation backend for add, merge, update, remove, and intent apply: git or orca")
 
 	registerAdapterFlag(root)
-	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Intent management:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
+	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Local acceptance:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
 	root.SetHelpCommandGroupID("automation")
 	root.AddCommand(
 		newListCommand(),
@@ -123,7 +104,6 @@ func New() *cobra.Command {
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),
-		newIntentCommand(),
 		newCICommand(),
 		newScheduleCommand(),
 	)
@@ -131,7 +111,7 @@ func New() *cobra.Command {
 		switch command.Name() {
 		case "find", "add", "merge", "list", "check", "update", "remove":
 			command.GroupID = "skills"
-		case "status", "record", "intent":
+		case "status", "record":
 			command.GroupID = "intent"
 		default:
 			command.GroupID = "automation"

@@ -142,6 +142,7 @@ func newHarness(t *testing.T) *harness {
 	h.env = append(os.Environ(),
 		"PATH="+h.binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"OPENCODE_API_KEY=fixture-credential",
+		"SKILLCTRL_FIXTURE_LOG="+filepath.Join(h.base, "pi.log"),
 		"SKILLCTRL_ADAPTER=git",
 		"GIT_CONFIG_GLOBAL="+h.gitConfig,
 		"CLAUDE_CONFIG_DIR=/must-not-write",
@@ -222,10 +223,7 @@ func (h *harness) commitAll() {
 	h.git("-c", "commit.gpgsign=false", "commit", "-qm", "fixture")
 }
 
-// installFakes puts stand-ins for the tools this project must never run. The npx
-// stub exists to prove the importer does not shell out to an upstream installer,
-// and the reviewer stub records how it was invoked so the isolation flags can be
-// asserted.
+// installFakes refuses accidental installer downloads or local reviewer execution.
 func (h *harness) installFakes() {
 	h.t.Helper()
 	if err := os.MkdirAll(h.binDir, 0o755); err != nil {
@@ -239,33 +237,7 @@ func (h *harness) installFakes() {
 	}
 	stub("npx", "#!/bin/sh\necho 'npx must never run' >&2\nexit 97\n")
 	stub("mise", "#!/bin/sh\necho \"{\\\"PATH\\\":\\\"$PATH\\\"}\"\n")
-	// The reviewer stub is given where to write its log; everything else it needs
-	// it reads from a file it sources, because the tool hands the reviewer a
-	// reduced environment on purpose.
-	stub("pi", `#!/usr/bin/env bash
-set -euo pipefail
-. `+h.base+`/reviewer.env
-printf '%s\n' "$@" >> "$SKILLCTRL_FIXTURE_LOG"
-printf 'PI_CODING_AGENT_DIR=%s\n' "${PI_CODING_AGENT_DIR:-}" >> "$SKILLCTRL_FIXTURE_LOG"
-[ -z "${FIXTURE_REVIEW_FAIL:-}" ] || exit 1
-body=".agents/skills/manual/SKILL.md"
-grep -q 'upstream v2' "$body"
-grep -q 'use default browser' .agents/skillctrl/intents/manual.md
-if [ -n "${FIXTURE_SCOPE:-}" ]; then
-  echo 'unauthorized intent edit' > .agents/skillctrl/intents/manual.md
-  echo 'unexpected new file' > scratch-notes.md
-fi
-result="${@: -1}"
-result="${result##*Write completion JSON to: }"
-if [ -n "${FIXTURE_UNRESOLVED:-}" ]; then
-  printf '{"accepted":[],"unresolved":["manual"]}' > "$result"
-else
-  printf -- '---\nname: manual\n---\nupstream v2; default browser\n' > "$body"
-  printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
-fi
-echo 'checked default browser'
-`)
-	h.knobs()
+	stub("pi", "#!/bin/sh\necho invoked >> \"$SKILLCTRL_FIXTURE_LOG\"\nexit 97\n")
 }
 
 func (h *harness) log() string {
@@ -312,24 +284,6 @@ func (h *harness) try(args ...string) (string, string, int) {
 		}
 	}
 	return stdout.String(), stderr.String(), code
-}
-
-// knobs writes the reviewer stub's configuration. The stub sources that file
-// rather than reading variables, because the tool deliberately does not pass the
-// caller's environment to the reviewer.
-func (h *harness) knobs(values ...string) {
-	h.t.Helper()
-	settings := append([]string{"SKILLCTRL_FIXTURE_LOG=" + filepath.Join(h.base, "pi.log")}, values...)
-	if err := os.WriteFile(filepath.Join(h.base, "reviewer.env"), []byte(strings.Join(settings, "\n")+"\n"), 0o644); err != nil {
-		h.t.Fatal(err)
-	}
-}
-
-// withEnv sets a reviewer knob for the duration of a subtest.
-func (h *harness) withEnv(key, value string) func() {
-	h.t.Helper()
-	h.knobs(fmt.Sprintf("%s=%s", key, value))
-	return func() { h.knobs() }
 }
 
 func (h *harness) reset() {

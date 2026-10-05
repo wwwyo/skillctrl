@@ -15,14 +15,14 @@
     },
     {
       "id": 2,
-      "prompt": "I ran an update from /tmp/project. It exited 2 and stdout reported {\"repo\":\"/tmp/skillctrl-worktree-123/worktree\",\"skills\":[\"browser\"],\"unresolved\":[\"browser\"],\"report\":\"/tmp/skillctrl-123/review.md\"}. I only changed the intent document before the update. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
-      "expected_output": "Investigates the returned worktree and report, preserves unresolved accepted hashes, and explains that an intent-only edit does not itself trigger adaptation.",
+      "prompt": "I ran skillctrl update browser from /tmp/project. It succeeded and reported {\"repo\":\"/tmp/project\",\"skills\":[\"browser\"]}. The imported skill no longer matches my saved intent, and check reports local.lock_changed=true. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
+      "expected_output": "Inspects the skill and saved intent in the selected repository, proposes direct verified editing, and uses record only after the content meets the intent.",
       "files": [],
       "expectations": [
-        "Uses the returned /tmp/skillctrl-worktree-123/worktree path for follow-up inspection.",
-        "Treats exit 2 as unresolved adaptation and inspects the report.",
-        "Does not propose record merely to clear the unresolved state.",
-        "Explains that changing intent alone does not trigger adaptation."
+        "Uses /tmp/project for inspection and does not propose creating or changing worktrees.",
+        "Explains that update imports originals without invoking AI or advancing the accepted lock.",
+        "Reads the whole skill and saved intent and proposes direct editing through the existing agent or editor.",
+        "Uses record browser only after verification; does not propose removed intent commands or recording merely to clear a mismatch."
       ]
     },
     {

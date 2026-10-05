@@ -1,5 +1,4 @@
-// Package adapt runs intent review without write credentials and validates its
-// patch separately.
+// Package adapt prepares and validates external intent review artifacts.
 //
 // The split is the point of this package. The reviewer runs with an inference
 // credential and no write token; everything it produces is treated as untrusted

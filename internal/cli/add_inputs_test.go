@@ -37,10 +37,6 @@ func TestAddInputsTracksSeparateSourcesAndNames(t *testing.T) {
 	if h.upstreamSkills()["new-skill"].(map[string]any)["source"] != "fixture/second" || h.upstreamSkills()["manual"].(map[string]any)["source"] != "fixture/source" {
 		t.Fatal("separate source registrations lost their identity")
 	}
-	_, stderr, code := h.try("intent", "apply", "new-skill")
-	if code != 1 || !strings.Contains(stderr, "requires a registered upstream and saved intent") {
-		t.Fatalf("intent-free apply was not rejected: %d %s", code, stderr)
-	}
 	if !bytes.Equal(h.originalLock, h.read(".agents/skillctrl/intents/lock.json")) || !bytes.Equal(index, h.read(".fixture-git/index")) || h.log() != "" {
 		t.Fatal("add inputs reviewed, accepted, or changed staging")
 	}

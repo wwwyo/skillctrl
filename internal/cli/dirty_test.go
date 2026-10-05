@@ -58,6 +58,50 @@ func TestInstallerPreservesUnrelatedPendingEditsAndStaging(t *testing.T) {
 	}
 }
 
+func TestLocalCommandsUseTheMainCheckoutWithoutWorktreeOrReviewerDependencies(t *testing.T) {
+	for _, args := range [][]string{
+		{"add", "fixture/source:new-skill"},
+		{"merge", "fixture/source:new-skill", "--name", "combined"},
+		{"update", "manual"},
+		{"record", "manual"},
+		{"remove", "manual"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			h := newHarness(t)
+			if err := os.Remove(filepath.Join(h.root, ".git")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(filepath.Join(h.root, ".fixture-git"), filepath.Join(h.root, ".git")); err != nil {
+				t.Fatal(err)
+			}
+			h.env = append(h.env, "SKILLCTRL_WORKTREE_PROVIDER=orca", "ORCA_CLI_COMMAND=/missing/orca", "SKILLCTRL_ADAPT_COMMAND=/missing/reviewer")
+			if args[0] == "update" {
+				h.publishSecondVersion(t)
+			}
+			if args[0] == "record" {
+				h.write(".agents/skills/manual/SKILL.md", manifest("manual", "verified manual customization"))
+			}
+			h.write("notes.md", "staged notes\n")
+			h.git("add", "notes.md")
+			h.write("notes.md", "unstaged notes\n")
+			index, head := h.read(".git/index"), h.git("rev-parse", "HEAD")
+			result := h.run(0, args...)
+			if result["repo"] != h.root {
+				t.Fatalf("command changed the mutation target: %v", result)
+			}
+			if string(h.read(".git/index")) != string(index) || h.git("rev-parse", "HEAD") != head || string(h.read("notes.md")) != "unstaged notes\n" || h.log() != "" {
+				t.Fatal("command changed unrelated state or invoked a reviewer")
+			}
+			if strings.Count(h.git("worktree", "list", "--porcelain"), "worktree ") != 1 {
+				t.Fatal("command created a worktree")
+			}
+			if args[0] == "update" && !strings.Contains(string(h.read(".agents/skills/manual/SKILL.md")), "upstream v2") {
+				t.Fatal("update did not modify the selected checkout")
+			}
+		})
+	}
+}
+
 func TestInstallerRefusesOnlyReplacementsThatLosePendingSkillEdits(t *testing.T) {
 	for _, operation := range []string{"add", "update", "remove"} {
 		t.Run(operation, func(t *testing.T) {
@@ -109,31 +153,5 @@ func TestInstallerProtectsIgnoredAndStagedOnlySkillChanges(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-func TestReviewFailurePreservesUnrelatedStaging(t *testing.T) {
-	for _, knob := range []string{"FIXTURE_REVIEW_FAIL=1", "FIXTURE_UNRESOLVED=1", "FIXTURE_SCOPE=1"} {
-		t.Run(knob, func(t *testing.T) {
-			h := newHarness(t)
-			h.publishSecondVersion(t)
-			h.write(".agents/skills/other/SKILL.md", "staged handwritten content\n")
-			h.git("add", "--", ".agents/skills/other/SKILL.md")
-			h.write(".agents/skills/other/SKILL.md", "unstaged handwritten content\n")
-			index, accepted := h.read(".fixture-git/index"), h.read(".agents/skillctrl/intents/lock.json")
-			h.knobs(knob)
-			code := 1
-			if knob == "FIXTURE_UNRESOLVED=1" {
-				code = 2
-			}
-			h.run(0, "update", "manual")
-			h.run(code, "intent", "apply", "manual")
-			if string(h.read(".fixture-git/index")) != string(index) || string(h.read(".agents/skillctrl/intents/lock.json")) != string(accepted) {
-				t.Fatal("failed or unresolved review changed staging or acceptance")
-			}
-			if string(h.read(".agents/skills/other/SKILL.md")) != "unstaged handwritten content\n" {
-				t.Fatal("failed or unresolved review changed unrelated content")
-			}
-		})
 	}
 }

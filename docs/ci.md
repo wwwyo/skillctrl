@@ -43,9 +43,7 @@ Three rules follow, and the commands enforce them:
 | `GITHUB_REPOSITORY`, `PR_NUMBER` | `ci publish` | where to report |
 | `DEFAULT_BRANCH`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT` | `schedule publish` | run identity and the branch to update |
 | `SKILLCTRL_TOOLCHAIN_CONFIG` | `ci prepare` | trusted configuration path; default `home/dot_config/mise/config.toml` |
-| `SKILLCTRL_AGENT_MODELS` | local review | trusted agent definitions; default `home/dot_pi/agent/models.json` |
-| `SKILLCTRL_ADAPT_MODEL`, `SKILLCTRL_ADAPT_THINKING`, `SKILLCTRL_ADAPT_COMMAND` | local review | reviewer override; defaults `opencode-go/space-bunny-free`, `high`, `pi` |
-| `SKILLCTRL_WORKTREE_PROVIDER` | `add`, `merge`, `update`, `remove`, `intent apply` | `git` (default) or `orca` |
+| `SKILLCTRL_AGENT_MODELS` | external reviewing workflow | trusted agent definitions; default `home/dot_pi/agent/models.json` |
 
 The trusted configuration must pin a runtime and the reviewer agent and set the
 release-policy settings. Only those four values are copied into the isolated
@@ -86,8 +84,8 @@ flowchart TD
 `ci prepare` does not start a model. The external workflow obtains instructions
 with `skillctrl ci prompt` after preparation, then passes those instructions,
 the fixed plan, and the result path to its reviewer. The reviewer has no write
-token; the separate validating/publishing job receives it. Local `intent apply`
-uses the embedded instructions internally and do not call `ci prompt`.
+token; the separate validating/publishing job receives it. No skillctrl command
+launches the reviewer. Local editing and recording need no reviewer toolchain.
 
 The phases below are what a workflow must arrange. Each step names the
 requirement, not the YAML.
@@ -227,9 +225,6 @@ requirement, not the YAML.
 - A live reviewer. The contract is verified on both sides of the boundary with a
   stub agent; nothing here demonstrates that a real model produces a patch that
   passes the same validation.
-- Orca worktree creation. `--worktree-provider orca` is implemented and was
-  exercised against a live Orca during this port; see the gaps section of
-  [parity.md](parity.md) for exactly what was and was not covered.
 
 Scheduled acquisition honors `--adapter skills|gh|git` and `SKILLCTRL_ADAPTER`,
 with the same default as local commands. Install the selected command through
@@ -244,5 +239,6 @@ alone cannot make the accepted lock differ. Acquire it through an explicit
 Selection and accepted hashes include only skills with both a registered upstream
 and saved intent. Intent-free scheduled imports can still produce an update PR,
 but do not enroll those skills in the accepted lock or require model review. Local
-`add`, `merge`, and `update` only acquire originals; use `intent apply NAME` for
-explicit local adaptation.
+`add`, `merge`, and `update` only acquire originals in the selected repository.
+Edit skill and intent files directly, verify them, then explicitly accept content
+with `record NAME`. Local commands never create a worktree or launch an AI agent.

@@ -111,7 +111,7 @@ func TestRecordPrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 // the behaviors that make the tool safe to run on a real checkout: a dry run
 // writes nothing, an unchanged original is not re-imported, a changed original
 // keeps binary bytes and executable modes, every rejected import is atomic, and
-// unresolved or failed adaptation retains the previously accepted hash.
+// imports preserve accepted hashes until the caller explicitly records content.
 func TestInstallerLifecycle(t *testing.T) {
 	h := newHarness(t)
 	status := func() string { return h.git("status", "--porcelain") }
@@ -159,13 +159,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		if body := readAll(t, adapted); !strings.Contains(body, "generic browser") {
 			t.Fatal("pure update did not preserve the original")
 		}
-		h.run(0, "intent", "apply", "manual")
-		if body := readAll(t, adapted); !strings.Contains(body, "upstream v2") ||
-			!strings.Contains(body, "default browser") {
-			// The imported original must be adapted to the saved intent, not
-			// dropped in favour of either the original or the old edit.
-			t.Fatalf("unexpected imported body: %q", body)
-		}
+		h.write(".agents/skills/manual/SKILL.md", manifest("manual", "upstream v2; default browser"))
+		h.run(0, "record", "manual")
 		binary := filepath.Join(h.root, ".agents/skills/manual/reference.bin")
 		if readAll(t, binary) != "\x00\xff\nraw\n" {
 			t.Fatal("binary content was not preserved")
@@ -281,91 +276,11 @@ func TestInstallerLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("unresolved adaptation exits 2 and keeps the old hash", func(t *testing.T) {
-		h.reset()
-		restore := h.withEnv("FIXTURE_UNRESOLVED", "1")
-		defer restore()
-		h.run(0, "update")
-		result := h.run(2, "intent", "apply", "manual")
-		equal(t, list(result["unresolved"]), []string{"manual"}, "unresolved skills")
-		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
-			t.Fatal("unresolved adaptation advanced the accepted lock")
-		}
-		if body := readAll(t, adapted); !strings.Contains(body, "generic browser") {
-			t.Fatal("unresolved adaptation changed the skill body")
-		}
-		got := h.run(0, "status")
-		equal(t, list(got["review_skills"]), []string{"manual"}, "status review skills")
-		if staged := h.git("diff", "--cached", "--name-only"); staged != "" {
-			t.Fatalf("unresolved adaptation staged changes: %s", staged)
-		}
-	})
-
-	t.Run("failed adaptation exits 1 and keeps the old hash", func(t *testing.T) {
-		h.reset()
-		restore := h.withEnv("FIXTURE_REVIEW_FAIL", "1")
-		defer restore()
-		h.run(0, "update")
-		h.run(1, "intent", "apply", "manual")
-		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
-			t.Fatal("failed adaptation advanced the accepted lock")
-		}
-		if body := readAll(t, adapted); !strings.Contains(body, "generic browser") {
-			t.Fatal("failed adaptation changed the skill body")
-		}
-		if staged := h.git("diff", "--cached", "--name-only"); staged != "" {
-			t.Fatalf("failed adaptation staged changes: %s", staged)
-		}
-	})
-
-	t.Run("reviewer scope violation is refused", func(t *testing.T) {
-		h.reset()
-		restore := h.withEnv("FIXTURE_SCOPE", "1")
-		defer restore()
-		h.run(0, "update")
-		h.run(1, "intent", "apply", "manual")
-		if readAll(t, filepath.Join(h.root, lock.Lock)) != string(h.originalLock) {
-			t.Fatal("scope violation advanced the accepted lock")
-		}
-		// The reviewer's edits are deliberately left in the worktree so the
-		// maintainer can inspect them; what matters is that nothing was accepted.
-		if _, err := os.Stat(filepath.Join(h.root, "scratch-notes.md")); err != nil {
-			t.Fatal("expected the refused review to remain visible for inspection")
-		}
-		if staged := h.git("diff", "--cached", "--name-only"); staged != "" {
-			t.Fatalf("scope violation staged changes: %s", staged)
-		}
-	})
-
-	t.Run("reviewer is isolated and its output is exported", func(t *testing.T) {
-		h.reset()
-		h.run(0, "update")
-		result := h.run(0, "intent", "apply", "manual")
-		if str(result["report"]) == "" || str(result["report"]) == "<nil>" {
-			t.Fatalf("expected a report path: %v", result["report"])
-		}
-		log := h.log()
-		for _, want := range []string{"--no-context-files", "--no-skills", "--no-extensions",
-			"--no-prompt-templates", "--no-session", "--no-approve", "--thinking",
-			"opencode-go/space-bunny-free"} {
-			if !strings.Contains(log, want) {
-				t.Fatalf("reviewer was not isolated: %q missing from %q", want, log)
-			}
-		}
-		if !strings.Contains(log, "PI_CODING_AGENT_DIR=") {
-			t.Fatal("reviewer ran without an isolated configuration directory")
-		}
-		if !strings.Contains(log, "--thinking\nhigh") {
-			t.Fatal("reviewer did not run at the documented thinking level")
-		}
-	})
-
 	t.Run("intent-free import needs no reviewer", func(t *testing.T) {
 		h.reset()
-		restore := h.withEnv("FIXTURE_REVIEW_FAIL", "1")
-		defer restore()
-		saved := h.withEnv("OPENCODE_API_KEY", "")
-		defer saved()
+		previous := h.env
+		h.env = append(h.env, "OPENCODE_API_KEY=")
+		defer func() { h.env = previous }()
 		os.Remove(filepath.Join(h.base, "pi.log"))
 		h.run(0, "add", "fixture/source", "--skill", "new-skill")
 		if _, ok := h.lockedSkills()["new-skill"]; ok {
