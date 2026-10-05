@@ -36,6 +36,44 @@
         "Checks portability and includes realistic evaluation cases.",
         "Does not record the distribution source as if it were already installed in .agents/skills."
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "Configure GitHub Agentic Workflows for skill PR checks. skillctrl check succeeds and reports local.lock_changed=false, although an intent file changed. Outline the next steps without executing commands or editing files.",
+      "expected_output": "The fixed hash gate succeeds without starting AI, fetching upstreams, or adding intent-change detection.",
+      "files": [],
+      "expectations": [
+        "Reads references/ci.md for automation guidance.",
+        "Distinguishes check exit status from the JSON predicate and succeeds on matching hashes.",
+        "Does not start AI or add intent-change detection for the intent-only change.",
+        "Does not run update in a PR check."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Our PR hash gate failed. browser satisfies its current intent, deploy may violate its intent, and docs cannot be judged from the available evidence. Plan the agent workflow outcomes without executing commands or changing files.",
+      "expected_output": "Reviews the affected whole skills, reports evidence, records browser only, comments on deploy and docs, and leaves the overall required check failed.",
+      "files": [],
+      "expectations": [
+        "Reads current intents, the diff, and whole affected skill directories.",
+        "Provides evidence before record browser and does not record deploy or docs.",
+        "Comments with the relevant intent, diff, and proposed fix for the suspected violation.",
+        "Comments with missing information for the unknown result and fails the overall required check.",
+        "Does not automatically fix the PR skill content or acquire upstreams."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Set up a weekly upstream update alongside our PR hash check using GitHub Agentic Workflows. Explain the two workflows and their publication checks in a read-only plan; do not execute commands or edit files.",
+      "expected_output": "Separate workflows: PR checks review hash drift only; scheduled updates acquire originals, adapt and verify against intent, record named results, and open a draft PR only for changes.",
+      "files": [],
+      "expectations": [
+        "Separates PR triggers from scheduled/manual update triggers.",
+        "Only the scheduled workflow invokes update, adapts editable content, and opens a draft PR for changes.",
+        "Keeps registered merged-skill upstream snapshots intact.",
+        "Requires verification before named record and published final-commit checks before success.",
+        "Addresses CI triggering for bot-written commits without assuming GITHUB_TOKEN pushes rerun checks."
+      ]
     }
   ]
 }

@@ -6,7 +6,7 @@
 ```yaml
 ---
 name: skillctrl
-description: "ローカルで保存したカスタマイズの意図を維持しながら、skillctrl で agent skill を検索・導入・統合・作成・改善・更新・削除する。用途に合う skill の探索、リポジトリ内の skill 管理、上流を追跡しながらの統合、ワークフローの SKILL.md 化、既存 skill の改善、変更内容と記録済み hash の確認を依頼されたときに使う。"
+description: "ローカルで保存したカスタマイズの意図を維持しながら、skillctrl で agent skill を検索・導入・統合・作成・改善・更新・削除する。用途に合う skill の探索、リポジトリ内の skill 管理、上流を追跡しながらの統合、ワークフローの SKILL.md 化、既存 skill の改善、変更内容と記録済み hash の確認、GitHub Agentic Workflows による skill の PR チェックと定期更新の設定を依頼されたときに使う。"
 license: "MIT; bundled upstream originals retain their own licenses"
 compatibility: "管理コマンドには Git と skillctrl CLI が必要。検索と上流からの取り込みにはネットワーク接続が必要。ローカルのカスタマイズは既存のエディタや agent で行い、管理コマンドはモデルを起動しない。"
 ---
@@ -39,6 +39,7 @@ compatibility: "管理コマンドには Git と skillctrl CLI が必要。検�
 | 更新後もカスタマイズを維持する | intent を書き、skill を編集・検証してから、確認済みの内容の hash を記録する。 |
 | 導入済み skill を更新・削除する | 指定された名前を更新・削除し、結果を確認する。 |
 | 未記録の変更を説明する、手動編集の hash を記録する | `check` で hash の差分を調べ、skill ディレクトリ全体を確認してから記録する。 |
+| PR のチェックや upstream の定期更新を設定する | [CI と定期更新](references/ci.md)を読み、別の agent workflow にする。 |
 
 依頼ですでに与えられた権限に従う。検索の依頼は候補の探索を認めるものであり、
 導入・編集・更新・削除を明示的に依頼された場合は、その操作を実行できる。
@@ -182,6 +183,8 @@ skill が有効になったことを区別する。
 
 ローカルと自動化で同じコマンドを使う。agent の実行、タイマー、repo の検査、
 draft PR の作成は呼び出し側の workflow が担当する。
+GitHub で自動化するときは [CI と定期更新](references/ci.md)を読む。
+PR のチェックは hash の不一致が出たときだけ AI 審査を起動し、定期更新は原本を取得して調整する。
 
 ## 取得 adapter を選ぶ
 

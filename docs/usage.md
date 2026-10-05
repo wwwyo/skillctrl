@@ -152,7 +152,7 @@ Upstream changes are acquired only by an explicit `update`; a new upstream
 version alone does not change local acceptance. Local and automated updates use
 the same commands. A CI job can fail on `.local.lock_changed` in the check JSON;
 a scheduler calls `update` before review, editing, and explicit recording.
-See [CI integration](ci.md) for the common flow.
+See [agent workflow guide](../.agents/skills/skillctrl/references/ci.md) for the common flow.
 
 To update originals deliberately, first inspect local customization, then run:
 
@@ -255,4 +255,4 @@ combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs 
   or validate an agent's judgment. Verify the skill against its saved intent
   before recording it. Automation should use the same checks and keep scope,
   tests, credentials, and PR publication in its repository-owned workflow; see
-  [CI integration](ci.md).
+  [agent workflow guide](../.agents/skills/skillctrl/references/ci.md).
