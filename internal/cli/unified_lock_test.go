@@ -100,6 +100,32 @@ func TestUnifiedLockMigration(t *testing.T) {
 }
 
 func TestUnifiedLockFailureAndPrecedence(t *testing.T) {
+	for _, path := range []string{skillstate.LegacyUpstreams, skillstate.LegacyAccepted} {
+		for _, key := range []string{"upstreams", "acceptedHashes"} {
+			for _, command := range []string{"record", "add"} {
+				t.Run(path+"/"+key+"/"+command, func(t *testing.T) {
+					h := newHarness(t)
+					legacyState(t, h)
+					var fields map[string]any
+					if err := json.Unmarshal(h.read(path), &fields); err != nil {
+						t.Fatal(err)
+					}
+					fields[key] = map[string]any{"preserve": true}
+					h.write(path, mustJSON(fields))
+					upstreams, accepted := h.read(skillstate.LegacyUpstreams), h.read(skillstate.LegacyAccepted)
+					before := h.git("status", "--porcelain")
+					args := []string{command}
+					if command == "add" {
+						args = append(args, "fixture/source:new-skill", "--name", "second-name")
+					}
+					h.run(1, args...)
+					if !bytes.Equal(upstreams, h.read(skillstate.LegacyUpstreams)) || !bytes.Equal(accepted, h.read(skillstate.LegacyAccepted)) || before != h.git("status", "--porcelain") {
+						t.Fatal("reserved legacy metadata allowed partial migration or import")
+					}
+				})
+			}
+		}
+	}
 	t.Run("conflicting legacy metadata fails without replacing either file", func(t *testing.T) {
 		h := newHarness(t)
 		legacyState(t, h)

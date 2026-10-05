@@ -107,6 +107,11 @@ func load(read func(string) ([]byte, error)) (*Record, error) {
 		}
 		delete(record.Extra, "version")
 		delete(record.Extra, "skills")
+		for _, key := range []string{"upstreams", "acceptedHashes"} {
+			if _, exists := record.Extra[key]; exists {
+				return nil, fmt.Errorf("legacy upstream metadata conflicts with skillctrl lock: %s", key)
+			}
+		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
