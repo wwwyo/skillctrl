@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -314,15 +315,13 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 }
 
 func runAdapter(name, directory, home string, args []string) error {
-	executable, err := exec.LookPath(name)
-	if err != nil {
-		return fmt.Errorf("%s adapter requires '%s' on PATH; install it with mise", name, name)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, executable, args...)
-	command.Dir = directory
 	env := removeEnv(gitx.Environment(), "OPENCODE_API_KEY")
+	executable, err := exec.LookPath(name)
+	if name != "skills" && err != nil {
+		return fmt.Errorf("%s adapter requires '%s' on PATH; install it with mise", name, name)
+	}
 	if name == "gh" && os.Getenv("GH_TOKEN") == "" && os.Getenv("GITHUB_TOKEN") == "" {
 		// Resolve Keychain-backed authentication before changing HOME. The token
 		// stays in process memory/environment, never an artifact or diagnostic.
@@ -345,7 +344,28 @@ func runAdapter(name, directory, home string, args []string) error {
 	for _, key := range []string{"HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "GH_CONFIG_DIR"} {
 		env = removeEnv(env, key)
 	}
-	command.Env = append(env, "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_CACHE_HOME="+filepath.Join(home, ".cache"), "XDG_STATE_HOME="+filepath.Join(home, ".state"), "GH_CONFIG_DIR="+config, "DO_NOT_TRACK=1", "CI=1", "GIT_TERMINAL_PROMPT=0")
+	env = append(env, "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_CACHE_HOME="+filepath.Join(home, ".cache"), "XDG_STATE_HOME="+filepath.Join(home, ".state"), "GH_CONFIG_DIR="+config, "DO_NOT_TRACK=1", "CI=1", "GIT_TERMINAL_PROMPT=0")
+	if name == "skills" {
+		if executable == "" || !compatibleSkills(ctx, executable, directory, env) {
+			executable, err = exec.LookPath("npx")
+			if err != nil {
+				return fmt.Errorf("skills adapter requires skills 1.x >= 1.7.0 on PATH or Node.js/npm with npx; install Node.js with mise")
+			}
+			// Keep npm's reusable cache outside the disposable installer HOME.
+			if os.Getenv("npm_config_cache") == "" && os.Getenv("NPM_CONFIG_CACHE") == "" {
+				callerHome, err := os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("resolve npm cache: %w", err)
+				}
+				env = append(env, "npm_config_cache="+filepath.Join(callerHome, ".npm"))
+			}
+			args = append([]string{"--yes", "--ignore-scripts", "skills@" + skillsVersion}, args...)
+			fmt.Fprintf(os.Stderr, "skills adapter: using npx skills@%s\n", skillsVersion)
+		}
+	}
+	command := exec.CommandContext(ctx, executable, args...)
+	command.Dir = directory
+	command.Env = env
 	stderr := diagnosticTail{limit: 16 * 1024}
 	command.Stdout = &stderr
 	command.Stderr = &stderr
@@ -353,6 +373,29 @@ func runAdapter(name, directory, home string, args []string) error {
 		return fmt.Errorf("%s adapter failed: %w\n%s", name, err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
+}
+
+const skillsVersion = "1.7.0"
+
+// compatibleSkills restricts reuse to stable versions supporting full-depth
+// discovery and the native project lock; other versions use the pinned package.
+func compatibleSkills(ctx context.Context, executable, directory string, env []string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, executable, "--version")
+	command.Dir, command.Env = directory, env
+	output := diagnosticTail{limit: 128}
+	command.Stdout = &output
+	if command.Run() != nil {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(output.String()), "v"), ".")
+	if len(parts) != 3 || parts[0] != "1" {
+		return false
+	}
+	minor, err := strconv.Atoi(parts[1])
+	patch, patchErr := strconv.Atoi(parts[2])
+	return err == nil && patchErr == nil && minor >= 7 && patch >= 0
 }
 
 // diagnosticTail drains both streams while retaining only bounded failure context.

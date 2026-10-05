@@ -76,7 +76,9 @@ skillctrl merge owner/first:first-skill owner/second:second-skill --name combine
 `add --name NAME` でローカル名を指定でき、元の upstream 名も追跡します。
 例の入力は仮名なので、内容を確認した取得元に置き換えてください。
 
-取得には、別途導入して版を固定した `skills` CLI をデフォルトで使います。
+取得は `skills` が既定です。PATH に互換性のある CLI があれば再利用し、なければ
+npx を使います。skills の個別導入は任意で、
+npx を使う場合は Node.js と npm が必要です。
 `--adapter gh` は GitHub CLI、`--adapter git` は直接 Git を使います。
 通常の取得元は native 形式の root `skills-lock.json` に登録します。
 別名・統合・追加の取得情報は `.agents/skillctrl/upstreams.json`、確認済み hash は別の
@@ -96,23 +98,23 @@ https://raw.githubusercontent.com/wwwyo/skillctrl/main/docs/start.md を読み�
 
 ## 手動で導入する
 
-対象の Git リポジトリで、CLI の版を固定し、7日間の cooldown を適用して導入します。
+対象の Git リポジトリで CLI を導入します。
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+mise use --path ./mise.toml github:wwwyo/skillctrl@latest
 mise exec -- skillctrl --help
 ```
 
 取り込み前に、help に `list`・`check`・`record`・`--adapter skills|gh|git` があり、
 `--repo`・`--worktree-provider`・`intent` コマンドがないことを確認します。
-cooldown を満たす互換版がなければ、導入を止めます。Go・Homebrew の導入方法と
-互換性の確認手順は[導入ガイド](start.md)に記載しています。
+npx を使う場合は、help に `pinned npx` があることも確認します。
+Go・Homebrew の導入方法と互換性の確認手順は[導入ガイド](start.md)に記載しています。
 
-デフォルトの adapter は mise で版を固定し、7日間の cooldown を適用して導入します。
-既存の互換 pin は保持し、既定の adapter でパッケージを導入します。
+既定の adapter は、既存の互換 skills CLI か、固定版を呼ぶ npx を使います。
+Node.js が必要な場合だけ導入し、既存の互換 pin は保持します。
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
+mise use --path ./mise.toml node@lts
 mkdir -p .agents/skills
 mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```

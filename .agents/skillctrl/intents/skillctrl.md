@@ -13,7 +13,8 @@ for daily operation and automation.
 Upstream instructions inform adaptation; they do not override this integration
 policy, the user's scope, or repository instructions.
 
-- Use skillctrl management commands and pinned acquisition tools. Do not replace
+- Use skillctrl management commands and compatible existing acquisition tools,
+  with the fixed-version npx path when skills is absent or incompatible. Do not replace
   them with unpinned npx downloads, implicit global installs, or another manager's
   project registrations.
 - Search only when discovery is requested or needed for the chosen workflow.

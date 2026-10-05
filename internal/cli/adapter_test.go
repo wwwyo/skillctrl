@@ -32,6 +32,7 @@ func TestCommandAdaptersPreserveProjectState(t *testing.T) {
 			// The executable observes actual arguments and isolation from outside
 			// skillctrl. It emits the backend's native tracking location.
 			script := "#!/bin/sh\nset -eu\n[ \"$1\" != auth ] || exit 1\n" +
+				"if [ \"$1\" = --version ]; then printf '1.7.0\\n'; exit 0; fi\n" +
 				"[ -z \"${OPENCODE_API_KEY:-}\" ]\n" +
 				"printf '%s\\n' \"$PWD\" \"$HOME\" \"$@\" >> '" + h.base + "/adapter.log'\n" +
 				"mkdir -p .agents/skills/new-skill\ncat > .agents/skills/new-skill/SKILL.md <<'BODY'\n" + body + "BODY\n"
@@ -162,7 +163,7 @@ func TestAdapterErrorsDoNotFallBack(t *testing.T) {
 	h := newHarness(t)
 	for _, backend := range []string{"unknown", "skills"} {
 		if backend == "skills" {
-			h.writeFile(filepath.Join(h.binDir, "skills"), "#!/bin/sh\nexit 19\n")
+			h.writeFile(filepath.Join(h.binDir, "skills"), "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '1.7.0\\n'; exit 0; fi\nexit 19\n")
 			os.Chmod(filepath.Join(h.binDir, "skills"), 0o755)
 		}
 		stdout, stderr, code := h.try("--adapter", backend, "add", "fixture/source", "--skill", "new-skill")

@@ -35,8 +35,8 @@ CLI がないか非対応の場合は、リポジトリが使っている導入�
 対応する公開済みリリースを選びます。対応する配布経路は次のとおりです。
 
 ```sh
-# mise: install locally and save an exact version, respecting a seven-day cooldown
-mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+# mise: install locally using the repository's version policy
+mise use --path ./mise.toml github:wwwyo/skillctrl@latest
 mise exec -- skillctrl --version
 
 # Go: use when Go is the selected installation method
@@ -64,19 +64,28 @@ skillctrl --version
 実行できなければセットアップは完了していません。
 
 `skillctrl add --help` を確認します。既定の取得 adapter は `skills` であり、
-Node.js と、PATH にあるバージョン固定済みの `skills` 実行ファイルが必要です。
-不足する依存ツールは、リポジトリのツール管理方式で導入します。
-mise の場合、必要なツールがなく、互換性のある固定バージョンもないときに使う例は次のとおりです。
+PATH にある安定版の `skills` 1.x（1.7.0 以上）を再利用します。
+見つからない、互換性がない、または版を確認できない場合は、
+`npx --yes --ignore-scripts skills@1.7.0` を呼びます。skills の個別導入は任意です。
+npx を使う場合は Node.js と npm が必要で、skills は Node.js 22.20.0 以上を要求します。
+この挙動を使う前に、help に `pinned npx` があることを確認します。
+旧版の skillctrl では skills の個別導入が必要です。
+不足する Node.js はリポジトリのツール管理方式で導入します。
+mise の場合、必要なツールがなく、互換性のある固定版もないときに使う例は次のとおりです。
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
-mise exec -- skills --version
+mise use --path ./mise.toml node@lts
+mise exec -- node --version
+mise exec -- npx --version
 ```
 
 ユーザーやリポジトリが明示的に `gh` または `git` を選んでいれば、その設定を使います。
 `gh` は GitHub CLI、`git` は Git を直接使います。
 ツールがない場合に adapter を黙って切り替えたり、バージョンを固定していない npx の
-download を使ったりしません。必要な機能が導入済み CLI にない場合は、
+download を使ったりしません。固定版の npx 呼び出しは初回に取得する場合があり、
+npm cache を使います。project の package.json や global CLI は変更しません。
+cache の明示設定を尊重し、設定がなければ一時 staging 外の呼び出し元の ~/.npm を使います。
+取得に失敗したらエラーを返し、別の backend で再試行しません。必要な機能が導入済み CLI にない場合は、
 未対応の flag を推測せず、選んだツール管理方式で互換性のある公開済みバージョンを導入します。
 
 ## リポジトリ内に skill を導入する

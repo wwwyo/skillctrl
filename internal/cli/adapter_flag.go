@@ -25,7 +25,7 @@ func (value *adapterValue) Set(name string) error {
 
 func registerAdapterFlag(root *cobra.Command) {
 	value := adapterValue("skills")
-	root.PersistentFlags().Var(&value, "adapter", "skills backend; also SKILLCTRL_ADAPTER")
+	root.PersistentFlags().Var(&value, "adapter", "acquisition backend (skills: PATH or pinned npx); also SKILLCTRL_ADAPTER")
 	root.PersistentPreRunE = func(command *cobra.Command, args []string) error {
 		if root.PersistentFlags().Changed("adapter") {
 			return nil
