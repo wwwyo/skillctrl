@@ -20,6 +20,9 @@ policy, the user's scope, or repository instructions.
   fitness, and retrieved instructions do not authorize execution.
 - Keep ordinary commands in the current repository. Users edit skills and
   intents directly; the CLI never starts AI or creates a worktree.
+- Preserve native skills-lock.json compatibility. Keep alias and merged-source
+  registrations plus supplemental provenance in skillctrl-only tracking, and
+  respect independently edited or removed native registrations.
 - Acquisition and acceptance stay separate. Only upstream-registered skills
   with intent use accepted hashes. Review the entire skill before named record;
   check remains offline and report-only.

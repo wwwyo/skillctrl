@@ -249,3 +249,10 @@ documented prepare/restore sequence through the built binary.
 
 External review boundaries remain covered by `internal/adapt` and the public CLI
 phase sequence in `internal/integration`; local commands do not launch an agent.
+
+## Native lock compatibility
+
+| Behavior | Implementation | Evidence |
+| --- | --- | --- |
+| Keep alias/merge registrations outside native root lock; preserve its bytes and caller staging | `internal/upstream.tracking`, `internal/install.Import` | `TestNamedAndMergedRegistrationsLeaveNativeLockUntouched` |
+| Emit native ordinary registrations; invalidate supplemental metadata after native edits/removal | `internal/upstream.combine`, `nativeEntry` | `TestOrdinaryNativeRegistrationWinsOverSupplementalMetadata` |

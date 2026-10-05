@@ -275,7 +275,7 @@ func exists(dir, object string) bool {
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}
-		for _, relative := range []string{upstream.Lock, upstream.LegacyLock} {
+		for _, relative := range []string{upstream.Lock, upstream.LegacyLock, upstream.Tracking} {
 			registered, err := entries(dir, "HEAD", relative, false)
 			if err != nil {
 				return "", err

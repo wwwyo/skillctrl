@@ -83,20 +83,16 @@ download を使ったりしません。必要な機能が導入済み CLI にな
 
 選んだリポジトリで実行します。skill ディレクトリがなければ作成し、
 前の手順で特定した CLI で、このパッケージだけを取り込みます。
-この取り込みでは `git` adapter を明示します。`skills` 1.7.0 は、配布元の
-`.agents/skills/` にあり lock に登録済みの skill を探索対象から除外するため、
-自身を管理対象にしたこのパッケージも除外します。この指定は、既定の `skills` adapter を変更しません。
-導入後のこのパッケージの更新にも `skillctrl --adapter git update skillctrl` を使います。
 
 ```sh
 mkdir -p .agents/skills
-skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 CLI と adapter を mise で管理している場合の取り込みコマンドは次のとおりです。
 
 ```sh
-mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 配布元は `wwwyo/skillctrl` の `.agents/skills/skillctrl/` です。
@@ -110,7 +106,8 @@ mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```text
 .agents/skills/<name>/                  skill body and bundled resources
 .agents/skillctrl/intents/<name>.md     optional local customization requirements
-skills-lock.json                      upstream registration at repository root
+skills-lock.json                      native upstream registrations at repository root
+.agents/skillctrl/upstreams.json        aliases, merged inputs, supplemental provenance
 .agents/skillctrl/intents/lock.json     recorded hashes for upstream + intent skills
 ```
 
@@ -127,7 +124,8 @@ skill だけが対象です。導入に CI、scheduler、モデルの credential
 
 導入先の `.agents/skills/skillctrl/SKILL.md` を読み、相対パスで参照するリソースを確認します。
 特定した CLI の実行方法で `skillctrl list` を実行し、`skillctrl` が一覧にあることを確認します。
-新しいファイル、リポジトリの差分、root の `skills-lock.json` を確認します。
+新しいファイル、リポジトリの差分、root の `skills-lock.json` と、あれば
+`.agents/skillctrl/upstreams.json` を確認します。
 結果に含まれる `repo` は、選んだ checkout を示している必要があります。
 
 現在の agent が skill を探索する設定を確認し、既存のリポジトリ用 skill ディレクトリの規約を使います。

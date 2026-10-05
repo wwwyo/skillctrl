@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/wwwyo/skillctrl/internal/lock"
+	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
 // harness builds a throwaway repository plus a fake upstream, then drives the
@@ -315,10 +316,8 @@ func (h *harness) lockedSkills() map[string]string {
 
 func (h *harness) upstreamSkills() map[string]any {
 	h.t.Helper()
-	var value struct {
-		Skills map[string]any `json:"skills"`
-	}
-	if err := json.Unmarshal(h.read("skills-lock.json"), &value); err != nil {
+	value, err := upstream.Load(h.root)
+	if err != nil {
 		h.t.Fatal(err)
 	}
 	return value.Skills

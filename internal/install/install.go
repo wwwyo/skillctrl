@@ -146,6 +146,38 @@ func sameFingerprint(a, b map[string][2]any) bool {
 // reconciles the relative Claude links. Any real directory occupying a Claude
 // link path is refused rather than replaced.
 func Import(repo, target, upstreamLock string) error {
+	prepared := filepath.Join(filepath.Dir(upstreamLock), upstream.PreparedNative)
+	if _, err := os.Stat(prepared); err == nil {
+		upstreamLock = prepared
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	tracking, trackingErr := os.ReadFile(filepath.Join(filepath.Dir(upstreamLock), upstream.PreparedTracking))
+	if trackingErr != nil && !os.IsNotExist(trackingErr) {
+		return trackingErr
+	}
+	if trackingErr == nil {
+		if err := upstream.ValidateTracking(tracking); err != nil {
+			return err
+		}
+		for _, relative := range []string{".agents", ".agents/skillctrl"} {
+			info, err := os.Lstat(filepath.Join(repo, relative))
+			if os.IsNotExist(err) {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("upstream tracking requires a real directory: %s", relative)
+			}
+		}
+		if info, err := os.Lstat(filepath.Join(repo, upstream.Tracking)); err == nil && !info.Mode().IsRegular() {
+			return fmt.Errorf("upstream tracking must be a regular file")
+		} else if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
 	existing := filepath.Join(repo, filepath.FromSlash(SkillsDir))
 	before, err := os.ReadDir(existing)
 	if err != nil {
@@ -246,6 +278,15 @@ func Import(repo, target, upstreamLock string) error {
 	}
 	for _, path := range intentRemovals {
 		if err := os.Remove(path); err != nil {
+			return err
+		}
+	}
+	if trackingErr == nil {
+		path := filepath.Join(repo, upstream.Tracking)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, tracking, 0o644); err != nil {
 			return err
 		}
 	}

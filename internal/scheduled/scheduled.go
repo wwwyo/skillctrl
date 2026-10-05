@@ -113,7 +113,7 @@ func ValidateImport(dir, base, tree string) error {
 			}
 			continue
 		}
-		if raw == upstream.Lock || hasAnyPrefix(raw, prefixes) {
+		if raw == upstream.Lock || raw == upstream.Tracking || hasAnyPrefix(raw, prefixes) {
 			continue
 		}
 		if name, ok := strings.CutPrefix(raw, ".claude/skills/"); ok {
@@ -283,6 +283,11 @@ func prepare(dir, directory, ghRepo string, gh adapt.GH, acquire func(string, st
 		return Result{}, err
 	}
 	paths := []string{lock.Skills, upstream.Lock, ".claude/skills"}
+	if _, err := os.Lstat(filepath.Join(dir, upstream.Tracking)); err == nil {
+		paths = append(paths, upstream.Tracking)
+	} else if !os.IsNotExist(err) {
+		return Result{}, err
+	}
 	legacy, err := gitx.Output(dir, "ls-files", "--", upstream.LegacyLock)
 	if err != nil {
 		return Result{}, err

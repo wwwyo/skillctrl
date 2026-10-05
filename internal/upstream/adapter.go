@@ -306,6 +306,10 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	if err := writeExport(target, files, contents); err != nil {
 		return nil, err
 	}
+	result["nativeExport"] = maps.Clone(metadata)
+	if installed != destinationName {
+		result["nativeName"] = installed
+	}
 	return result, nil
 }
 

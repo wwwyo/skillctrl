@@ -11,20 +11,23 @@
 .agents/skillctrl/intents/<name>.md     what your customization must keep doing
 ```
 
-lock ファイルはツールが作成します。上流の記録は
-`skills-lock.json`、受け入れ済みの hash は
-`.agents/skillctrl/intents/lock.json` に保存されます。
-受け入れ済み hash・`check`・意図のレビューは、upstream に登録され、かつ intent が
-ある skill だけが対象です。intent のない導入済み skill と自作 skill は対象外です。
-対象外の既存 hash は次の受理 lock 書き込み時に取り除きます。取得コマンドは受理 lock を
-書きません。`check` は削除待ちの記録を `lock_changed` で報告します。
+native の project lock は root の `skills-lock.json` のままです。通常の登録は
+`npx skills` の形式を保ち、別名・統合入力・追加の取得情報は
+`.agents/skillctrl/upstreams.json` に保存します。独自の登録やフィールドを native の
+lock に追加しません。native のコマンドは通常の登録を復元・更新でき、native にない
+別名と統合の管理には skillctrl を使います。
 
-`npx skills` のプロジェクト用 lock（version 1）は root に置いたまま読み、既存の
-version・他の provider の登録・未知のフィールドを保持します。skillctrl は Git の
-取得情報を追加します。旧 `.agents/.skill-lock.json` だけがある場合は、取り込みの
-成功後に root へ移行します。`check` や dry run では移動しません。root に既存の
-lock があればそちらを優先します。統合済みの登録は skillctrl 独自の `sources`
-を使うため、skillctrl で管理します。
+`.agents/skillctrl/intents/lock.json` は、upstream 登録と intent の両方を持つ
+skill ディレクトリ全体の確認済み hash を保存します。intent のない導入済み skill と
+自作 skill は対象外です。取得は受理 hash を更新せず、`check` はローカルの乖離と
+対象外の記録の削除待ちを offline で報告します。
+
+既存の native lock は、version・他の provider・未知のフィールドを保持し、登録が
+変わらなければ元のバイト列も保持します。追加の情報は対応する native 登録に紐付け、
+native 側で独立に編集・削除された場合は古い追加情報を使いません。旧 version 3 と
+skillctrl の独自登録も読み、取り込みが成功したときだけ、認識した別名・統合の登録を
+専用ファイルへ移します。read-only のコマンドと dry run は移行しません。root の lock が
+ない場合に限り、成功した取り込みで旧 `.agents/.skill-lock.json` を root に移します。
 
 
 ## 手順
@@ -91,16 +94,11 @@ SKILL.md に残します。GitHub CLI は一時 home に切り替える前に既
 実行コマンドとして扱います。探索方法・release/ref の選択・取得ファイルの実行属性は
 backend の仕様に従います。切替で原本が変わった場合の調整は直接編集して行います。command adapter が
 取得 commit を提供しない場合、存在しない commit を記録しません。
-`skills` 1.7.0 は、配布元の root `skills-lock.json` に名前またはディレクトリ名が
-登録された `.agents/skills/` の skill を、導入済みの依存とみなして探索から除外します。
-この repo の自己管理パッケージには `skillctrl --adapter git add wwwyo/skillctrl:skillctrl` を使います。
-GitHub CLI は `--allow-hidden-dirs` で隠しディレクトリを探索でき、`gh` adapter はこの flag を渡します。
-日本語の skill ガイドは文書として掲載し、導入用の frontmatter を付けないため、英語のパッケージの代わりに選ばれません。
-
-adapter は登録には保存せず、実行ごとに選びます。導入先での更新にも
-`skillctrl --adapter git update skillctrl` を使います。異なる探索条件を持つ skill を
-まとめて更新する場合は、必要な adapter ごとに分けて実行します。配布元のこの repo では、
-統合した `skillctrl` が Vercel と Anthropic の入力を追跡するため、既定の adapter で原本を更新できます。
+adapter は実行ごとに選びます。探索方法・取得元の解決・実行属性は backend ごとに
+異なるため、その違いが重要な場合は明示的に選びます。配布元のこの repo は自身の
+統合登録を専用ファイルに保存するため、配布パッケージを native の導入済みの依存として
+記録しません。日本語の skill ガイドの metadata は文書として掲載し、導入用の
+frontmatter を付けないため、翻訳が配布物として選ばれることを防ぎます。
 
 CI は任意です。通常の CLI には reviewer やモデルの設定は不要です。
 エディタや今使っている agent で直接編集し、確認後に record します。
@@ -108,7 +106,7 @@ CI は任意です。通常の CLI には reviewer やモデルの設定は不�
 `record NAME` は現在の skill ディレクトリ全体から hash を計算し、
 `.agents/skillctrl/intents/lock.json` の NAME の値を作成・置換します。
 NAME は対象 skill 名で、hash を渡す引数ではありません。同じ内容なら同じ hash になります。
-root の `skills-lock.json` にある原本の hash は更新しません。
+native の登録と原本の追跡情報は更新しません。
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
 意図を満たすかの検証は実行前に自分で行います。
 `record --dry-run` は操作の概要だけを表示し、hash の計算・比較はしません。差分の確認には `check [NAME...]` を使います。
@@ -130,7 +128,7 @@ upstream の取得は明示的な `update` または `schedule prepare` で行�
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
 # Edit and verify the skill against its saved intent
 skillctrl record chosen-skill
 git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
@@ -185,7 +183,7 @@ skillctrl record combined
 
 統合先の intent は `combined.md` です。既存の入力 skill とそのローカル intent
 は合成・削除しません。調整時には原本を保持し、未解決の内容は record しません。
-指定した repo が作業先です。旧 CLI は複数 source の記録に対応しません。
+指定した repo が作業先です。旧 skillctrl CLI は専用の追跡ファイルを読みません。
 
 単一の導入には `add owner/repo:upstream-name --name local-name` を使えます。ローカルの
 ディレクトリ名・登録名を変え、原本の本文と frontmatter は保持します。

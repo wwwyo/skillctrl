@@ -12,20 +12,26 @@ two paths it reads:
 .agents/skillctrl/intents/<name>.md     what your customization must keep doing
 ```
 
-The project lock stays at the repository root: `skills-lock.json` records
-where each skill came from; `.agents/skillctrl/intents/lock.json` records the
-accepted hash of each whole skill directory that has both an upstream
-registration and saved intent. Intent-free imports and handwritten skills stay
-outside this accepted lock. Existing ineligible entries are pruned on the next
-accepted-lock write; acquisition does not write that lock. `check` remains
-read-only and reports pending cleanup through `lock_changed`.
+The native project lock stays at the repository root: `skills-lock.json` keeps
+ordinary registrations in the format used by `npx skills`. Aliases, merged
+inputs, and supplemental source provenance live in
+`.agents/skillctrl/upstreams.json`; they do not add custom entries or fields to
+the native lock. Native commands restore and update ordinary registrations;
+use skillctrl for aliases and merges, which native skills does not implement.
 
-Existing `npx skills` project locks (version 1) are read in place, preserving their
-version, other providers, and unknown fields. New locks use version 1, with extra
-Git source metadata for skillctrl. Legacy version 3 records remain readable. If
-only `.agents/.skill-lock.json` exists, a successful import migrates it to the
-root; `check` and dry runs never move it. An existing root lock takes precedence.
-Merged entries use skillctrl's `sources` extension; manage those with skillctrl.
+`.agents/skillctrl/intents/lock.json` separately records the accepted hash of each
+whole skill directory with both an upstream registration and saved intent.
+Intent-free imports and handwritten skills remain excluded. Acquisition never
+writes accepted hashes; `check` reports local drift and pending cleanup offline.
+
+Existing native locks retain their version, other providers, unknown fields,
+and exact bytes when their registrations are unchanged. Supplemental metadata
+is bound to its native entry: an independent native edit or removal wins over
+old metadata. Legacy version 3 and older skillctrl extensions remain readable;
+a successful import moves recognized alias/merge registrations into the private
+tracking file. Read-only commands and dry runs never migrate anything. Only
+when no root lock exists does a successful import move the legacy native lock
+from `.agents/.skill-lock.json` to the root.
 
 
 ## Work with skills
@@ -109,19 +115,12 @@ backend records source commits; command adapters record paths and content hashes
 without inventing a commit identifier. Intent review, import protection, accepted
 hashes, and CI validation are shared by all adapters.
 
-`skills` 1.7.0 omits `.agents/skills/` entries whose name or directory appears in
-the source repository's root `skills-lock.json`, treating them as installed
-dependencies rather than distributable skills. For this repository's self-managed
-package, use `skillctrl --adapter git add wwwyo/skillctrl:skillctrl`. GitHub CLI
-can discover the hidden directory with `--allow-hidden-dirs`, which the `gh`
-adapter supplies. Japanese skill guides are documentation, without installable
-frontmatter, so they cannot substitute for the English package.
-
-The adapter is selected per invocation, not saved in a registration. Consumers
-must also use `skillctrl --adapter git update skillctrl`; when updating several
-skills with different discovery requirements, invoke updates separately with
-the appropriate adapter. In this source repository, the merged `skillctrl` entry
-tracks its Vercel/Anthropic inputs, so its own update uses the default adapter.
+Adapter selection is per invocation. Backend discovery, source resolution and
+file modes may differ; choose an adapter explicitly when that distinction matters.
+The source repository stores its own merged registration in private tracking,
+so it does not mark its distributable package as a native installed dependency.
+Japanese skill guides display metadata as documentation, without installable
+frontmatter, preventing accidental selection of the translation.
 
 CI is optional. Local commands need neither an AI reviewer nor its toolchain.
 Use your editor or existing agent to customize content before recording it.
@@ -129,7 +128,7 @@ Use your editor or existing agent to customize content before recording it.
 `record NAME` computes the current whole skill-directory hash and creates or
 replaces the entry for NAME in `.agents/skillctrl/intents/lock.json`. NAME selects
 a skill; you do not supply a hash. Unchanged content produces the same hash. It
-does not update the original-source hashes in root `skills-lock.json`. It updates
+does not update native registrations or original-source tracking. It updates
 only the accepted lock. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
@@ -162,7 +161,7 @@ To update originals deliberately, first inspect local customization, then run:
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
 # Edit and verify the skill against its saved intent
 skillctrl record chosen-skill
 git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
@@ -225,7 +224,7 @@ skillctrl record combined
 
 Only `combined.md` guides that review. Existing input skills and their local
 intents are neither combined nor deleted. Keep the original snapshots intact during customization. Do not record
-unresolved integration. Operations use the selected repository in place. Older binaries cannot manage multi-source entries.
+unresolved integration. Operations use the selected repository in place. Older skillctrl binaries do not read the private tracking file.
 
 For a single input, `add owner/repo:upstream-name --name local-name` changes the
 local directory and registration name, preserving original file bytes and

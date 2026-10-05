@@ -80,12 +80,6 @@ skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
 
-導入済みのこのパッケージを `wwwyo/skillctrl` から更新する場合は、
-`skillctrl --adapter git update skillctrl` を使う。配布元は自身のパッケージを
-`.agents/skills/` と root の lock で管理しており、`skills` 1.7.0 はこのような
-登録済みパッケージを探索から除外する。adapter は実行ごとに選ぶ。
-他のパッケージが異なる探索条件を必要とする場合は、adapter ごとに更新を分ける。
-
 コマンドは現在の作業ディレクトリから Git root を特定する。
 別のリポジトリで作業する場合は `cd` で移動する。`--repo` flag はない。
 
@@ -96,7 +90,7 @@ main checkout と linked worktree のどちらも、その場で変更する。
 worktree の作成や AI reviewer の起動は行わず、既存の agent やエディタで直接編集する。
 
 リポジトリの差分、新しいファイル、リンクを確認する。
-root の `skills-lock.json` にある upstream 登録と、
+native 形式の root `skills-lock.json` と `.agents/skillctrl/upstreams.json` にある取得元の情報と、
 `.agents/skillctrl/intents/lock.json` にある記録済み hash も、ファイルがあれば確認する。
 実行可能な scripts と references を含め、skill ディレクトリ全体を見る。
 ローカルのコマンドは commit・push・PR 作成を行わない。

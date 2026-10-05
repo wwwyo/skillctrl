@@ -70,6 +70,8 @@ type Record struct {
 	Skills   map[string]any             `json:"skills"`
 	Extra    map[string]json.RawMessage `json:"-"`
 	original []byte
+	native   *Record
+	tracking *Record
 }
 
 // MarshalJSON retains unknown top-level fields written by another tool.
@@ -103,8 +105,8 @@ func (record *Record) ManagedSkills() map[string]any {
 	return managed
 }
 
-// Load reads the project lock, falling back to the old repository-local path.
-func Load(dir string) (*Record, error) {
+// loadNative reads the project lock, falling back to the old repository-local path.
+func loadNative(dir string) (*Record, error) {
 	for _, relative := range []string{Lock, LegacyLock} {
 		path := filepath.Join(dir, filepath.FromSlash(relative))
 		info, err := os.Lstat(path)
@@ -126,9 +128,9 @@ func Load(dir string) (*Record, error) {
 	return &Record{Version: Version, Skills: map[string]any{}}, nil
 }
 
-// Read loads source registrations from a fixed Git tree rather than the
+// readNative loads native registrations from a fixed Git tree rather than the
 // working copy, so CI selection cannot depend on unstaged edits.
-func Read(dir, ref string) (*Record, error) {
+func readNative(dir, ref string) (*Record, error) {
 	for _, relative := range []string{Lock, LegacyLock} {
 		listing, err := gitx.Output(dir, "ls-tree", ref, "--", relative)
 		if err != nil {
@@ -305,20 +307,9 @@ func (r *Repository) indexSkills() error {
 	}
 	r.skills = map[string][]string{}
 	for name, oid := range manifests {
-		text := strings.ReplaceAll(string(blobs[oid]), "\r\n", "\n")
-		if !strings.HasPrefix(text, "---\n") {
-			continue
-		}
-		frontmatter, _, found := strings.Cut(text, "\n---")
+		label, found := manifestName(blobs[oid])
 		if !found {
 			continue
-		}
-		var label string
-		for _, line := range strings.Split(frontmatter, "\n") {
-			if key, value, ok := strings.Cut(line, "name:"); ok && strings.TrimSpace(key) == "" {
-				label = strings.Trim(strings.TrimSpace(value), "\"'")
-				break
-			}
 		}
 		if Name(label) {
 			r.skills[label] = append(r.skills[label], name)
@@ -332,6 +323,23 @@ func (r *Repository) indexSkills() error {
 		slices.Sort(r.skills[name])
 	}
 	return nil
+}
+
+func manifestName(content []byte) (string, bool) {
+	text := strings.ReplaceAll(string(content), "\r\n", "\n")
+	if !strings.HasPrefix(text, "---\n") {
+		return "", false
+	}
+	frontmatter, _, found := strings.Cut(text, "\n---")
+	if !found {
+		return "", false
+	}
+	for _, line := range strings.Split(frontmatter, "\n") {
+		if key, value, ok := strings.Cut(line, "name:"); ok && strings.TrimSpace(key) == "" {
+			return strings.Trim(strings.TrimSpace(value), "\"'"), true
+		}
+	}
+	return "", true
 }
 
 // Select keeps the recorded path when it is still valid, and otherwise requires
@@ -434,6 +442,8 @@ func (r *Repository) inspectExport(destination, name, destinationName string, pr
 	if result == nil {
 		result = map[string]any{}
 	}
+	delete(result, "nativeExport")
+	delete(result, "nativeName")
 	if !strings.EqualFold(previousSource, r.source) {
 		delete(result, "ref")
 	}
@@ -448,6 +458,9 @@ func (r *Repository) inspectExport(destination, name, destinationName string, pr
 		result["installedAt"] = now
 	}
 	result["updatedAt"] = now
+	if declared, _ := manifestName(contents[files["SKILL.md"].oid]); Name(declared) && declared != destinationName {
+		result["nativeName"] = declared
+	}
 	return result, files, contents, nil
 }
 
@@ -532,10 +545,6 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 	if err != nil {
 		return "", "", err
 	}
-	baseline, err := jsonfmt.File(value)
-	if err != nil {
-		return "", "", err
-	}
 	target = filepath.Join(directory, "skills")
 	if err := copyTree(filepath.Join(dir, filepath.FromSlash(".agents/skills")), target); err != nil {
 		return "", "", err
@@ -616,15 +625,7 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 		value.Skills[name] = exported
 	}
 	lock = filepath.Join(directory, "upstream.json")
-	encoded, err := jsonfmt.File(value)
-	if err != nil {
-		return "", "", err
-	}
-	// Keep the caller's exact formatting when no registration changed.
-	if bytes.Equal(baseline, encoded) && len(value.original) > 0 {
-		encoded = value.original
-	}
-	if err := os.WriteFile(lock, encoded, 0o644); err != nil {
+	if err := value.writePrepared(directory, lock); err != nil {
 		return "", "", err
 	}
 	return target, lock, nil

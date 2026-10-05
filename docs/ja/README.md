@@ -53,7 +53,7 @@ intent に沿うかの判断は行わず、hash の不一致だけではコマ�
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
 # Edit and verify the updated skill against its intent
 skillctrl record chosen-skill
 ```
@@ -78,7 +78,8 @@ skillctrl merge owner/first:first-skill owner/second:second-skill --name combine
 
 取得には、別途導入して版を固定した `skills` CLI をデフォルトで使います。
 `--adapter gh` は GitHub CLI、`--adapter git` は直接 Git を使います。
-取得元の登録は root の `skills-lock.json`、確認済み hash は別の
+通常の取得元は native 形式の root `skills-lock.json` に登録します。
+別名・統合・追加の取得情報は `.agents/skillctrl/upstreams.json`、確認済み hash は別の
 `.agents/skillctrl/intents/lock.json` に保存します。検索・一覧・削除には `find`・`list`・`remove` を使います。
 adapter・lock・細かな挙動は[コマンドの詳細](usage.md)を参照してください。
 
@@ -108,17 +109,14 @@ cooldown を満たす互換版がなければ、導入を止めます。Go・Hom
 互換性の確認手順は[導入ガイド](start.md)に記載しています。
 
 デフォルトの adapter は mise で版を固定し、7日間の cooldown を適用して導入します。
-既存の互換 pin は保持します。このパッケージの導入は `git` adapter を明示します。
-`skills` 1.7.0 は配布元の lock に登録済みの `.agents/skills/` を探索から除外するためです。
-既定の adapter は `skills` のままです。
+既存の互換 pin は保持し、既定の adapter でパッケージを導入します。
 
 ```sh
 mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
 mkdir -p .agents/skills
-mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
-このパッケージの更新には `skillctrl --adapter git update skillctrl` を使います。
 CLI と skill は別の配布物です。stdout は JSON、stderr は診断です。
 終了コードは成功が `0`、失敗が `1` です。
 
@@ -143,6 +141,6 @@ mise exec -- go build .
 [リリース手順](../releasing.md)にまとめています。[MIT](../../LICENSE)で公開しています。
 
 配布する skill 自体も、この repo の `.agents/skills/skillctrl/` で管理します。
-root の `skills-lock.json` は検索・作成の取得元を追跡し、
+`.agents/skillctrl/upstreams.json` は検索・作成の取得元を追跡し、
 `.agents/skillctrl/intents/skillctrl.md` は統合方針を保存します。
 同じ `update skillctrl`・直接編集・`record skillctrl`・`check skillctrl` の流れを使います。

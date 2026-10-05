@@ -128,11 +128,11 @@ func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.
 		}
 	}
 	var registration map[string]any
-	if err := json.Unmarshal(h.read("skills-lock.json"), &registration); err != nil {
+	if err := json.Unmarshal(h.read(".agents/skillctrl/upstreams.json"), &registration); err != nil {
 		t.Fatal(err)
 	}
 	delete(registration["skills"].(map[string]any)["combined"].(map[string]any), "sourceLayout")
-	h.write("skills-lock.json", mustJSON(registration))
+	h.write(".agents/skillctrl/upstreams.json", mustJSON(registration))
 	legacyBody := "Legacy routing to .skillctrl-sources/0/SKILL.md and .skillctrl-sources/1/SKILL.md.\n"
 	h.write(".agents/skills/combined/SKILL.md", legacyBody)
 	h.commitAll()

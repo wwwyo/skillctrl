@@ -85,22 +85,17 @@ version through the chosen manager rather than guessing unsupported flags.
 ## Install the repository-local skill
 
 Run from the selected repository. Create its skills directory if it is missing,
-then import only this package, using the CLI invocation resolved above. Use the
-explicit `git` adapter for this import: `skills` 1.7.0 excludes registered skills
-under an upstream repository's `.agents/skills/`, including this self-managed
-package. This explicit selection does not change the default `skills` adapter.
-Later refreshes of the installed package also need
-`skillctrl --adapter git update skillctrl`:
+then import only this package, using the CLI invocation resolved above:
 
 ```sh
 mkdir -p .agents/skills
-skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 For a mise-managed CLI and adapter, the import invocation is:
 
 ```sh
-mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 The source package is `.agents/skills/skillctrl/` in `wwwyo/skillctrl`. The installed
@@ -114,7 +109,8 @@ The managed paths are:
 ```text
 .agents/skills/<name>/                  skill body and bundled resources
 .agents/skillctrl/intents/<name>.md     optional local customization requirements
-skills-lock.json                      upstream registration at repository root
+skills-lock.json                      native upstream registrations at repository root
+.agents/skillctrl/upstreams.json        aliases, merged inputs, supplemental provenance
 .agents/skillctrl/intents/lock.json     recorded hashes for upstream + intent skills
 ```
 
@@ -133,7 +129,7 @@ credentials, or a locally launched reviewer.
 Read the installed `.agents/skills/skillctrl/SKILL.md` and check its relative
 resources. Run `skillctrl list` through the resolved invocation and confirm the
 installed `skillctrl` entry. Inspect new files, the repository diff, and root
-`skills-lock.json`; the returned `repo` must identify the selected checkout.
+`skills-lock.json` and `.agents/skillctrl/upstreams.json` when present; the returned `repo` must identify the selected checkout.
 
 Check the current agent's existing skill-discovery configuration. Reuse its
 repository skill directory convention. If a relative link is required, follow

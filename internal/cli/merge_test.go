@@ -28,11 +28,11 @@ func mergedSources(t *testing.T, h *harness) []map[string]any {
 			Sources []map[string]any `json:"sources"`
 		} `json:"skills"`
 	}
-	if err := json.Unmarshal(h.read("skills-lock.json"), &document); err != nil {
+	if err := json.Unmarshal(h.read(".agents/skillctrl/upstreams.json"), &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.Version != 3 {
-		t.Fatal("legacy lock version changed")
+	if document.Version != 1 {
+		t.Fatal("unsupported private tracking version")
 	}
 	return document.Skills["combined"].Sources
 }

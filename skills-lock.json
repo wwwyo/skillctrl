@@ -1,32 +1,4 @@
 {
-  "skills": {
-    "skillctrl": {
-      "sourceLayout": "references",
-      "sources": [
-        {
-          "computedHash": "913b9d37d0d54047dd65222bb8c67b2bf04e3cb87dcad1729068d7a8b2c8c396",
-          "installedAt": "2026-10-05T05:39:13.931Z",
-          "skill": "find-skills",
-          "skillFolderHash": "76a98a285cb0434f3d39e1a873823556330e398b",
-          "skillPath": "skills/find-skills/SKILL.md",
-          "source": "vercel-labs/skills",
-          "sourceType": "github",
-          "sourceUrl": "https://github.com/vercel-labs/skills.git",
-          "updatedAt": "2026-10-05T05:39:13.931Z"
-        },
-        {
-          "computedHash": "5ea13a6d9f0d4bb694405d79acd00cadec0d21bb138c4dd10fcf3c500cb835c2",
-          "installedAt": "2026-10-05T05:39:17.095Z",
-          "skill": "skill-creator",
-          "skillFolderHash": "3cf9a8db32597ba3e24b584a3d696f4e11c7d7b6",
-          "skillPath": "skills/skill-creator/SKILL.md",
-          "source": "anthropics/skills",
-          "sourceType": "github",
-          "sourceUrl": "https://github.com/anthropics/skills.git",
-          "updatedAt": "2026-10-05T05:39:17.095Z"
-        }
-      ]
-    }
-  },
+  "skills": {},
   "version": 1
 }

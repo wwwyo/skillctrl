@@ -74,12 +74,6 @@ skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
 
-When refreshing this installed package from `wwwyo/skillctrl`, use
-`skillctrl --adapter git update skillctrl`. The upstream repository manages
-its own package in `.agents/skills/` and its root lock; `skills` 1.7.0 omits such
-registered packages from discovery. Adapter selection is per invocation. Split
-updates by adapter when other packages have different discovery requirements.
-
 Commands resolve the Git root from the current working directory; use `cd` to
 work in another repository. There is no `--repo` flag.
 
@@ -90,8 +84,8 @@ edits, checks, and recording. Commands modify the selected repository in place,
 including main checkouts and linked worktrees. They never create a worktree or
 start an AI reviewer. Use the existing agent or editor to change content directly.
 
-Inspect the repository's diff, new files, links, root `skills-lock.json` upstream
-registrations, and `.agents/skillctrl/intents/lock.json` accepted hashes when
+Inspect the repository's diff, new files, links, native root `skills-lock.json` registrations, skillctrl
+tracking in `.agents/skillctrl/upstreams.json`, and `.agents/skillctrl/intents/lock.json` accepted hashes when
 present. Check the whole skill directory, including executable scripts and references. Local
 commands do not commit, push, or create a PR. Complete those steps only when
 already requested or required by the user's authorized repository workflow.

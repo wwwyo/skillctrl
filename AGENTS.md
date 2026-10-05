@@ -6,7 +6,8 @@ A Go CLI for managing agent skills while preserving locally recorded intent.
 
 - `docs/`: shared project requirements and documentation.
 - `.agents/skills/skillctrl/`: distributable skill, managed by skillctrl with
-  upstream registrations in root `skills-lock.json` and saved integration intent.
+  upstream registrations in `.agents/skillctrl/upstreams.json` and saved integration intent.
+- Root `skills-lock.json`: native skills registrations; skillctrl-specific tracking stays separate.
 - `internal/`: implementation and colocated tests.
 - `tools/release/`: the release archive and tap formula builder.
 - Root Go command: `go install github.com/wwwyo/skillctrl@<version>`.

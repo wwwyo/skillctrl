@@ -12,6 +12,21 @@ repository: the exact way a job passes artifacts, secrets, and write permissions
 between steps belongs to that platform, and a sample that looks complete but is
 not wired correctly is worse than none.
 
+## Share the local update procedure
+
+Local and automated updates share the content workflow: `update`, inspect the
+diff and saved intent, edit as needed, `record`, then `check`. A cron job can call
+`update`; skillctrl does not require the schedule commands for automation.
+
+The phases below add isolated reviewer jobs, immutable artifacts, and publication
+for workflows that need that separation. Target-path and hash validation are
+deterministic checks, not model decisions. They can also run as required checks
+on a PR from an agent-owned branch; separate publication jobs are optional. `schedule prepare` uses the same
+acquisition as `update`, then fixes the input commit and bundle; `restore` moves
+that input between jobs and `publish` opens a draft PR. The workflow supplies the
+timer and reviewer. PR CI uses fixed local inputs without fetching upstreams.
+Both native registrations and private upstream tracking belong to those inputs.
+
 ## Trust boundaries
 
 | Party | Trusted with | Never trusted with |

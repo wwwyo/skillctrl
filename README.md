@@ -58,7 +58,7 @@ skill to its saved intent, verify it, and explicitly record the result:
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
 # Edit and verify the updated skill against its intent
 skillctrl record chosen-skill
 ```
@@ -85,8 +85,9 @@ are placeholders; use inspected sources.
 
 Acquisition defaults to the separately installed, pinned `skills` CLI.
 `--adapter gh` and `--adapter git` select GitHub CLI or direct Git instead.
-Root `skills-lock.json` keeps source registrations; the separate
-`.agents/skillctrl/intents/lock.json` keeps accepted hashes.
+Root `skills-lock.json` keeps native registrations. Alias/merge tracking and extra
+provenance stay in `.agents/skillctrl/upstreams.json`; accepted hashes stay in
+`.agents/skillctrl/intents/lock.json`.
 Use `find`, `list`, and `remove` for discovery, inspection, and cleanup.
 See [command details](docs/usage.md) for adapters, locks, and edge cases.
 
@@ -116,17 +117,14 @@ command. If no compatible release meets the cooldown, stop. See
 [setup](docs/start.md) for Go and Homebrew alternatives and the full compatibility check.
 
 Install the default adapter through mise with an exact pin and seven-day cooldown,
-preserving existing compatible pins. Import this self-managed package with the
-explicit Git adapter: `skills` 1.7.0 excludes registered `.agents/skills/` packages
-from upstream discovery. The default adapter remains `skills`:
+preserving existing compatible pins, then import the package with the default adapter:
 
 ```sh
 mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
 mkdir -p .agents/skills
-mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
+mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
-Refresh this package with `skillctrl --adapter git update skillctrl`.
 CLI and skill are separate artifacts. Results are JSON on stdout; diagnostics
 go to stderr. Exit `0` means success and `1` means failure.
 
@@ -152,6 +150,6 @@ replacing a global installation. Read [requirements](docs/requirements.md),
 for development details. Licensed under [MIT](LICENSE).
 
 The distributable skill is itself managed here in `.agents/skills/skillctrl/`:
-root `skills-lock.json` tracks its discovery and authoring inputs, and
+`.agents/skillctrl/upstreams.json` tracks its discovery and authoring inputs, and
 `.agents/skillctrl/intents/skillctrl.md` records the integration policy.
 Use the same `update skillctrl`, direct editing, `record skillctrl`, and `check skillctrl` flow.
