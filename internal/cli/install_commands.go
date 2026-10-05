@@ -281,6 +281,12 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 // worktree and must not touch staging: the caller keeps ownership of its index
 // and commits, and a pending edit is exactly what is being recorded.
 func runRecord(repo string, values []string) error {
+	if len(values) == 0 {
+		if err := pruneAcceptance(repo); err != nil {
+			return fail(repo, err)
+		}
+		return emit(map[string]any{"repo": repo, "recorded": []string{}})
+	}
 	tree, err := lock.WorkingTree(repo)
 	if err != nil {
 		return fail(repo, err)
@@ -319,9 +325,11 @@ func runRecord(repo string, values []string) error {
 
 func newRecordCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "record names...",
+		Use:   "record [names...]",
 		Short: "Accept named skills with registered upstreams and saved intent",
-		Args:  cobra.MinimumNArgs(1),
+		Long: "Accept only named skills after verifying their content. No reviewer runs.\n" +
+			"With no names, remove ineligible lock entries without accepting any skill.",
+		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "record", "", args)
 		},

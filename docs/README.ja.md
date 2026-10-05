@@ -133,6 +133,7 @@ CI は任意です。通常の CLI には reviewer やモデルの設定は不�
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
 手動で編集して確認した内容を承認する操作であり、意図を満たすかの検証ではありません。
 upstream 登録と intent のある指定 skill の hash だけを更新し、他の対象の hash は保持します。対象外の記録は取り除きます。
+引数なしの `record` は対象外の記録の整理だけを行い、内容を受理しません。intent を全部削除した後にも使えます。
 
 `ci plan` は固定 commit から CI のレビュー対象を選び、`ci prompt` は準備後に外部の
 agent へ渡すレビュー指示を表示します。ローカルの編集や `record` には不要です。

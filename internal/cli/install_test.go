@@ -107,6 +107,32 @@ func TestRecordPrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 	}
 }
 
+func TestRecordWithoutNamesOnlyPrunesIneligibleHashes(t *testing.T) {
+	h := newHarness(t)
+	h.write(lock.Lock, lockBytes(t, h.root))
+	accepted := h.lockedSkills()["manual"]
+	h.write(".agents/skills/manual/SKILL.md", "unverified edit\n")
+	h.git("add", "--", ".agents/skills/manual/SKILL.md")
+	index := h.read(".fixture-git/index")
+	result := h.run(0, "record")
+	if len(list(result["recorded"])) != 0 || h.lockedSkills()["manual"] != accepted {
+		t.Fatal("cleanup accepted unverified content")
+	}
+	if _, ok := h.lockedSkills()["other"]; ok {
+		t.Fatal("cleanup retained an ineligible hash")
+	}
+	if err := os.Remove(filepath.Join(h.root, lock.Intents, "manual.md")); err != nil {
+		t.Fatal(err)
+	}
+	h.run(0, "record")
+	if len(h.lockedSkills()) != 0 {
+		t.Fatal("cleanup retained hashes after every intent was removed")
+	}
+	if string(index) != string(h.read(".fixture-git/index")) || string(h.read(".agents/skills/manual/SKILL.md")) != "unverified edit\n" || h.log() != "" {
+		t.Fatal("cleanup changed staging, skill content, or invoked a reviewer")
+	}
+}
+
 // TestInstallerLifecycle is the port of the original installer suite. It walks
 // the behaviors that make the tool safe to run on a real checkout: a dry run
 // writes nothing, an unchanged original is not re-imported, a changed original

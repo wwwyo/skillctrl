@@ -178,7 +178,8 @@ accepted-lock write. Do not edit the lock JSON by hand.
 Write or edit `.agents/skillctrl/intents/chosen-name.md` and the skill directly.
 Verify that the whole skill meets the intent, then run `record chosen-name`.
 Removing the intent file excludes the skill from acceptance; stale accepted hashes
-are reported by check/status and pruned on the next accepted-lock write.
+are reported by check/status. Run `record` without names to prune ineligible
+entries without accepting any content; eligible hashes remain unchanged.
 Intent-free imports never enroll in the accepted lock. Acquisition is independent
 of intent. For one selected skill, `add owner/repo:upstream-name --name local-name`
 changes the local directory/registration while preserving original frontmatter;

@@ -153,7 +153,7 @@ Use your editor or existing agent to customize content before recording it.
 accepted lock. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
-Only named upstream-registered skills with saved intent advance; other eligible hashes remain unchanged. Ineligible entries are pruned.
+Only named upstream-registered skills with saved intent advance; other eligible hashes remain unchanged. Ineligible entries are pruned. With no names, `record` only prunes ineligible entries and accepts no content, including after every intent file has been deleted.
 
 `ci plan` selects from fixed commits for a CI job without fetching upstreams.
 `ci prompt` prints the embedded review instructions after preparation, for the

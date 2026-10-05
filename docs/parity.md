@@ -244,6 +244,7 @@ documented prepare/restore sequence through the built binary.
 | Add, merge, changed update, remove, and record use the selected main checkout, preserve staging/unrelated edits, and invoke no reviewer or worktree manager | `TestLocalCommandsUseTheMainCheckoutWithoutWorktreeOrReviewerDependencies` |
 | First merge uses the selected main checkout's empty skills directory | `TestFirstMergeUsesTheMainCheckout` |
 | Direct intent editing changes eligibility; deleting intent prunes acceptance on the next record without removing the skill/upstream | `TestNamedAddAndIntentLifecycle` |
+| Name-free record prunes ineligible hashes without accepting eligible edits, even after every intent is removed; skill content and staging remain unchanged | `TestRecordWithoutNamesOnlyPrunesIneligibleHashes` |
 | Removed intent commands and worktree-provider flags are rejected | `TestArgumentErrorsAreReported` |
 
 External review boundaries remain covered by `internal/adapt` and the public CLI
