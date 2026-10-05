@@ -156,7 +156,7 @@ skillctrl check
 対象は upstream 登録と保存した intent の両方がある skill だけで、呼び出し元の staging は保持する。
 skill のレビューや調整は行わない。
 
-手書きの skill は、intent ファイルがあっても記録用 hash、check、ローカルの hash チェックの対象外。
+手書きの skill は、intent ファイルがあっても記録用 hash とローカルの check の対象外。
 それらに `record` を実行したり、架空の upstream 登録を作ったりしない。
 旧方式で記録された手書き skill の hash は、次の記録用 lock 書き込みで取り除く。
 lock の JSON は手動で編集しない。

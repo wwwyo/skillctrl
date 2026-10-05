@@ -149,7 +149,7 @@ skillctrl check
 `record NAME` computes the current whole skill-directory hash and creates or
 replaces NAME in the accepted lock. NAME selects a skill, not a supplied hash.
 Only upstream-registered skills with saved intent are eligible; caller staging is preserved. It does not review or adapt the skill. Handwritten
-skills are excluded from accepted hashes, checks, and local hash checks,
+skills are excluded from accepted hashes and local checks,
 even if they have an intent document; do not run `record` for them or invent an
 upstream registration. Legacy handwritten hashes are pruned on the next
 accepted-lock write. Do not edit the lock JSON by hand.
