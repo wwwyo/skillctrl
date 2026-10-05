@@ -88,14 +88,14 @@ Do not create a reusable skill unless that is within the user's request.
 ## Import, update, and remove
 
 Select names explicitly rather than importing an entire collection. Add and
-merge share repeatable `--from owner/repo:skill` inputs. Add installs separate
+merge share positional `owner/repo:skill` inputs. Add installs separate
 skills, including inputs from different repositories; merge combines them.
 Reject colliding skill names before acquisition. The native-compatible
 `add owner/repo --skill chosen-name` syntax remains available, but cannot be
-combined with `--from`:
+combined with qualified owner/repo:skill inputs:
 
 ```sh
-skillctrl --repo /absolute/path/to/project add --from owner/repo:chosen-name
+skillctrl --repo /absolute/path/to/project add owner/repo:chosen-name
 skillctrl --repo /absolute/path/to/project update chosen-name
 skillctrl --repo /absolute/path/to/project remove chosen-name
 ```
@@ -133,14 +133,14 @@ Check `skillctrl merge --help`; this command needs a binary containing the merge
 feature. Select the full list of originals explicitly; no intent or reviewer is required:
 
 ```sh
-skillctrl --repo /absolute/path/to/project merge combined \
-  --from owner/discovery:find-skills \
-  --from owner/authoring:skill-creator
+skillctrl --repo /absolute/path/to/project merge --name combined \
+  owner/discovery:find-skills \
+  owner/authoring:skill-creator
 skillctrl --repo /actual/working-copy update combined
 ```
 
-Replace these placeholder repositories with inspected sources. `--from` is
-repeatable and replaces the target's entire `sources` array. `merge` mechanically
+Replace these placeholder repositories with inspected sources. The positional
+inputs replace the target's entire `sources` array. `merge` mechanically
 creates root routing to complete upstream originals, and explicit re-merge
 regenerates routing. `update` refreshes snapshots while preserving current root
 output. Neither command invokes AI or advances accepted hashes.
@@ -181,7 +181,7 @@ review requires the configured agent. Alternatively edit and verify manually,
 then `record chosen-name`. `intent remove chosen-name` removes intent and its
 accepted hash while keeping the skill and upstream registration. Intent-free
 imports never enroll in the accepted lock. Acquisition is always independent
-of intent. For one selected skill, `add --from owner/repo:upstream-name --name local-name`
+of intent. For one selected skill, `add owner/repo:upstream-name --name local-name`
 changes the local directory/registration while preserving original frontmatter;
 update uses the stored upstream name; check reads only local accepted hashes. `--name` cannot label several skills.
 

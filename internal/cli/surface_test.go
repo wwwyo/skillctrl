@@ -48,20 +48,22 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"removed schema", []string{"schema"}, "unknown command"},
 		{"root plan moved", []string{"plan"}, "unknown command"},
 		{"root prompt moved", []string{"prompt"}, "unknown command"},
-		{"add without inputs", []string{"add"}, "required"},
-		{"add skill without source", []string{"add", "--skill", "chosen"}, "requires a source"},
+		{"add without inputs", []string{"add"}, "requires at least 1 arg"},
+		{"add skill without source", []string{"add", "--skill", "chosen"}, "requires at least 1 arg"},
 		{"empty add skill", []string{"add", "owner/repo", "--skill", ""}, "required"},
-		{"mixed add flags", []string{"add", "--from", "owner/repo:skill", "--skill", "skill"}, "none of the others"},
-		{"mixed add source", []string{"add", "owner/repo", "--from", "owner/repo:skill"}, "positional source"},
-		{"malformed add source", []string{"add", "--from", "owner/repo"}, "owner/repo:skill"},
-		{"add without a skill", []string{"add", "owner/repo"}, "required"},
-		{"merge without a name", []string{"merge", "--from", "owner/repo:skill"}, "requires a valid name"},
-		{"conflicting merge names", []string{"merge", "combined", "--name", "other", "--from", "owner/repo:skill"}, "either a positional"},
+		{"removed add from", []string{"add", "owner/repo:skill", "--from", "other/repo:skill"}, "unknown flag"},
+		{"removed merge from", []string{"merge", "owner/repo:skill", "--name", "combined", "--from", "other/repo:skill"}, "unknown flag"},
+		{"mixed add source forms", []string{"add", "owner/repo", "other/repo:skill", "--skill", "skill"}, "exactly one repository"},
+		{"qualified add source with skill", []string{"add", "owner/repo:skill", "--skill", "skill"}, "source must be"},
+		{"malformed add input", []string{"add", "owner/repo"}, "owner/repo:skill"},
+		{"merge without a name", []string{"merge", "owner/repo:skill"}, "required flag"},
+		{"positional merge name", []string{"merge", "combined", "owner/repo:skill", "--name", "other"}, "owner/repo:skill"},
+		{"invalid merge name", []string{"merge", "owner/repo:skill", "--name", "../escape"}, "valid --name"},
 		{"intent without file", []string{"intent", "set", "chosen"}, "required flag"},
 		{"intent apply without names", []string{"intent", "apply"}, "requires at least 1 arg"},
-		{"merge without sources", []string{"merge", "combined"}, "required flag"},
-		{"malformed merge source", []string{"merge", "combined", "--from", "owner/repo"}, "owner/repo:skill"},
-		{"duplicate merge source", []string{"merge", "combined", "--from", "owner/repo:skill", "--from", "owner/repo:skill"}, "duplicate upstream"},
+		{"merge without inputs", []string{"merge", "--name", "combined"}, "requires at least 1 arg"},
+		{"malformed merge input", []string{"merge", "--name", "combined", "owner/repo"}, "owner/repo:skill"},
+		{"duplicate merge input", []string{"merge", "--name", "combined", "owner/repo:skill", "owner/repo:skill"}, "duplicate upstream"},
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
 		{"plan without a base", []string{"ci", "plan"}, "requires --base"},
 		{"extra arguments", []string{"status", "extra"}, "unknown command"},
@@ -139,8 +141,12 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("add --help failed")
 	}
-	if !strings.Contains(stdout, "--skill") || !strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") {
+	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "owner/repo:skill") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
+	}
+	stdout, _, code = runBinary(t, nil, "merge", "--help")
+	if code != 0 || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--name") || !strings.Contains(stdout, "owner/repo:skill") {
+		t.Fatalf("merge help does not describe positional inputs:\n%s", stdout)
 	}
 	stdout, _, code = runBinary(t, nil, "ci", "--help")
 	if code != 0 || !strings.Contains(stdout, "plan") || !strings.Contains(stdout, "prompt") {
@@ -251,7 +257,7 @@ func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
 		{"list"}, {"status"}, {"record", "chosen"},
 		{"--dry-run", "find", "review"},
 		{"--dry-run", "add", "owner/repo", "--skill", "chosen"},
-		{"--dry-run", "merge", "combined", "--from", "owner/repo:chosen"},
+		{"--dry-run", "merge", "owner/repo:chosen", "--name", "combined"},
 		{"--dry-run", "update"}, {"--dry-run", "remove", "chosen"},
 		{"check"}, {"ci", "prompt"}, {"ci", "plan", "--base", "HEAD"},
 		{"ci", "configure"}, {"ci", "prepare", "/nonexistent-artifacts"},

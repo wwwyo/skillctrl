@@ -24,7 +24,7 @@ type Input struct {
 	Skill  string `json:"skill"`
 }
 
-// ParseInputs parses repeatable owner/repo:skill arguments without shell evaluation.
+// ParseInputs parses positional owner/repo:skill arguments without shell evaluation.
 func ParseInputs(values []string) ([]Input, error) {
 	inputs := make([]Input, 0, len(values))
 	for _, value := range values {

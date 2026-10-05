@@ -269,7 +269,7 @@ documented prepare/restore sequence through the built binary.
 
 | Behavior | Observable coverage |
 | --- | --- |
-| Add and merge share repeatable owner/repo:skill inputs; add preserves separate source identities, original bytes, local naming, and caller staging without review or acceptance | `TestAddFromTracksSeparateSourcesAndNames` |
-| Intent application without saved intent fails before reviewer execution | `TestAddFromTracksSeparateSourcesAndNames` |
-| Invalid, duplicate, colliding, or multiply named inputs fail before acquisition, including dry runs | `TestAddFromRejectsInvalidInputsWithoutAcquisition`, `TestArgumentErrorsAreReported` |
-| Failed acquisition or overlapping pending edits prevents every input from being imported | `TestAddFromPreparesEveryInputBeforeImporting` |
+| Add and merge share positional owner/repo:skill inputs; add preserves separate source identities, original bytes, local naming, and caller staging without review or acceptance | `TestAddInputsTracksSeparateSourcesAndNames` |
+| Intent application without saved intent fails before reviewer execution | `TestAddInputsTracksSeparateSourcesAndNames` |
+| Invalid, duplicate, colliding, or multiply named inputs fail before acquisition, including dry runs | `TestAddInputsRejectsInvalidInputsWithoutAcquisition`, `TestArgumentErrorsAreReported` |
+| Failed acquisition or overlapping pending edits prevents every input from being imported | `TestAddInputsPreparesEveryInputBeforeImporting` |

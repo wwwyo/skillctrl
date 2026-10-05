@@ -87,7 +87,7 @@ printf '{"accepted":["manual"],"unresolved":[]}' > "$result"
 func TestPureMergeProducesRoutingWithoutIntent(t *testing.T) {
 	h := newHarness(t)
 	before := h.read(lock.Lock)
-	h.run(0, "merge", "--name", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	body := string(h.read(".agents/skills/combined/SKILL.md"))
 	for _, ref := range []string{"references/manual/SKILL.md", "references/new-skill/SKILL.md"} {
 		if !strings.Contains(body, "("+ref+")") {
@@ -104,7 +104,7 @@ func TestPureMergeProducesRoutingWithoutIntent(t *testing.T) {
 		t.Fatal("pure merge created intent")
 	}
 	h.commitAll()
-	h.run(0, "merge", "combined", "--from", "fixture/source:new-skill", "--from", "fixture/source:manual")
+	h.run(0, "merge", "--name", "combined", "fixture/source:new-skill", "fixture/source:manual")
 	body = string(h.read(".agents/skills/combined/SKILL.md"))
 	if !strings.Contains(body, "[new-skill](references/new-skill/SKILL.md)") {
 		t.Fatal("reconfigured merge kept outdated routing")
@@ -148,10 +148,10 @@ func TestIntentSetRejectsUnsafePathsAndEmptyInput(t *testing.T) {
 
 func TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions(t *testing.T) {
 	h := newHarness(t)
-	h.run(0, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	h.write(".agents/skills/combined/references/guide.md", "Handwritten integration notes.\n")
 	h.commitAll()
-	h.run(0, "merge", "combined", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:new-skill")
 	if string(h.read(".agents/skills/combined/references/guide.md")) != "Handwritten integration notes.\n" {
 		t.Fatal("remerge removed handwritten references")
 	}
@@ -160,13 +160,13 @@ func TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions(t *testin
 	}
 	h.commitAll()
 	before := h.git("status", "--porcelain")
-	h.run(1, "merge", "combined", "--from", "fixture/source:new-skill", "--from", "fixture/other:new-skill")
+	h.run(1, "merge", "--name", "combined", "fixture/source:new-skill", "fixture/other:new-skill")
 	if before != h.git("status", "--porcelain") {
 		t.Fatal("colliding input names changed project state")
 	}
 	h.write(".agents/skills/combined/references/manual/SKILL.md", "Handwritten reference.\n")
 	h.commitAll()
-	h.run(1, "merge", "combined", "--from", "fixture/source:manual")
+	h.run(1, "merge", "--name", "combined", "fixture/source:manual")
 	if string(h.read(".agents/skills/combined/references/manual/SKILL.md")) != "Handwritten reference.\n" {
 		t.Fatal("merge overwrote an unregistered reference")
 	}
@@ -174,7 +174,7 @@ func TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions(t *testin
 
 func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.T) {
 	h := newHarness(t)
-	h.run(0, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	if err := os.MkdirAll(filepath.Join(h.root, ".agents/skills/combined/.skillctrl-sources"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.
 		t.Fatal("legacy routing recovery points to missing named references")
 	}
 	h.commitAll()
-	h.run(0, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	if _, err := os.Stat(filepath.Join(h.root, ".agents/skills/combined/.skillctrl-sources")); !os.IsNotExist(err) {
 		t.Fatal("explicit migration retained numeric originals")
 	}
@@ -223,7 +223,7 @@ func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.
 
 func TestNamedScheduleRestoreRecomputesPlanWithoutEnvironmentPlan(t *testing.T) {
 	h := newHarness(t)
-	h.run(0, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill")
+	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	h.commitAll()
 	base := h.git("rev-parse", "HEAD")
 	h.publishSecondVersion(t)

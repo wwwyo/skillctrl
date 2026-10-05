@@ -77,7 +77,7 @@ skillctrl list
 skillctrl check
 
 # import a skill
-skillctrl add --from owner/repo:chosen-skill
+skillctrl add owner/repo:chosen-skill
 
 # refresh the original without AI or acceptance
 skillctrl update chosen-skill
@@ -113,8 +113,8 @@ release cooldown. The skills executable must be on PATH; skillctrl does not
 use an unpinned `npx` download.
 
 ```sh
-skillctrl --adapter skills add --from owner/repo:chosen-skill
-skillctrl --adapter gh add --from owner/repo:chosen-skill
+skillctrl --adapter skills add owner/repo:chosen-skill
+skillctrl --adapter gh add owner/repo:chosen-skill
 skillctrl list
 skillctrl check chosen-skill
 ```
@@ -210,7 +210,7 @@ Once this package is published in the repository, import it into your chosen
 skills repository:
 
 ```sh
-skillctrl --repo /absolute/path/to/project add --from wwwyo/skillctrl:skillctrl
+skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl:skillctrl
 ```
 
 The CLI must already be installed and the target must contain `.agents/skills/`.
@@ -220,19 +220,19 @@ target's `.agents/skills/`. The skill and CLI are separate artifacts.
 
 ## Merge upstream skills
 
-`add` and `merge` use the same repeatable `--from owner/repo:skill` inputs.
+`add` and `merge` use the same positional `owner/repo:skill` inputs.
 `add` imports separate skills; `merge` imports ordered originals into one
 routing skill, with each input registered in its `sources` array. Neither
 requires intent or a reviewer:
 
 ```sh
 # Import separate skills
-skillctrl add --from owner/first:first-skill --from owner/second:second-skill
+skillctrl add owner/first:first-skill owner/second:second-skill
 
 # Combine the same inputs under one routing skill
 skillctrl merge --name combined \
-  --from owner/first:first-skill \
-  --from owner/second:second-skill
+  owner/first:first-skill \
+  owner/second:second-skill
 skillctrl update combined
 ```
 
@@ -259,14 +259,13 @@ intents are neither combined nor deleted. Review preserves the source snapshots;
 unresolved integration keeps the old accepted hash. Use the returned `repo`
 path for subsequent operations. Older binaries cannot manage multi-source entries.
 
-For a single input, `add --from owner/repo:upstream-name --name local-name` changes the
+For a single input, `add owner/repo:upstream-name --name local-name` changes the
 local directory and registration name, preserving original file bytes and
 frontmatter. Subsequent `update local-name` resolves the recorded upstream name;
 `check local-name` checks only the local accepted hash. `--name` requires exactly one selected skill; omit it
 when importing several separate skills. The acquisition-compatible
 `add owner/repo --skill upstream-name` syntax also remains available. Do not
-combine its positional source or `--skill` with `--from`. Repeated `--from`
-inputs must have distinct skill names, including across repositories.
+combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs must have distinct skill names, including across repositories.
 
 ## What it will and will not do
 

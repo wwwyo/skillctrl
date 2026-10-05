@@ -105,20 +105,16 @@ func newFindCommand() *cobra.Command {
 
 func newAddCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:     "add [source]",
+		Use:     "add inputs...",
 		Aliases: []string{"install", "a"},
 		Short:   "Import and register upstream skills without intent review",
-		Long: "Import separate skills using repeatable --from owner/repo:skill,\n" +
+		Long: "Import separate skills using positional owner/repo:skill inputs,\n" +
 			"the same input syntax as merge. Alternatively, use source --skill names\n" +
 			"for the acquisition CLI's syntax. Use --name only with one selected skill.",
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			if command.Flags().Changed("from") {
-				if len(args) != 0 {
-					return fmt.Errorf("--from cannot be combined with a positional source")
-				}
-				values, _ := command.Flags().GetStringArray("from")
-				inputs, err := upstream.ParseInputs(values)
+			if !command.Flags().Changed("skill") {
+				inputs, err := upstream.ParseInputs(args)
 				if err != nil {
 					return fail("", err)
 				}
@@ -129,7 +125,10 @@ func newAddCommand() *cobra.Command {
 				return runInstall(command, "add", "", names, inputs...)
 			}
 			if len(args) != 1 {
-				return fmt.Errorf("add requires a source with --skill, or --from owner/repo:skill")
+				return fmt.Errorf("--skill requires exactly one repository source; otherwise use owner/repo:skill inputs")
+			}
+			if _, err := upstream.Source(args[0]); err != nil {
+				return fail("", err)
 			}
 			skills, _ := command.Flags().GetStringSlice("skill")
 			if len(skills) == 0 {
@@ -139,10 +138,7 @@ func newAddCommand() *cobra.Command {
 		},
 	}
 	command.Flags().String("name", "", "local directory name; requires exactly one selected skill")
-	command.Flags().StringArray("from", nil, "upstream owner/repo:skill; repeatable, as in merge")
 	command.Flags().StringSlice("skill", nil, "skill to import from the positional source; repeatable")
-	command.MarkFlagsMutuallyExclusive("from", "skill")
-	command.MarkFlagsOneRequired("from", "skill")
 	return command
 }
 
@@ -158,25 +154,19 @@ func newUpdateCommand() *cobra.Command {
 
 func newMergeCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "merge [name]",
+		Use:   "merge inputs... --name NAME",
 		Short: "Register upstream skills under one routing skill without intent review",
 		Long: "Register named GitHub originals under one repository-local routing skill.\n" +
-			"Use a positional name or --name. --from replaces the target's sources array;\n" +
+			"Use positional owner/repo:skill inputs and --name for the routing skill.\n" +
+			"The inputs replace the target's sources array;\n" +
 			"update subsequently refreshes every source. No intent or reviewer is required.",
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			name, _ := command.Flags().GetString("name")
-			if len(args) > 0 {
-				if command.Flags().Changed("name") {
-					return fmt.Errorf("use either a positional name or --name")
-				}
-				name = args[0]
-			}
 			if !upstream.Name(name) {
-				return fmt.Errorf("merge requires a valid name or --name")
+				return fmt.Errorf("merge requires a valid --name")
 			}
-			values, _ := command.Flags().GetStringArray("from")
-			inputs, err := upstream.ParseInputs(values)
+			inputs, err := upstream.ParseInputs(args)
 			if err != nil {
 				return fail("", err)
 			}
@@ -184,8 +174,7 @@ func newMergeCommand() *cobra.Command {
 		},
 	}
 	command.Flags().String("name", "", "local routing skill name")
-	command.Flags().StringArray("from", nil, "upstream owner/repo:skill; repeatable and required")
-	_ = command.MarkFlagRequired("from")
+	_ = command.MarkFlagRequired("name")
 	return command
 }
 

@@ -43,7 +43,7 @@ echo checked both originals and saved intent
 }
 
 func mergeArguments() []string {
-	return []string{"merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:new-skill"}
+	return []string{"merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill"}
 }
 
 func mergedSources(t *testing.T, h *harness) []map[string]any {
@@ -150,11 +150,11 @@ func TestMergeDryRunAndPreparationFailureDoNotWrite(t *testing.T) {
 	if len(result["sources"].([]any)) != 2 || before != h.git("status", "--porcelain") || h.log() != "" {
 		t.Fatal("dry-run did not describe inputs without writes or review")
 	}
-	h.run(1, "merge", "combined", "--from", "fixture/source:manual", "--from", "fixture/source:linked")
+	h.run(1, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:linked")
 	if !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || before != h.git("status", "--porcelain") {
 		t.Fatal("failure in the second source imported a partial result")
 	}
-	h.run(0, "merge", "unknown", "--from", "fixture/source:manual")
+	h.run(0, "merge", "--name", "unknown", "fixture/source:manual")
 	if h.log() != "" {
 		t.Fatal("intent-free routing invoked a reviewer")
 	}
