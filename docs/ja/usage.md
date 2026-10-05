@@ -203,7 +203,8 @@ skillctrl record combined
   追跡済み blob と実行属性を保持します。command adapter は各ツール本来の
   探索・導入仕様に従い、skillctrl は取得した skill の script を実行しません。
 - **更新で変わっていない原本は取り込みません。** これが手動適応を毎回失わずに保つ仕組みです。
-- **2 つの lock。** `skills-lock.json`（新規作成は version 1、旧 version 3 も読み取り可能）は取得元、
+- **受理 hash。** native の登録は root の `skills-lock.json`、別名・統合・追加の取得情報は
+  `.agents/skillctrl/upstreams.json` に保存します。
   `.agents/skillctrl/intents/lock.json`（version 2）は受け入れ済みの実体の
   Git tree hash です。skill ディレクトリ全体（本文・reference・実行属性）が
   hash に含まれ、意図ファイルは含まれません。意図の変更・削除だけを理由に

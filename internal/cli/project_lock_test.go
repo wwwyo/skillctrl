@@ -12,9 +12,10 @@ import (
 func TestNativeProjectLockIsKeptAtTheRepositoryRoot(t *testing.T) {
 	h := newHarness(t)
 	h.writeOrigin("skills/new-skill/SKILL.md", manifest("new-skill", "native name"))
+	h.writeOrigin("skills/manual/SKILL.md", manifest("manual", "upstream v1; generic browser"))
 	h.originGit("add", "-A")
 	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "use native name")
-	original := manifest("canonical-manual", "upstream v1; generic browser")
+	original := manifest("manual", "upstream v1; generic browser")
 	digest := sha256.Sum256([]byte("SKILL.md" + original))
 	h.write("skills-lock.json", mustJSON(map[string]any{
 		"version": 1,

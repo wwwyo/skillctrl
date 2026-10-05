@@ -2,12 +2,19 @@ package cli_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 )
 
 func TestNamedAndMergedRegistrationsLeaveNativeLockUntouched(t *testing.T) {
 	h := newHarness(t)
+	digest := sha256.Sum256([]byte("SKILL.md" + manifest("canonical-manual", "upstream v1; generic browser")))
+	h.write("skills-lock.json", mustJSON(map[string]any{"version": 1, "skills": map[string]any{
+		"manual": map[string]any{"source": "fixture/source", "sourceType": "github", "skillPath": "skills/manual/SKILL.md", "computedHash": hex.EncodeToString(digest[:])},
+	}}))
+	h.commitAll()
 	native := h.read("skills-lock.json")
 	index := h.read(".fixture-git/index")
 	h.run(0, "add", "fixture/source:new-skill", "--name", "local-name")
@@ -23,6 +30,42 @@ func TestNamedAndMergedRegistrationsLeaveNativeLockUntouched(t *testing.T) {
 	h.run(0, "remove", "local-name", "combined")
 	if !bytes.Equal(native, h.read("skills-lock.json")) || len(h.upstreamSkills()) != 1 {
 		t.Fatal("removing private registrations changed native registrations")
+	}
+}
+
+func TestLegacyProvenanceMovesOutOfNativeLockOnlyOnImport(t *testing.T) {
+	h := newHarness(t)
+	var native map[string]any
+	if err := json.Unmarshal(h.read("skills-lock.json"), &native); err != nil {
+		t.Fatal(err)
+	}
+	entry := native["skills"].(map[string]any)["manual"].(map[string]any)
+	entry["sourceCommit"] = h.originGit("rev-parse", "HEAD")
+	entry["installedAt"] = "2026-01-01T00:00:00.000Z"
+	entry["updatedAt"] = "2026-01-01T00:00:00.000Z"
+	entry["nativeName"] = "manual"
+	entry["future"] = map[string]any{"preserve": true}
+	h.write("skills-lock.json", mustJSON(native))
+	h.commitAll()
+	original := h.read("skills-lock.json")
+	h.run(0, "check")
+	h.run(0, "--dry-run", "update")
+	if !bytes.Equal(original, h.read("skills-lock.json")) {
+		t.Fatal("read-only command migrated legacy fields")
+	}
+	h.run(0, "update", "manual")
+	if err := json.Unmarshal(h.read("skills-lock.json"), &native); err != nil {
+		t.Fatal(err)
+	}
+	project := native["skills"].(map[string]any)["manual"].(map[string]any)
+	private := h.upstreamSkills()["manual"].(map[string]any)
+	for _, key := range []string{"sourceCommit", "skillFolderHash", "installedAt", "updatedAt", "nativeName"} {
+		if _, exists := project[key]; exists || private[key] != entry[key] {
+			t.Fatalf("legacy provenance was not moved intact: %s", key)
+		}
+	}
+	if project["future"].(map[string]any)["preserve"] != true {
+		t.Fatal("migration removed unknown metadata")
 	}
 }
 
@@ -69,6 +112,15 @@ func TestOrdinaryNativeRegistrationWinsOverSupplementalMetadata(t *testing.T) {
 	if !bytes.Equal(nativeBytes, h.read("skills-lock.json")) {
 		t.Fatal("unchanged ordinary update rewrote native metadata")
 	}
+	privateBytes := h.read(".agents/skillctrl/upstreams.json")
+	var tracking map[string]any
+	if err := json.Unmarshal(privateBytes, &tracking); err != nil {
+		t.Fatal(err)
+	}
+	tracking["skills"].(map[string]any)["new-skill"].(map[string]any)["source"] = "fixture/other"
+	h.write(".agents/skillctrl/upstreams.json", mustJSON(tracking))
+	h.run(1, "check")
+	h.write(".agents/skillctrl/upstreams.json", string(privateBytes))
 	entry["computedHash"] = "changed-by-native-manager"
 	h.write("skills-lock.json", mustJSON(native))
 	h.run(0, "list")

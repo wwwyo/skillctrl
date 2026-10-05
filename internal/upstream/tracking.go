@@ -110,6 +110,10 @@ func combine(native, tracking *Record) (*Record, error) {
 			if !sameRegistration(native.Skills[name], binding) {
 				continue
 			}
+			project := native.Skills[name].(map[string]any)
+			if specialRegistration(name, entry) || !strings.EqualFold(field(entry, "source"), field(project, "source")) || entry["sourceType"] != project["sourceType"] || field(entry, "skillPath") != field(project, "skillPath") {
+				return nil, fmt.Errorf("supplemental metadata changed native source identity: %s", name)
+			}
 			entry = maps.Clone(entry)
 			delete(entry, "native")
 			entry["nativeExport"] = binding
@@ -142,7 +146,10 @@ func nativeEntry(entry, previous map[string]any) map[string]any {
 			result[key] = value
 		}
 	}
-	for _, key := range []string{"skill", "sources", "sourceLayout"} {
+	if _, present := result["computedHash"]; !present && field(entry, "computedHash") != "" {
+		result["computedHash"] = entry["computedHash"]
+	}
+	for _, key := range []string{"skill", "sources", "sourceLayout", "sourceCommit", "skillFolderHash", "installedAt", "updatedAt", "nativeName", "nativeExport"} {
 		delete(result, key)
 	}
 	return result
