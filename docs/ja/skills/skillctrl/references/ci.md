@@ -9,17 +9,24 @@ agent の実行・権限・チェック・公開は呼び出し側で管理す�
 
 agent を起動する前に、PR の checkout で `skillctrl check` を実行する。
 受理済み hash の対象は、upstream 登録と保存した intent の両方がある skill に限る。
-skillctrl と `jq` を含むツールを repo の設定で固定して導入し、次を実行する。
+skillctrl と `jq` を含むツールを repo の設定で固定して導入する。
+GitHub Actions の step で、審査が必要かを出力する。
 
 ```bash
 set -euo pipefail
 skillctrl check > skillctrl-check.json
-jq -e '.local.lock_changed == false' skillctrl-check.json
+lock_changed="$(jq -er '.local.lock_changed | if type == "boolean" then tostring else error("invalid lock_changed") end' skillctrl-check.json)"
+if [ "$lock_changed" = false ]; then
+  echo 'review_needed=false' >> "$GITHUB_OUTPUT"
+else
+  echo 'review_needed=true' >> "$GITHUB_OUTPUT"
+fi
 ```
 
 hash の不一致は JSON に報告され、コマンド自体は exit 0 で終了する。
-`jq` の条件で CI の判定を落とす。コマンドのエラーや不正な結果は実行上の失敗であり、
-内容を受理する理由にはしない。一致していれば AI 審査なしで成功とする。
+`review_needed=true` なら agent に渡し、`false` なら AI 審査なしで成功とする。
+この事前判定では、不一致でシェルを終了させず、審査に進めるようにする。
+コマンドのエラーや不正な結果では step を失敗にし、内容を受理する理由にはしない。
 この workflow では upstream を取得せず、intent の変更検知も加えない。
 intent だけを編集しても審査は起動しない。
 
@@ -48,8 +55,16 @@ skillctrl record chosen-skill
 対象外の古い記録を整理するだけの場合は、名前なしの `skillctrl record` を使う。
 これは内容を受理せず、intent の適合判定も必要としない。
 
-根拠のコメントと lock の変更を PR ブランチに保存し、最終 commit に対して
-hash の判定と repo のチェックを再実行する。公開前に PR の head を再確認し、
+根拠のコメントと lock の変更を PR ブランチに保存し、最終的な hash の判定と
+repo のチェックが通ることを必須にする。
+
+```bash
+set -euo pipefail
+skillctrl check > skillctrl-check.json
+jq -e '.local.lock_changed == false' skillctrl-check.json
+```
+
+これらのチェックは最終 commit に対して実行する。公開前に PR の head を再確認し、
 審査中に変わっていれば、新しい内容を審査してから記録・成功報告する。
 違反の疑いや判断不能の場合は、その skill を記録せず、内容も変更しない。
 自動修正せず、コメントで修正案を示す。
@@ -94,7 +109,7 @@ upstream の新しい release だけを理由に、無関係な PR を失敗に�
 ツールと取得用の依存を固定し、engine・認証・checkout とコマンドへのアクセスを設定する。
 資格情報は repo の secret 管理に置く。
 
-一致時に推論を起動しないよう、agent の実行前に固定の hash 判定を置く。
+一致時に推論を起動しないよう、agent の実行前に固定の hash の事前判定を置く。
 コメント、PR ブランチへの lock の保存、draft PR の作成、チェック結果には
 [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/) を使う。
 PR のチェックが書き込める範囲は受理済み lock に限り、変更可能なパスと登録済み原本の整合性は

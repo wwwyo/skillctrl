@@ -11,19 +11,25 @@ owns agent execution, permissions, checks, and publication.
 Run `skillctrl check` on the PR checkout before starting an agent. Only skills
 with both upstream registration and saved intent participate in accepted hashes.
 Install pinned tools, including skillctrl and `jq`, through the repository's tool
-configuration, and run:
+configuration. In a GitHub Actions step, expose whether review is needed:
 
 ```bash
 set -euo pipefail
 skillctrl check > skillctrl-check.json
-jq -e '.local.lock_changed == false' skillctrl-check.json
+lock_changed="$(jq -er '.local.lock_changed | if type == "boolean" then tostring else error("invalid lock_changed") end' skillctrl-check.json)"
+if [ "$lock_changed" = false ]; then
+  echo 'review_needed=false' >> "$GITHUB_OUTPUT"
+else
+  echo 'review_needed=true' >> "$GITHUB_OUTPUT"
+fi
 ```
 
-Hash differences are reported in JSON with exit status 0; the `jq` predicate
-makes them fail the CI gate. A command error or invalid report is an operational
-failure, not a request to accept content. If the gate passes, report success
-without AI review. Do not fetch upstreams in this workflow or add intent-change
-detection. An intent edit alone does not trigger review.
+Hash differences are reported in JSON with exit status 0. Route
+`review_needed=true` to the agent and `false` to success without AI review.
+This probe leaves drift available for review instead of aborting the shell.
+A command error or invalid report stops the step as an operational failure,
+not a request to accept content. Do not fetch upstreams in this workflow or add
+intent-change detection. An intent edit alone does not trigger review.
 
 When the report shows hash drift, start the agent only for the affected skills.
 Read each current saved intent, the PR diff, and the complete skill directory,
@@ -53,7 +59,15 @@ with `skillctrl record` without names; this accepts no content and needs no
 intent judgment.
 
 Publish the evidence comment and accepted-lock change to the PR branch, then
-rerun the hash gate and repository checks against the final commit. Recheck the
+require the final hash gate and repository checks to pass:
+
+```bash
+set -euo pipefail
+skillctrl check > skillctrl-check.json
+jq -e '.local.lock_changed == false' skillctrl-check.json
+```
+
+Run these checks against the final commit. Recheck the
 PR head before publication; if it changed during review, review the new content
 before recording or reporting success. Suspected violations and unknown results
 leave that skill unrecorded and its content unchanged; propose a fix in the
@@ -104,7 +118,7 @@ above. Pin tools and acquisition dependencies, select the engine and its
 authentication, and configure access to the checkout and required commands.
 Keep credentials in the repository's secret management.
 
-Configure a fixed hash gate before agent execution so matching content never
+Configure a fixed hash probe before agent execution so matching content never
 starts inference. Use [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/)
 for comments, accepted-lock publication to the PR branch, draft PR creation,
 and check results. Restrict PR-check writes to the accepted lock; use trusted
