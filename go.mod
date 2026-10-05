@@ -3,7 +3,6 @@ module github.com/wwwyo/skillctrl
 go 1.27.1
 
 require (
-	github.com/BurntSushi/toml v1.6.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/text v0.42.0
 )
