@@ -66,13 +66,18 @@ skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
 
+コマンドは現在の作業ディレクトリから Git root を特定する。
+別のリポジトリで作業する場合は `cd` で移動する。`--repo` flag はない。
+
 stdout は JSON、stderr は診断として読む。終了コード `0` は成功、`1` は失敗を表す。
 ローカルのコマンドは reviewer を起動しない。導入・更新・削除の結果に含まれる
 `repo` は実際の作業先なので、その後の確認・編集・check・record でもそのパスを使う。
 main checkout と linked worktree のどちらも、その場で変更する。
 worktree の作成や AI reviewer の起動は行わず、既存の agent やエディタで直接編集する。
 
-リポジトリの差分、新しいファイル、リンク、両方の lock を確認する。
+リポジトリの差分、新しいファイル、リンクを確認する。
+root の `skills-lock.json` にある upstream 登録と、
+`.agents/skillctrl/intents/lock.json` にある記録済み hash も、ファイルがあれば確認する。
 実行可能な scripts と references を含め、skill ディレクトリ全体を見る。
 ローカルのコマンドは commit・push・PR 作成を行わない。
 それらは、依頼済みか、ユーザーが認めたリポジトリの作業手順で必要な場合だけ行う。

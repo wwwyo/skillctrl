@@ -65,6 +65,9 @@ skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
 
+Commands resolve the Git root from the current working directory; use `cd` to
+work in another repository. There is no `--repo` flag.
+
 Read stdout as JSON and stderr as diagnostics. Exit `0` is success, `1` is
 failure. Local commands never launch a reviewer. An install/update/remove
 result's `repo` is the actual working copy: use that path for subsequent reads,
@@ -72,8 +75,9 @@ edits, checks, and recording. Commands modify the selected repository in place,
 including main checkouts and linked worktrees. They never create a worktree or
 start an AI reviewer. Use the existing agent or editor to change content directly.
 
-Inspect the repository's diff, new files, links, and both locks. Check
-the whole skill directory, including executable scripts and references. Local
+Inspect the repository's diff, new files, links, root `skills-lock.json` upstream
+registrations, and `.agents/skillctrl/intents/lock.json` accepted hashes when
+present. Check the whole skill directory, including executable scripts and references. Local
 commands do not commit, push, or create a PR. Complete those steps only when
 already requested or required by the user's authorized repository workflow.
 
