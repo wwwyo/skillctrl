@@ -53,4 +53,5 @@ Report public repo/release/tap links, tested install commands and their observed
 
 ## Named imports
 
-- add --name NAME requires exactly one --skill, changes the destination directory and registration identity, and preserves source file bytes/frontmatter. Record the original upstream skill name independently so update and scheduled validation continue to resolve it; check scopes local acceptance by the destination name. Reject malformed names and multiple selected skills before acquisition.
+- Add and merge share repeatable --from owner/repo:skill inputs. Add imports separate skills from one or more repositories, preparing every input before importing any result; merge combines them. Reject duplicate inputs and case-insensitive skill-name collisions before acquisition, including dry runs. Preserve add source --skill names for acquisition CLI parity; reject mixing its source or --skill with --from.
+- add --name NAME requires exactly one selected skill (--from or --skill), changes the destination directory and registration identity, and preserves source file bytes/frontmatter. Record the original upstream skill name independently so update and scheduled validation continue to resolve it; check scopes local acceptance by the destination name. Reject malformed names and multiple selected skills before acquisition.

@@ -543,7 +543,7 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 	if len(selected) == 0 {
 		selected = slices.Sorted(maps.Keys(value.ManagedSkills()))
 	}
-	for _, requested := range selected {
+	for index, requested := range selected {
 		name := requested
 		if command == "add" && outputName != "" {
 			name = outputName
@@ -592,6 +592,9 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 			}
 		}
 		origin := identifier
+		if command == "add" && len(inputs) > 0 {
+			origin = inputs[index].Source
+		}
 		if command != "add" {
 			origin = field(previous, "source")
 		}

@@ -264,3 +264,12 @@ The public scheduled restore command recomputes the artifact plan without
 `SKILL_PLAN`; publication still requires the verified environment plan.
 `TestNamedScheduleRestoreRecomputesPlanWithoutEnvironmentPlan` exercises the
 documented prepare/restore sequence through the built binary.
+
+## Shared upstream input syntax
+
+| Behavior | Observable coverage |
+| --- | --- |
+| Add and merge share repeatable owner/repo:skill inputs; add preserves separate source identities, original bytes, local naming, and caller staging without review or acceptance | `TestAddFromTracksSeparateSourcesAndNames` |
+| Intent application without saved intent fails before reviewer execution | `TestAddFromTracksSeparateSourcesAndNames` |
+| Invalid, duplicate, colliding, or multiply named inputs fail before acquisition, including dry runs | `TestAddFromRejectsInvalidInputsWithoutAcquisition`, `TestArgumentErrorsAreReported` |
+| Failed acquisition or overlapping pending edits prevents every input from being imported | `TestAddFromPreparesEveryInputBeforeImporting` |

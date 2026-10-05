@@ -87,10 +87,15 @@ Do not create a reusable skill unless that is within the user's request.
 
 ## Import, update, and remove
 
-Select names explicitly rather than importing an entire collection:
+Select names explicitly rather than importing an entire collection. Add and
+merge share repeatable `--from owner/repo:skill` inputs. Add installs separate
+skills, including inputs from different repositories; merge combines them.
+Reject colliding skill names before acquisition. The native-compatible
+`add owner/repo --skill chosen-name` syntax remains available, but cannot be
+combined with `--from`:
 
 ```sh
-skillctrl --repo /absolute/path/to/project add owner/repo --skill chosen-name
+skillctrl --repo /absolute/path/to/project add --from owner/repo:chosen-name
 skillctrl --repo /absolute/path/to/project update chosen-name
 skillctrl --repo /absolute/path/to/project remove chosen-name
 ```
@@ -176,7 +181,7 @@ review requires the configured agent. Alternatively edit and verify manually,
 then `record chosen-name`. `intent remove chosen-name` removes intent and its
 accepted hash while keeping the skill and upstream registration. Intent-free
 imports never enroll in the accepted lock. Acquisition is always independent
-of intent. For one selected skill, `add --name local-name --skill upstream-name`
+of intent. For one selected skill, `add --from owner/repo:upstream-name --name local-name`
 changes the local directory/registration while preserving original frontmatter;
 update uses the stored upstream name; check reads only local accepted hashes. `--name` cannot label several skills.
 

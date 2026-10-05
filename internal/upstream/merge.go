@@ -18,7 +18,7 @@ const SourceDirectory = "references"
 // LegacySourceDirectory is the original numeric snapshot layout.
 const LegacySourceDirectory = ".skillctrl-sources"
 
-// Input identifies one GitHub skill contributing to a merged skill.
+// Input identifies one GitHub skill to import or combine into a routing skill.
 type Input struct {
 	Source string `json:"source"`
 	Skill  string `json:"skill"`
@@ -111,7 +111,7 @@ func referencePaths(inputs []Input) ([]string, error) {
 	for index, input := range inputs {
 		key := strings.ToLower(input.Skill)
 		if seen[key] {
-			return nil, fmt.Errorf("upstream skill names collide in references: %s", input.Skill)
+			return nil, fmt.Errorf("upstream skill names collide: %s", input.Skill)
 		}
 		seen[key] = true
 		paths[index] = SourceDirectory + "/" + input.Skill

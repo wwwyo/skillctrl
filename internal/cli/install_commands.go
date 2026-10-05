@@ -105,18 +105,44 @@ func newFindCommand() *cobra.Command {
 
 func newAddCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:     "add source",
+		Use:     "add [source]",
 		Aliases: []string{"install", "a"},
 		Short:   "Import and register upstream skills without intent review",
-		Args:    cobra.ExactArgs(1),
+		Long: "Import separate skills using repeatable --from owner/repo:skill,\n" +
+			"the same input syntax as merge. Alternatively, use source --skill names\n" +
+			"for the acquisition CLI's syntax. Use --name only with one selected skill.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			if command.Flags().Changed("from") {
+				if len(args) != 0 {
+					return fmt.Errorf("--from cannot be combined with a positional source")
+				}
+				values, _ := command.Flags().GetStringArray("from")
+				inputs, err := upstream.ParseInputs(values)
+				if err != nil {
+					return fail("", err)
+				}
+				names := make([]string, len(inputs))
+				for index, input := range inputs {
+					names[index] = input.Skill
+				}
+				return runInstall(command, "add", "", names, inputs...)
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("add requires a source with --skill, or --from owner/repo:skill")
+			}
 			skills, _ := command.Flags().GetStringSlice("skill")
+			if len(skills) == 0 {
+				return fmt.Errorf("at least one --skill is required")
+			}
 			return runInstall(command, "add", args[0], skills)
 		},
 	}
-	command.Flags().String("name", "", "local directory name; requires exactly one --skill")
-	command.Flags().StringSlice("skill", nil, "skill to import; repeatable and required")
-	_ = command.MarkFlagRequired("skill")
+	command.Flags().String("name", "", "local directory name; requires exactly one selected skill")
+	command.Flags().StringArray("from", nil, "upstream owner/repo:skill; repeatable, as in merge")
+	command.Flags().StringSlice("skill", nil, "skill to import from the positional source; repeatable")
+	command.MarkFlagsMutuallyExclusive("from", "skill")
+	command.MarkFlagsOneRequired("from", "skill")
 	return command
 }
 
@@ -192,11 +218,11 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if kind == "add" {
 		outputName, _ = command.Flags().GetString("name")
 		if command.Flags().Changed("name") && (len(values) != 1 || !upstream.Name(outputName)) {
-			return fail(repo, fmt.Errorf("--name requires exactly one --skill and a plain directory name"))
+			return fail(repo, fmt.Errorf("--name requires exactly one selected skill and a plain directory name"))
 		}
 	}
 	identifier := ""
-	if kind == "add" {
+	if kind == "add" && len(inputs) == 0 {
 		identifier, err = upstream.Source(source)
 		if err != nil {
 			return fail(repo, err)
@@ -206,7 +232,7 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if dry {
 		result := map[string]any{"dry_run": true, "repo": repo, "command": kind,
 			"source": source, "skills": values}
-		if kind == "merge" {
+		if len(inputs) > 0 {
 			result["sources"] = inputs
 		}
 		if outputName != "" {
@@ -242,14 +268,18 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	var target, upstreamLock string
 	if kind == "merge" {
 		target, upstreamLock, err = upstream.MergeWithAdapter(worktree, values[0], inputs, isolated, adapter)
+	} else if kind == "add" && len(inputs) > 0 {
+		target, upstreamLock, err = upstream.AddInputsWithAdapter(worktree, inputs, outputName, isolated, adapter)
 	} else if outputName != "" {
 		target, upstreamLock, err = upstream.AddNamedWithAdapter(worktree, values[0], outputName, identifier, isolated, adapter)
-		values = []string{outputName}
 	} else {
 		target, upstreamLock, err = upstream.InstallWithAdapter(worktree, kind, values, identifier, isolated, adapter)
 	}
 	if err != nil {
 		return fail(worktree, err)
+	}
+	if outputName != "" {
+		values = []string{outputName}
 	}
 	if err := install.CheckSkills(target); err != nil {
 		return fail(worktree, err)

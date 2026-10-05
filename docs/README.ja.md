@@ -68,7 +68,7 @@ lock があればそちらを優先します。統合済みの登録は skillctr
 skillctrl find review --owner owner
 
 # Import a skill
-skillctrl add owner/repo --skill chosen-skill
+skillctrl add --from owner/repo:chosen-skill
 
 # Refresh the original without AI or acceptance
 skillctrl update chosen-skill
@@ -101,8 +101,8 @@ skillctrl remove chosen-skill
 ツールは mise で管理し、repo では `skills` 1.7.0 と `gh` 2.101.0 を固定しています。
 
 ```sh
-skillctrl --adapter skills add owner/repo --skill chosen-skill
-skillctrl --adapter gh add owner/repo --skill chosen-skill
+skillctrl --adapter skills add --from owner/repo:chosen-skill
+skillctrl --adapter gh add --from owner/repo:chosen-skill
 skillctrl list
 skillctrl check chosen-skill
 ```
@@ -173,7 +173,7 @@ commit 前に最終的な変更を確認します。
 このパッケージがリポジトリで公開されたら、対象を指定して導入できます。
 
 ```sh
-skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl --skill skillctrl
+skillctrl --repo /absolute/path/to/project add --from wwwyo/skillctrl:skillctrl
 ```
 
 CLI の事前導入と、対象リポジトリの `.agents/skills/` が必要です。結果の JSON に
@@ -182,11 +182,16 @@ CLI の事前導入と、対象リポジトリの `.agents/skills/` が必要で
 
 ## 複数の原本を統合する
 
-複数の `--skill` を指定する `add` は、それぞれ別の skill を導入します。
+`add` と `merge` は同じ `--from owner/repo:skill` を繰り返して取得元を指定します。
+`add` はそれぞれ別の skill を導入します。
 `merge` は原本を1つの skill 配下に保存し、root の `SKILL.md` を routing として作ります。
 intent や reviewer は不要です。
 
 ```sh
+# Import separate skills
+skillctrl add --from owner/first:first-skill --from owner/second:second-skill
+
+# Combine the same inputs under one routing skill
 skillctrl merge --name combined \
   --from owner/first:first-skill \
   --from owner/second:second-skill
@@ -211,10 +216,12 @@ skillctrl intent apply combined
 は合成・削除しません。レビュー中の原本は変更できず、未解決なら古い受理 hash を保持します。
 結果の `repo` が実際の作業先です。旧 CLI は複数 source の記録に対応しません。
 
-単一の導入には `add --name local-name --skill upstream-name` を使えます。ローカルの
+単一の導入には `add --from owner/repo:upstream-name --name local-name` を使えます。ローカルの
 ディレクトリ名・登録名を変え、原本の本文と frontmatter は保持します。
 `update local-name` は登録した upstream 名を使い、`check local-name` は手元の受理 hash だけを確認します。
-`--name` は1つの `--skill` にだけ使えます。複数の別 skill を導入するときは省略します。
+`--name` は選択した skill が1つの場合だけ使えます。複数の別 skill を導入するときは省略します。
+取得 CLI と同じ `add owner/repo --skill upstream-name` も使えます。位置引数の取得元や
+`--skill` と `--from` は併用できません。複数の `--from` は異なる skill 名を指定します。
 
 ## 安全の根拠
 

@@ -89,6 +89,25 @@ func AddNamedWithAdapter(dir, skill, name, source, directory string, adapter Ada
 	return install(dir, directory, importRequest{command: "add", selected: []string{skill}, source: source, outputName: name}, adapter)
 }
 
+// AddInputsWithAdapter prepares separate skills from explicit upstream inputs
+// before any result is imported into the caller's worktree.
+func AddInputsWithAdapter(dir string, inputs []Input, name, directory string, adapter Adapter) (string, string, error) {
+	if err := validateInputs(inputs); err != nil {
+		return "", "", err
+	}
+	if _, err := referencePaths(inputs); err != nil {
+		return "", "", err
+	}
+	if name != "" && (len(inputs) != 1 || !Name(name)) {
+		return "", "", fmt.Errorf("--name requires exactly one selected skill and a plain directory name")
+	}
+	selected := make([]string, len(inputs))
+	for index, input := range inputs {
+		selected[index] = input.Skill
+	}
+	return install(dir, directory, importRequest{command: "add", selected: selected, inputs: inputs, outputName: name}, adapter)
+}
+
 // MergeWithAdapter prepares each merged input through the same backend.
 func MergeWithAdapter(dir, name string, inputs []Input, directory string, adapter Adapter) (string, string, error) {
 	if err := validateInputs(inputs); err != nil {

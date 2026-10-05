@@ -48,8 +48,13 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"removed schema", []string{"schema"}, "unknown command"},
 		{"root plan moved", []string{"plan"}, "unknown command"},
 		{"root prompt moved", []string{"prompt"}, "unknown command"},
-		{"add without a source", []string{"add"}, "accepts 1 arg"},
-		{"add without a skill", []string{"add", "owner/repo"}, "required flag"},
+		{"add without inputs", []string{"add"}, "required"},
+		{"add skill without source", []string{"add", "--skill", "chosen"}, "requires a source"},
+		{"empty add skill", []string{"add", "owner/repo", "--skill", ""}, "required"},
+		{"mixed add flags", []string{"add", "--from", "owner/repo:skill", "--skill", "skill"}, "none of the others"},
+		{"mixed add source", []string{"add", "owner/repo", "--from", "owner/repo:skill"}, "positional source"},
+		{"malformed add source", []string{"add", "--from", "owner/repo"}, "owner/repo:skill"},
+		{"add without a skill", []string{"add", "owner/repo"}, "required"},
 		{"merge without a name", []string{"merge", "--from", "owner/repo:skill"}, "requires a valid name"},
 		{"conflicting merge names", []string{"merge", "combined", "--name", "other", "--from", "owner/repo:skill"}, "either a positional"},
 		{"intent without file", []string{"intent", "set", "chosen"}, "required flag"},
@@ -134,7 +139,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("add --help failed")
 	}
-	if !strings.Contains(stdout, "--skill") || !strings.Contains(stdout, "--repo") {
+	if !strings.Contains(stdout, "--skill") || !strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
 	}
 	stdout, _, code = runBinary(t, nil, "ci", "--help")
