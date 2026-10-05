@@ -37,8 +37,8 @@ existing installation method and select a compatible published release. These
 are the supported distribution paths:
 
 ```sh
-# mise: install locally and save an exact version, respecting a seven-day cooldown
-mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+# mise: install locally using the repository's version policy
+mise use --path ./mise.toml github:wwwyo/skillctrl@latest
 mise exec -- skillctrl --version
 
 # Go: use when Go is the selected installation method
@@ -61,7 +61,7 @@ rules. Do not replace an existing global installation or
 change its version merely to complete repository-local setup. Use the resolved
 executable or the tool manager's execution wrapper for the remaining commands.
 Recheck the required command surface after installation. If no compatible
-published release meets the repository's cooldown, report that setup cannot
+published release meets the repository's release-age policy, report that setup cannot
 complete yet; do not invoke an older `add` or bypass the cooldown. Make sure the
 executable is reachable by this agent; a successful installation with an
 inaccessible executable is incomplete setup.
@@ -77,7 +77,7 @@ Node.js through the repository's tool manager. For mise, only when needed and no
 compatible pin already exists:
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts
+mise use --path ./mise.toml node@lts
 mise exec -- node --version
 mise exec -- npx --version
 ```

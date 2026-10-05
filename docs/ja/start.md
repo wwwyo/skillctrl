@@ -35,8 +35,8 @@ CLI がないか非対応の場合は、リポジトリが使っている導入�
 対応する公開済みリリースを選びます。対応する配布経路は次のとおりです。
 
 ```sh
-# mise: install locally and save an exact version, respecting a seven-day cooldown
-mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+# mise: install locally using the repository's version policy
+mise use --path ./mise.toml github:wwwyo/skillctrl@latest
 mise exec -- skillctrl --version
 
 # Go: use when Go is the selected installation method
@@ -74,7 +74,7 @@ npx を使う場合は Node.js と npm が必要で、skills は Node.js 22.20.0
 mise の場合、必要なツールがなく、互換性のある固定版もないときに使う例は次のとおりです。
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts
+mise use --path ./mise.toml node@lts
 mise exec -- node --version
 mise exec -- npx --version
 ```
