@@ -181,8 +181,8 @@ with optional skill names. It contacts no upstreams and invokes no acquisition
 adapter or reviewer. Upstream
 acquisition belongs to explicit `update`. Default acquisition uses the `skills`
 backend. Select `--adapter gh` for GitHub CLI or `--adapter git`
-for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in
-disposable staging and the project lock remains at root `skills-lock.json`.
+for direct Git imports; `SKILLCTRL_ADAPTER` sets a default.
+Keep the project lock at root `skills-lock.json`.
 Backend discovery, release selection, embedded metadata, and file modes can
 differ; switching adapters can require another intent review. Missing tools are
 errors. Follow CLI diagnostics for missing acquisition dependencies.

@@ -107,6 +107,7 @@ mise exec -- skillctrl --help
 
 取り込み前に、help に `list`・`check`・`record`・`--adapter skills|gh|git` があり、
 `--repo`・`--worktree-provider`・`intent` コマンドがないことを確認します。
+npx を使う場合は、help に `pinned npx` があることも確認します。
 Go・Homebrew の導入方法と互換性の確認手順は[導入ガイド](start.md)に記載しています。
 
 既定の adapter は、既存の互換 skills CLI か、固定版を呼ぶ npx を使います。

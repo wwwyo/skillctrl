@@ -115,7 +115,8 @@ mise exec -- skillctrl --help
 
 Before importing, require help to show `list`, `check`, `record`, and
 `--adapter skills|gh|git`, with no `--repo`, `--worktree-provider`, or `intent`
-command. See
+command. Before relying on npx, require help to mention `pinned npx`.
+See
 [setup](docs/start.md) for Go and Homebrew alternatives and the full compatibility check.
 
 For the default adapter, reuse an existing compatible `skills` CLI or provide
