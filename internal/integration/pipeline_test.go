@@ -93,10 +93,10 @@ func (e *env) list() []string {
 }
 
 // run invokes the binary and fails the test unless the exit code matches.
-func run(t *testing.T, dir, directory string, e *env, code int, args ...string) string {
+func run(t *testing.T, dir string, e *env, code int, args ...string) string {
 	t.Helper()
-	command := exec.Command(binaryPath(t), append([]string{"--repo", dir}, args...)...)
-	command.Dir = directory
+	command := exec.Command(binaryPath(t), args...)
+	command.Dir = dir
 	command.Env = e.list()
 	var stdout, stderr strings.Builder
 	command.Stdout = &stdout
@@ -230,7 +230,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	}
 
 	t.Run("select", func(t *testing.T) {
-		plan := run(t, repo, caller, environment, 0,
+		plan := run(t, repo, environment, 0,
 			"ci", "plan", "--base", head, "--head", head)
 		var selection struct {
 			Skills       []string `json:"skills"`
@@ -264,11 +264,11 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 
 	t.Run("prepare refuses without a trusted source", func(t *testing.T) {
 		without := environment.with("SKILL_PLAN", plan)
-		run(t, repo, caller, without, 1, "ci", "prepare", artifacts)
+		run(t, repo, without, 1, "ci", "prepare", artifacts)
 	})
 
 	t.Run("review", func(t *testing.T) {
-		run(t, repo, caller, job, 0, "ci", "prepare", artifacts)
+		run(t, repo, job, 0, "ci", "prepare", artifacts)
 		config := readFile(t, filepath.Join(artifacts, "mise.toml"))
 		for _, want := range []string{`node = "22.11.0"`, `"npm:@earendil-works/pi-coding-agent" = "0.55.1"`,
 			"pin = true", `minimum_release_age = "7d"`} {
@@ -279,7 +279,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 		// The reviewing job runs the agent under the prepared toolchain with the
 		// contract this binary embeds, then exports what it produced.
 		runReviewer(t, repo, artifacts, tools, job, plan)
-		run(t, repo, repo, job, 0, "ci", "export", artifacts)
+		run(t, repo, job, 0, "ci", "export", artifacts)
 		patch, err := os.ReadFile(filepath.Join(artifacts, "repair.patch"))
 		if err != nil {
 			t.Fatalf("no patch was exported: %v", err)
@@ -306,19 +306,19 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 			t.Fatal("could not build a mismatched plan")
 		}
 		other := cloneAt(t, repo, head, filepath.Join(caller, "forged"))
-		run(t, other, other, validatorJob.with("SKILL_PLAN", forged), 1, "ci", "apply", artifacts)
+		run(t, other, validatorJob.with("SKILL_PLAN", forged), 1, "ci", "apply", artifacts)
 		if git(t, other, "diff", "--cached", "--name-only") != "" {
 			t.Fatal("a refused validation staged changes")
 		}
 	})
 
 	t.Run("validate", func(t *testing.T) {
-		recomputed := run(t, validator, validator, validatorJob, 0,
+		recomputed := run(t, validator, validatorJob, 0,
 			"ci", "plan", "--base", head, "--head", head)
 		if normalise(recomputed) != normalise(plan) {
 			t.Fatalf("the recomputed plan differs:\n%s\n%s", plan, recomputed)
 		}
-		run(t, validator, validator, validatorJob, 0, "ci", "apply", artifacts)
+		run(t, validator, validatorJob, 0, "ci", "apply", artifacts)
 		if body := readFile(t, filepath.Join(validator, ".agents/skills/manual/SKILL.md")); body != "original v1\n" {
 			t.Fatalf("apply modified the working tree: %q", body)
 		}
@@ -339,7 +339,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	t.Run("gate before publication still reports unresolved work", func(t *testing.T) {
 		// ci apply is index-only, so until the repair is committed the hashes on
 		// disk still differ from the accepted lock. The gate must say so.
-		state := run(t, validator, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
+		state := run(t, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
 		var selection struct {
 			LockChanged bool `json:"lock_changed"`
 		}
@@ -374,7 +374,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 		// Nothing is staged yet, so a first run has nothing to commit. Running it
 		// twice must still post one comment, not two.
 		git(t, validator, "reset", "--hard", head)
-		run(t, validator, validator, publishJob, 0, "ci", "publish", artifacts)
+		run(t, validator, publishJob, 0, "ci", "publish", artifacts)
 		if git(t, validator, "rev-parse", "HEAD") != head {
 			t.Fatal("publication committed without a staged repair")
 		}
@@ -382,14 +382,14 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 		if first != 1 {
 			t.Fatalf("expected one report, got %d", first)
 		}
-		run(t, validator, validator, publishJob, 0, "ci", "publish", artifacts)
+		run(t, validator, publishJob, 0, "ci", "publish", artifacts)
 		if second := strings.Count(readFile(t, log), "POST"); second != first {
 			t.Fatalf("a rerun posted a duplicate comment: %d then %d", first, second)
 		}
 
 		// Now publish the repair itself.
-		run(t, validator, validator, validatorJob, 0, "ci", "apply", artifacts)
-		run(t, validator, validator, publishJob, 0, "ci", "publish", artifacts)
+		run(t, validator, validatorJob, 0, "ci", "apply", artifacts)
+		run(t, validator, publishJob, 0, "ci", "publish", artifacts)
 		if branch := git(t, validator, "ls-remote", "origin", "refs/heads/feature"); branch == "" {
 			t.Fatal("the repair was not pushed to the pull request branch")
 		}
@@ -399,7 +399,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 	})
 
 	t.Run("gate", func(t *testing.T) {
-		state := run(t, validator, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
+		state := run(t, validator, validatorJob, 0, "ci", "plan", "--base", head, "--head", "HEAD")
 		var selection struct {
 			LockChanged bool     `json:"lock_changed"`
 			Skills      []string `json:"skills"`
@@ -418,7 +418,7 @@ func TestDocumentedPhaseSequence(t *testing.T) {
 func runReviewer(t *testing.T, repo, artifacts, trustedTools string, environment *env, plan string) {
 	t.Helper()
 	prompt := filepath.Join(artifacts, "ci-prompt.md")
-	write(t, prompt, run(t, repo, repo, environment, 0, "ci", "prompt"))
+	write(t, prompt, run(t, repo, environment, 0, "ci", "prompt"))
 	report, err := os.Create(filepath.Join(artifacts, "report.md"))
 	if err != nil {
 		t.Fatal(err)
@@ -582,7 +582,7 @@ func TestPublishRefusesDryRun(t *testing.T) {
 
 	job := environment.with(
 		"PATH", ghDir+string(os.PathListSeparator)+environment.values["PATH"],
-		"SKILL_PLAN", run(t, repo, caller, environment, 0, "ci", "plan", "--base", head, "--head", head),
+		"SKILL_PLAN", run(t, repo, environment, 0, "ci", "plan", "--base", head, "--head", head),
 		"CHECKER_SOURCE", head,
 		"GITHUB_REPOSITORY", "fixture/repo",
 		"PR_NUMBER", "7",
@@ -600,7 +600,7 @@ func TestPublishRefusesDryRun(t *testing.T) {
 	} {
 		command := []string{"--dry-run"}
 		command = append(command, phase...)
-		stdout := run(t, repo, repo, job, 1, command...)
+		stdout := run(t, repo, job, 1, command...)
 		if stdout != "" {
 			t.Fatalf("%v wrote to stdout under --dry-run: %s", phase, stdout)
 		}
@@ -609,7 +609,7 @@ func TestPublishRefusesDryRun(t *testing.T) {
 		}
 	}
 	// The stub publisher works, so the refusals above are not vacuous.
-	run(t, repo, repo, job, 0, "ci", "publish", artifacts)
+	run(t, repo, job, 0, "ci", "publish", artifacts)
 	if _, err := os.Stat(log); err != nil {
 		t.Fatal("the stub publisher was never reached without --dry-run")
 	}

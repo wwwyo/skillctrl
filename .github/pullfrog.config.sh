@@ -50,7 +50,7 @@ pf_set fix-ci.reviewed-prs 'false'
 "${PF[@]}" config set instructions --repo "$REPO" --yes --file - <<'PULLFROG_INSTRUCTIONS'
 Write all responses, progress comments, PR descriptions, and reviews in English.
 Write code comments, CLI messages, help, adaptation prompts, and public documentation
-in English. Keep the prose in docs/README.ja.md in Japanese, with English comments
+in English. Keep the prose under docs/ja/ in Japanese, with English comments
 in its code examples.
 
 Label each review finding with its severity:

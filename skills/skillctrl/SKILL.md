@@ -37,9 +37,10 @@ wants completed, or silently replace another skill manager's registrations.
 2. Check the installed CLI with `skillctrl --version` and `skillctrl --help`. Consult command help for version-specific options. If the
    binary is missing, use the repository's tool manager and a pinned release;
    the installation instructions are at https://github.com/wwwyo/skillctrl.
-3. Use an absolute target path in `--repo` for management commands. The CLI's
-   default is the current repository. It has no `--global` option; a repository
-   may separately expose its skills through shared agent configuration.
+3. Run management commands from the target repository. Use `cd` to select a
+   different repository before invoking skillctrl. It has no `--repo` or
+   `--global` option; a repository may separately expose its skills through shared
+   agent configuration.
 4. The Git repository must contain `.agents/skills/`. For an authorized setup,
    create that directory if needed. Pending edits are allowed: the CLI preserves
    unrelated files and caller staging. Imports that would replace a skill directory
@@ -47,7 +48,8 @@ wants completed, or silently replace another skill manager's registrations.
    Never reset or commit user edits merely to run the CLI.
 
 ```sh
-skillctrl --repo /absolute/path/to/project check
+cd /absolute/path/to/project
+skillctrl check
 ```
 
 The managed paths inside the target are:
@@ -95,9 +97,9 @@ Reject colliding skill names before acquisition. The native-compatible
 combined with qualified owner/repo:skill inputs:
 
 ```sh
-skillctrl --repo /absolute/path/to/project add owner/repo:chosen-name
-skillctrl --repo /absolute/path/to/project update chosen-name
-skillctrl --repo /absolute/path/to/project remove chosen-name
+skillctrl add owner/repo:chosen-name
+skillctrl update chosen-name
+skillctrl remove chosen-name
 ```
 
 Read stdout as JSON and stderr as diagnostics. Exit `0` is success, `1` is
@@ -133,10 +135,10 @@ Check `skillctrl merge --help`; this command needs a binary containing the merge
 feature. Select the full list of originals explicitly; no intent or reviewer is required:
 
 ```sh
-skillctrl --repo /absolute/path/to/project merge --name combined \
+skillctrl merge --name combined \
   owner/discovery:find-skills \
   owner/authoring:skill-creator
-skillctrl --repo /actual/working-copy update combined
+skillctrl update combined
 ```
 
 Replace these placeholder repositories with inspected sources. The positional
@@ -164,8 +166,8 @@ the actual repository path. Then edit the skill to meet that intent, exercise a
 representative task, and inspect all changed content before accepting it:
 
 ```sh
-skillctrl --repo /actual/working-copy record chosen-name
-skillctrl --repo /actual/working-copy check
+skillctrl record chosen-name
+skillctrl check
 ```
 
 `record NAME` computes the current whole skill-directory hash and creates or

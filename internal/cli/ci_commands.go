@@ -75,7 +75,7 @@ func newCIStep(name string, run func(dir, directory string, plan lock.Plan) erro
 			if err := rejectDryRun(command); err != nil {
 				return fail("", err)
 			}
-			dir, err := repository(command)
+			dir, err := repository()
 			if err != nil {
 				return fail("", err)
 			}
@@ -108,7 +108,7 @@ func newCIConfigureCommand() *cobra.Command {
 			if err := rejectDryRun(command); err != nil {
 				return fail("", err)
 			}
-			dir, err := repository(command)
+			dir, err := repository()
 			if err != nil {
 				return fail("", err)
 			}
@@ -185,7 +185,7 @@ func newScheduleStep(name string, run func(dir, directory string, plan lock.Plan
 			if err := rejectDryRun(command); err != nil {
 				return fail("", err)
 			}
-			dir, err := repository(command)
+			dir, err := repository()
 			if err != nil {
 				return fail("", err)
 			}
@@ -225,7 +225,7 @@ func newPlanCommand() *cobra.Command {
 			if base == "" {
 				return fail("", fmt.Errorf("plan requires --base"))
 			}
-			repo, err := repository(command)
+			repo, err := repository()
 			if err != nil {
 				return fail("", err)
 			}

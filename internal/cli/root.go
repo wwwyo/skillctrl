@@ -87,7 +87,6 @@ func New() *cobra.Command {
 	root.SetErr(os.Stderr)
 	root.CompletionOptions.DisableDefaultCmd = true
 
-	root.PersistentFlags().String("repo", "", "repository to operate on (default: the current repository)")
 	root.PersistentFlags().Bool("dry-run", false,
 		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
 

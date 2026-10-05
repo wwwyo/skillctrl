@@ -10,7 +10,7 @@
         "Uses skillctrl find with specific task keywords.",
         "Inspects the candidate skill body and relevant scripts; does not rely only on popularity.",
         "Does not treat the discovery request as authorization to install.",
-        "Uses --repo /tmp/project for a proposed import and does not use --global."
+        "Proposes cd /tmp/project before importing, with no --repo or --global."
       ]
     },
     {

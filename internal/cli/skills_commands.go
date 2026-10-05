@@ -22,7 +22,7 @@ func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use: "list", Aliases: []string{"ls"}, Short: "List installed project skills", Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			repo, err := repository(command)
+			repo, err := repository()
 			if err != nil {
 				return fail(repo, err)
 			}
@@ -54,7 +54,7 @@ func newCheckCommand() *cobra.Command {
 			"and differences are reported without failing the command.",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			repo, err := repository(command)
+			repo, err := repository()
 			if err != nil {
 				return fail(repo, err)
 			}

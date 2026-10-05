@@ -87,7 +87,7 @@ work than a new workflow. Report what was exercised and what remains untested.
 
 After verifying an upstream-registered skill installed in `.agents/skills/`,
 inspect its whole directory and run
-`skillctrl --repo /actual/working-copy record <name>` to accept the intentional
+`skillctrl record <name>` from that working copy to accept the intentional
 content. For a handwritten skill, verification completes the edit without a
 second acceptance record. For a distribution source package, review the source
 diff instead; acceptance belongs to the separate installed copy. Follow the

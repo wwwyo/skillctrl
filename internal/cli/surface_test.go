@@ -67,6 +67,7 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
 		{"plan without a base", []string{"ci", "plan"}, "requires --base"},
 		{"removed status", []string{"status"}, "unknown command"},
+		{"removed repo flag", []string{"check", "--repo", "/another-repository"}, "unknown flag"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -132,7 +133,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	if strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") {
+	if strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") || strings.Contains(stdout, "--repo") {
 		t.Fatalf("help advertises removed local orchestration:\n%s", stdout)
 	}
 	for _, command := range []string{"add", "merge", "update", "remove", "record", "find", "list", "check"} {
@@ -144,7 +145,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("add --help failed")
 	}
-	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "skillctrl add owner/repo:skill...") {
+	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "skillctrl add owner/repo:skill...") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
 	}
 	stdout, _, code = runBinary(t, nil, "merge", "--help")
@@ -180,8 +181,10 @@ func TestDryRunIsRefusedWhereItCannotBeHonored(t *testing.T) {
 		}
 	}
 	// The installer commands keep the meaning the flag advertises.
-	if _, _, code := runBinary(t, nil, "--dry-run", "--repo", "/nonexistent", "update"); code != 1 {
-		t.Fatalf("a dry-run update outside a repository should fail cleanly, got %d", code)
+	command := exec.Command(binaryPath(t), "--dry-run", "update")
+	command.Dir = t.TempDir()
+	if output, err := command.CombinedOutput(); err == nil || !strings.Contains(string(output), "current repository must contain") {
+		t.Fatalf("a dry-run update outside a repository did not fail cleanly: %v\n%s", err, output)
 	}
 }
 
@@ -230,7 +233,8 @@ func TestInjectedVersionWins(t *testing.T) {
 // stdout free for results.
 func TestFailuresAreJSONOnStderr(t *testing.T) {
 	h := newHarness(t)
-	stdout, stderr, code := h.try("check", "--repo", filepath.Join(h.root, "missing"))
+	h.write(".agents/skillctrl/intents/lock.json", "invalid lock\n")
+	stdout, stderr, code := h.try("check")
 	if code != 1 {
 		t.Fatalf("exit %d want 1", code)
 	}
@@ -308,5 +312,38 @@ func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
 	stdout, stderr, code = runBinary(t, environment, "__complete", "--adapter", "")
 	if code != 0 || stdout != "skills\ngh\ngit\n:4\n" {
 		t.Fatalf("enum completion: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
+
+// TestCurrentRepositoryIncludesSubdirectories pins targeting even before any
+// skills are installed, when a nested working directory has its own files.
+func TestCurrentRepositoryIncludesSubdirectories(t *testing.T) {
+	for _, withSkills := range []bool{true, false} {
+		t.Run(map[bool]string{true: "installed", false: "empty"}[withSkills], func(t *testing.T) {
+			h := newHarness(t)
+			if !withSkills {
+				if err := os.RemoveAll(filepath.Join(h.root, ".agents/skills")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			nested := filepath.Join(h.root, "nested")
+			if err := os.MkdirAll(nested, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			command := exec.Command(h.binary, "list")
+			command.Dir = nested
+			command.Env = h.env
+			output, err := command.Output()
+			if err != nil {
+				t.Fatalf("list from nested directory: %v", err)
+			}
+			var result map[string]any
+			if err := json.Unmarshal(output, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result["repo"] != h.root {
+				t.Fatalf("nested directory selected a different repository: %s", output)
+			}
+		})
 	}
 }

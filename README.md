@@ -7,7 +7,7 @@
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[日本語](docs/README.ja.md) · [Requirements](docs/requirements.md) · [CI integration](docs/ci.md) · [Parity](docs/parity.md)
+[日本語](docs/ja/README.md) · [Requirements](docs/requirements.md) · [CI integration](docs/ci.md) · [Parity](docs/parity.md)
 
 Manage agent skills in a Git repository without losing the intent behind your
 local adaptations.
@@ -216,7 +216,8 @@ Once this package is published in the repository, import it into your chosen
 skills repository:
 
 ```sh
-skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl:skillctrl
+cd /absolute/path/to/project
+skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 The CLI must already be installed and the target must contain `.agents/skills/`.
@@ -295,8 +296,8 @@ combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs 
   replace a skill directory containing pending edits is refused before any skill
   is imported; unchanged originals do not overwrite those edits. Main checkouts
   and linked worktrees are both modified in place. skillctrl never creates a
-  worktree or changes the working directory. Use `--repo` to select a different
-  repository explicitly.
+  worktree or changes the working directory. Run commands from the target repository;
+  change repositories with `cd` before invoking skillctrl.
 - **AI execution belongs to the external workflow.** Local commands do not
   start a reviewer. CI preparation provides trusted configuration and review
   instructions; the adopting workflow runs its agent and supplies the artifacts.

@@ -36,5 +36,5 @@ run(command, ['--thinking', 'high', '--no-session', '--no-context-files', '--no-
   + '\nWrite completion JSON to: ' + directory + '/result.json'],
   {stdio: ['ignore', report, 'inherit'], cwd: process.env.REVIEW_DIR});
 fs.closeSync(report);
-run(binary, ['--repo', process.env.REVIEW_DIR, 'ci', 'export', directory],
-  {env: {SKILL_PLAN: JSON.stringify(plan)}});
+run(binary, ['ci', 'export', directory],
+  {cwd: process.env.REVIEW_DIR, env: {SKILL_PLAN: JSON.stringify(plan)}});

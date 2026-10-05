@@ -14,34 +14,13 @@ import (
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
-// repository resolves the checkout a command operates on. An explicit --repo
-// always wins. Otherwise the current repository is used, which is what makes the
-// tool usable outside the repository it was originally written for.
-func repository(command *cobra.Command) (string, error) {
-	if value, _ := command.Flags().GetString("repo"); value != "" {
-		absolute, err := filepath.Abs(value)
-		if err != nil {
-			return "", err
-		}
-		return absolute, nil
-	}
+// repository resolves the checkout containing the current working directory.
+func repository() (string, error) {
 	out, err := gitx.Output("", "rev-parse", "--show-toplevel")
 	if err != nil {
-		working, getwdErr := os.Getwd()
-		if getwdErr != nil {
-			return "", getwdErr
-		}
-		return working, nil
+		return os.Getwd()
 	}
-	candidate := gitx.Trimmed(out)
-	if _, err := os.Stat(filepath.Join(candidate, filepath.FromSlash(install.SkillsDir))); err == nil {
-		return candidate, nil
-	}
-	working, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	return working, nil
+	return gitx.Trimmed(out), nil
 }
 
 // emit writes one JSON document to stdout.
@@ -170,12 +149,12 @@ func newRemoveCommand() *cobra.Command {
 
 // runInstall performs the shared add, merge, update, remove, and record flow.
 func runInstall(command *cobra.Command, kind, source string, requested []string, inputs ...upstream.Input) error {
-	repo, err := repository(command)
+	repo, err := repository()
 	if err != nil {
 		return fail("", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
-		return fail(repo, fmt.Errorf("--repo must point to a repository containing %s", install.SkillsDir))
+		return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
 	}
 	values, err := install.Names(requested)
 	if err != nil {

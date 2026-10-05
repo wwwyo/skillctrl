@@ -71,6 +71,11 @@ func newHarness(t *testing.T) *harness {
 	if err := os.MkdirAll(h.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	physicalRoot, err := filepath.EvalSymlinks(h.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.root = physicalRoot
 	h.git("init", "-q")
 	h.git("config", "user.name", "Fixture")
 	h.git("config", "user.email", "fixture@example.invalid")
@@ -267,7 +272,7 @@ func (h *harness) run(exitCode int, args ...string) map[string]any {
 
 func (h *harness) try(args ...string) (string, string, int) {
 	h.t.Helper()
-	command := exec.Command(h.binary, append([]string{"--repo", h.root}, args...)...)
+	command := exec.Command(h.binary, args...)
 	command.Env = h.env
 	command.Dir = h.root
 	var stdout, stderr strings.Builder

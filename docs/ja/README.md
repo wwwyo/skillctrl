@@ -1,13 +1,13 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../assets/wordmark-dark.svg">
-  <img src="../assets/wordmark.svg" alt="skillctrl" width="312" height="88">
+  <source media="(prefers-color-scheme: dark)" srcset="../../assets/wordmark-dark.svg">
+  <img src="../../assets/wordmark.svg" alt="skillctrl" width="312" height="88">
 </picture>
 
 # skillctrl
 
-[![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](../go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
+[![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](../../go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-[English](../README.md) · [移植・公開の要件](requirements.md) · [CI での使い方](ci.md) · [対応表](parity.md)
+[English](../../README.md) · [skill の日本語訳](skills/skillctrl.md) · [移植・公開の要件](../requirements.md) · [CI での使い方](../ci.md) · [対応表](../parity.md)
 
 agent skill を Git リポジトリで管理しながら、ローカルで加えた適応の「意図」を
 失わないようにするための CLI です。
@@ -168,18 +168,19 @@ commit 前に最終的な変更を確認します。
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 0 は成功、exit 1 は失敗です。上記のローカルコマンドは作業内容を作業ディレクトリに
 残し、commit・push・PR 作成は行いません。`ci` / `schedule` の公開コマンドは
-検証した変更を commit・push するためのもので、[CI の文書](ci.md)に手順を記載しています。
+検証した変更を commit・push するためのもので、[CI の文書](../ci.md)に手順を記載しています。
 
 ## agent 向け skill
 
-配布用の [skillctrl skill](../skills/skillctrl/SKILL.md) に、検索・導入・調整・
+配布用の [skillctrl skill](../../skills/skillctrl/SKILL.md) に、検索・導入・調整・
 更新・削除の手順をまとめています。新規作成・改善のガイドは必要なときに読む
 別ファイルに置き、`find-skills` や `skill-creator` の別途導入は不要にしています。
 
 このパッケージがリポジトリで公開されたら、対象を指定して導入できます。
 
 ```sh
-skillctrl --repo /absolute/path/to/project add wwwyo/skillctrl:skillctrl
+cd /absolute/path/to/project
+skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 CLI の事前導入と、対象リポジトリの `.agents/skills/` が必要です。結果の JSON に
@@ -253,7 +254,7 @@ skillctrl record combined
   含む skill ディレクトリを置き換える場合は、取り込み前に拒否します。原本が
   変わっていなければ、その編集を上書きしません。main checkout も linked worktree も、
   指定した repo をその場で変更します。worktree の作成や作業ディレクトリの変更は行いません。
-  別の repo を対象にする場合は `--repo` で明示します。
+  別の repo を対象にする場合は、`cd` で移動してから実行します。
 - **AI の実行は外部 workflow の責務です。** 通常の CLI は agent を起動しません。
   CI の準備コマンドは信頼済み設定とレビュー指示を提供し、採用側の workflow が agent を
   起動して成果物を渡します。`skillctrl ci apply` は検証済み patch を index にだけ適用します。
@@ -273,8 +274,8 @@ shell で mise を有効にしていない場合は、次のように実行し�
 mise exec -- skillctrl --help
 ```
 
-詳細な設計は [README.md](../README.md)、CI での使い方と trust boundary は
-[docs/ci.md](ci.md)、確認済みのテストとの対応表は [docs/parity.md](parity.md)
+詳細な設計は [README.md](../../README.md)、CI での使い方と trust boundary は
+[docs/ci.md](../ci.md)、確認済みのテストとの対応表は [docs/parity.md](../parity.md)
 を参照してください。
 
-[MIT ライセンス](../LICENSE)で公開しています。
+[MIT ライセンス](../../LICENSE)で公開しています。

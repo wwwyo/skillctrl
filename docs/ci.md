@@ -95,7 +95,7 @@ requirement, not the YAML.
 
    ```sh
    base=$(git merge-base "$BASE_SHA" HEAD)
-   skillctrl --repo . ci plan --base "$base" --head HEAD > plan.json
+   skillctrl ci plan --base "$base" --head HEAD > plan.json
    ```
 
    Publish `plan.json`. The plan is the only thing the reviewing job may treat as
@@ -116,7 +116,7 @@ requirement, not the YAML.
    ```sh
    export SKILL_PLAN="$(cat plan.json)"
    export CHECKER_SOURCE="$BASE_SHA"
-   skillctrl --repo . ci prepare /tmp/skillctrl    # writes /tmp/skillctrl/mise.toml
+   skillctrl ci prepare /tmp/skillctrl    # writes /tmp/skillctrl/mise.toml
    ```
 
    `ci prepare` refuses without `CHECKER_SOURCE`: there is no trusted toolchain
@@ -161,10 +161,10 @@ requirement, not the YAML.
 
    ```sh
    base=$(git merge-base "$BASE_SHA" HEAD)
-   skillctrl --repo . ci plan --base "$base" --head HEAD > /tmp/skillctrl/plan.json
+   skillctrl ci plan --base "$base" --head HEAD > /tmp/skillctrl/plan.json
    diff <(jq -S . plan.json) <(jq -S . /tmp/skillctrl/plan.json)
    export SKILL_PLAN="$(cat /tmp/skillctrl/plan.json)"
-   skillctrl --repo . ci apply /tmp/skillctrl
+   skillctrl ci apply /tmp/skillctrl
    ```
 
    If the recomputed plan differs, the input under review changed: stop.
@@ -173,7 +173,7 @@ requirement, not the YAML.
 
    ```sh
    export SKILL_PLAN="$(cat plan.json)"
-   skillctrl --repo . ci publish /tmp/skillctrl
+   skillctrl ci publish /tmp/skillctrl
    ```
 
    This commits the staged repair, pushes it to the pull request branch, and
@@ -193,7 +193,7 @@ requirement, not the YAML.
    git config user.name  "github-actions[bot]"
    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
    mkdir -p input
-   skillctrl --repo . schedule prepare input > update.json
+   skillctrl schedule prepare input > update.json
    ```
 
    Publish `update.json`, `input/plan.json`, and `input/input.bundle` when
@@ -207,7 +207,7 @@ requirement, not the YAML.
 
    ```sh
    export CHECKER_SOURCE="$BASE_SHA"
-   skillctrl --repo . schedule restore input > /tmp/skillctrl/plan.json
+   skillctrl schedule restore input > /tmp/skillctrl/plan.json
    export SKILL_PLAN="$(cat /tmp/skillctrl/plan.json)"
    # then the review and validate steps above
    ```
