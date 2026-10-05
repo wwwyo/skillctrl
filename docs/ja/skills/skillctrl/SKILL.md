@@ -1,18 +1,29 @@
 ---
 name: skillctrl
 description: "ローカルで保存したカスタマイズの意図を維持しながら、skillctrl で agent skill を検索・導入・統合・作成・改善・更新・削除する。用途に合う skill の探索、リポジトリ内の skill 管理、上流を追跡しながらの統合、ワークフローの SKILL.md 化、既存 skill の改善、変更内容と記録済み hash の確認を依頼されたときに使う。"
-license: MIT
+license: "MIT; bundled upstream originals retain their own licenses"
 compatibility: "管理コマンドには Git と skillctrl CLI が必要。検索と上流からの取り込みにはネットワーク接続が必要。ローカルのカスタマイズは既存のエディタや agent で行い、管理コマンドはモデルを起動しない。"
 ---
 
 # skillctrl
 
-これは配布用 [SKILL.md](../../../../skills/skillctrl/SKILL.md) の日本語訳です。
+これは配布用 [SKILL.md](../../../../.agents/skills/skillctrl/SKILL.md) の日本語訳です。
 
 ユーザーが選んだ Git リポジトリで、skill の導入から更新・削除までを管理する。
 用途に合う既存 skill があれば優先し、ユーザー固有のワークフローや適切な取得元がない場合は、
 目的を絞った skill を作る。ローカルで調整した理由を skill のそばに保存し、
 後の上流更新でもその意図に沿って内容を調整できるようにする。
+
+このパッケージは、検索と作成の手順を skillctrl のローカル管理の規則に統合している。
+上流の変更を反映するときは、保存した
+[find-skills の原本](../../../../.agents/skills/skillctrl/references/find-skills/SKILL.md)と
+[skill-creator の原本](../../../../.agents/skills/skillctrl/references/skill-creator/SKILL.md)を、
+この entrypoint と[作成ガイド](references/authoring.md)に照らして確認する。
+操作にはここで調整した手順を使い、比較用の原本を手順を回避する指示として扱わない。
+原本のライセンスはそれぞれ
+[find-skills](../../../../.agents/skills/skillctrl/references/find-skills-LICENSE.txt)と
+[skill-creator](../../../../.agents/skills/skillctrl/references/skill-creator/LICENSE.txt)に保持し、
+調整した文書は [MIT](../../../../.agents/skills/skillctrl/LICENSE.txt) とする。
 
 ## 依頼に合う手順を選ぶ
 

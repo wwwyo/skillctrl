@@ -95,7 +95,7 @@ CLI と adapter を mise で管理している場合の取り込みコマンド�
 mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
 ```
 
-配布元は `wwwyo/skillctrl` の `skills/skillctrl/` です。
+配布元は `wwwyo/skillctrl` の `.agents/skills/skillctrl/` です。
 導入先は対象リポジトリの `.agents/skills/skillctrl/` とし、
 `SKILL.md`、references、その他の同梱リソースを含めます。
 既存のパッケージは置き換え前に確認し、未コミットの編集を理由に取り込みが拒否されたら、

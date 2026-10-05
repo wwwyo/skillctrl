@@ -98,7 +98,7 @@ For a mise-managed CLI and adapter, the import invocation is:
 mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
 ```
 
-The source package is `skills/skillctrl/` in `wwwyo/skillctrl`. The installed
+The source package is `.agents/skills/skillctrl/` in `wwwyo/skillctrl`. The installed
 package must be `.agents/skills/skillctrl/` in the target repository, including
 `SKILL.md`, references, and other bundled resources. Inspect any existing package
 before replacing it; preserve local customization if the import reports pending

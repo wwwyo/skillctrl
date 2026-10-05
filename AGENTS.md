@@ -5,6 +5,8 @@ A Go CLI for managing agent skills while preserving locally recorded intent.
 ## Structure
 
 - `docs/`: shared project requirements and documentation.
+- `.agents/skills/skillctrl/`: distributable skill, managed by skillctrl with
+  upstream registrations in root `skills-lock.json` and saved integration intent.
 - `internal/`: implementation and colocated tests.
 - `tools/release/`: the release archive and tap formula builder.
 - Root Go command: `go install github.com/wwwyo/skillctrl@<version>`.

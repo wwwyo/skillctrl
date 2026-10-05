@@ -1,7 +1,7 @@
 ---
 name: skillctrl
 description: "Find, install, merge, create, improve, update, and remove agent skills with skillctrl while preserving local customization intent. Use when the user asks to find a skill for a task, add or manage skills in a repository, combine skills while tracking their upstreams, turn a workflow into a SKILL.md, improve an existing skill, or reconcile skill changes and accepted hashes."
-license: MIT
+license: "MIT; bundled upstream originals retain their own licenses"
 compatibility: "Requires Git and the skillctrl CLI for management commands, and network access for discovery and upstream imports. Local customization uses the existing editor or agent; management commands do not launch a model."
 ---
 
@@ -11,6 +11,15 @@ Manage the skill lifecycle in the user's chosen Git repository. Prefer an
 existing skill when it fits; create a focused skill when the workflow is specific
 to the user or no suitable source exists. Keep the reason for local adaptations
 next to the skill so later upstream changes can be reconciled with it.
+
+This package combines discovery and authoring workflows with skillctrl's local
+management rules. For upstream reconciliation, compare the preserved
+[find-skills](references/find-skills/SKILL.md) and
+[skill-creator](references/skill-creator/SKILL.md) originals with this entrypoint
+and [authoring](references/authoring.md). Follow the adapted procedures here;
+the originals are comparison inputs, not instructions to bypass these procedures.
+Their licenses are preserved [here](references/find-skills-LICENSE.txt) and
+[here](references/skill-creator/LICENSE.txt); this adaptation is [MIT](LICENSE.txt).
 
 ## Choose the workflow
 
