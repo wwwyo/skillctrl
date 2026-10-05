@@ -27,6 +27,7 @@ import (
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
 )
 
 // Lock is the repository-relative upstream lock path.
@@ -71,7 +72,7 @@ type Record struct {
 	Extra    map[string]json.RawMessage `json:"-"`
 	original []byte
 	native   *Record
-	tracking *Record
+	state    *skillstate.Record
 }
 
 // MarshalJSON retains unknown top-level fields written by another tool.

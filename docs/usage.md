@@ -15,14 +15,14 @@ two paths it reads:
 The native project lock stays at the repository root: `skills-lock.json` keeps
 ordinary registrations in the format used by `npx skills`. Aliases, merged
 inputs, and supplemental source provenance live in
-`.agents/skillctrl/upstreams.json`; they do not add custom entries or fields to
+`.agents/skillctrl/lock.json`; they do not add custom entries or fields to
 the native lock. Native commands restore and update ordinary registrations;
 use skillctrl for aliases and merges, which native skills does not implement.
 
-`.agents/skillctrl/intents/lock.json` separately records the accepted hash of each
+The same lock records the accepted hash of each
 whole skill directory with both an upstream registration and saved intent.
 Intent-free imports and handwritten skills remain excluded. Acquisition never
-writes accepted hashes; `check` reports local drift and pending cleanup offline.
+advances accepted hashes; `check` reports local drift and pending cleanup offline.
 
 Existing native locks retain their version, other providers, unknown fields,
 and exact bytes when their registrations are unchanged. Supplemental metadata
@@ -33,6 +33,18 @@ tracking file. Read-only commands and dry runs never migrate anything. Only
 when no root lock exists does a successful import move the legacy native lock
 from `.agents/.skill-lock.json` to the root.
 
+The private lock uses version 1, with `upstreams` for skillctrl-only registrations
+and `acceptedHashes` for explicit acceptance. `add`, `merge`, and `update` change
+provenance without advancing accepted hashes; `record` changes accepted hashes
+without fetching or changing provenance. `remove` removes the registration and
+its accepted hash.
+
+When the private lock is absent, skillctrl reads the old `upstreams.json` and
+`intents/lock.json` files under `.agents/skillctrl/`. The next successful private
+lock write combines them and removes both old files without accepting new content.
+`check` and dry runs never migrate files. Once present, the unified lock takes
+precedence over old files, including registrations deliberately removed from it.
+Older skillctrl releases do not read the unified lock; keep the new CLI after migration.
 
 ## Work with skills
 
@@ -133,10 +145,10 @@ CI is optional. Local commands need neither an AI reviewer nor its toolchain.
 Use your editor or existing agent to customize content before recording it.
 
 `record NAME` computes the current whole skill-directory hash and creates or
-replaces the entry for NAME in `.agents/skillctrl/intents/lock.json`. NAME selects
+replaces NAME in `acceptedHashes` in `.agents/skillctrl/lock.json`. NAME selects
 a skill; you do not supply a hash. Unchanged content produces the same hash. It
 does not update native registrations or original-source tracking. It updates
-only the accepted lock. It runs no reviewer, changes no skill content, and leaves the
+only the accepted hashes, preserving acquisition metadata. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
 `record --dry-run` previews the operation without computing or comparing hashes;
@@ -158,10 +170,10 @@ To update originals deliberately, first inspect local customization, then run:
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 # Edit and verify the skill against its saved intent
 skillctrl record chosen-skill
-git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
 Single-input updates replace changed originals; merged updates refresh the

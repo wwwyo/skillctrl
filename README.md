@@ -58,7 +58,7 @@ skill to its saved intent, verify it, and explicitly record the result:
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 # Edit and verify the updated skill against its intent
 skillctrl record chosen-skill
 ```
@@ -87,9 +87,8 @@ Acquisition defaults to `skills`: reuse a compatible CLI on PATH, or use npx.
 Installing skills separately is optional;
 the npx path requires Node.js and npm.
 `--adapter gh` and `--adapter git` select GitHub CLI or direct Git instead.
-Root `skills-lock.json` keeps native registrations. Alias/merge tracking and extra
-provenance stay in `.agents/skillctrl/upstreams.json`; accepted hashes stay in
-`.agents/skillctrl/intents/lock.json`.
+Root `skills-lock.json` keeps native registrations. Alias/merge tracking, extra provenance,
+and explicitly recorded hashes share `.agents/skillctrl/lock.json`.
 Use `find`, `list`, and `remove` for discovery, inspection, and cleanup.
 See [command details](docs/usage.md) for adapters, locks, and edge cases.
 
@@ -154,6 +153,6 @@ replacing a global installation. Read [requirements](docs/requirements.md),
 for development details. Licensed under [MIT](LICENSE).
 
 The distributable skill is itself managed here in `.agents/skills/skillctrl/`:
-`.agents/skillctrl/upstreams.json` tracks its discovery and authoring inputs, and
+`.agents/skillctrl/lock.json` tracks its discovery and authoring inputs, and
 `.agents/skillctrl/intents/skillctrl.md` records the integration policy.
 Use the same `update skillctrl`, direct editing, `record skillctrl`, and `check skillctrl` flow.

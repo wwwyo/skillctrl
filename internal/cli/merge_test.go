@@ -26,9 +26,9 @@ func mergedSources(t *testing.T, h *harness) []map[string]any {
 		Version int `json:"version"`
 		Skills  map[string]struct {
 			Sources []map[string]any `json:"sources"`
-		} `json:"skills"`
+		} `json:"upstreams"`
 	}
-	if err := json.Unmarshal(h.read(".agents/skillctrl/upstreams.json"), &document); err != nil {
+	if err := json.Unmarshal(h.read(".agents/skillctrl/lock.json"), &document); err != nil {
 		t.Fatal(err)
 	}
 	if document.Version != 1 {

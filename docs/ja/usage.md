@@ -13,11 +13,11 @@
 
 native の project lock は root の `skills-lock.json` のままです。通常の登録は
 `npx skills` の形式を保ち、別名・統合入力・追加の取得情報は
-`.agents/skillctrl/upstreams.json` に保存します。独自の登録やフィールドを native の
+`.agents/skillctrl/lock.json` に保存します。独自の登録やフィールドを native の
 lock に追加しません。native のコマンドは通常の登録を復元・更新でき、native にない
 別名と統合の管理には skillctrl を使います。
 
-`.agents/skillctrl/intents/lock.json` は、upstream 登録と intent の両方を持つ
+同じ lock に、upstream 登録と intent の両方を持つ
 skill ディレクトリ全体の確認済み hash を保存します。intent のない導入済み skill と
 自作 skill は対象外です。取得は受理 hash を更新せず、`check` はローカルの乖離と
 対象外の記録の削除待ちを offline で報告します。
@@ -29,6 +29,16 @@ skillctrl の独自登録も読み、取り込みが成功したときだけ、�
 専用ファイルへ移します。read-only のコマンドと dry run は移行しません。root の lock が
 ない場合に限り、成功した取り込みで旧 `.agents/.skill-lock.json` を root に移します。
 
+独自 lock は version 1 で、取得元対応を `upstreams`、確認済み hash を
+`acceptedHashes` に保存します。`add`・`merge`・`update` は取得情報だけを更新し、
+`record` は取得をせず確認済み hash だけを更新します。`remove` は対象の登録と hash を削除します。
+
+独自 lock がなければ、旧 `.agents/skillctrl/upstreams.json` と
+`.agents/skillctrl/intents/lock.json` を読みます。次の独自 lock 書き込みが成功した時点で
+両方を統合して旧ファイルを削除します。新しい内容を受理することはありません。
+`check` と dry run は移行しません。統合後は独自 lock を優先し、古いファイルから
+削除済みの登録を復活させません。旧 skillctrl は統合した lock を読めないため、
+移行後は新しい CLI を使います。
 
 ## 手順
 
@@ -111,7 +121,7 @@ CI は任意です。通常の CLI には reviewer やモデルの設定は不�
 エディタや今使っている agent で直接編集し、確認後に record します。
 
 `record NAME` は現在の skill ディレクトリ全体から hash を計算し、
-`.agents/skillctrl/intents/lock.json` の NAME の値を作成・置換します。
+`.agents/skillctrl/lock.json` の `acceptedHashes` にある NAME の値を作成・置換します。
 NAME は対象 skill 名で、hash を渡す引数ではありません。同じ内容なら同じ hash になります。
 native の登録と原本の追跡情報は更新しません。
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
@@ -133,10 +143,10 @@ upstream の取得は明示的な `update` で行います。upstream の更新�
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 # Edit and verify the skill against its saved intent
 skillctrl record chosen-skill
-git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
 単体 skill は原本が変わると本文を置き換え、merged skill は登録した references を
@@ -208,9 +218,9 @@ skillctrl record combined
   探索・導入仕様に従い、skillctrl は取得した skill の script を実行しません。
 - **更新で変わっていない原本は取り込みません。** これが手動適応を毎回失わずに保つ仕組みです。
 - **受理 hash。** native の登録は root の `skills-lock.json`、別名・統合・追加の取得情報は
-  `.agents/skillctrl/upstreams.json` に保存します。
-  `.agents/skillctrl/intents/lock.json`（version 2）は受け入れ済みの実体の
-  Git tree hash です。skill ディレクトリ全体（本文・reference・実行属性）が
+  `.agents/skillctrl/lock.json` に保存します。
+  同じ lock の `acceptedHashes` は、受け入れ済みの実体の Git tree hash です。
+  skill ディレクトリ全体（本文・reference・実行属性）が
   hash に含まれ、意図ファイルは含まれません。意図の変更・削除だけを理由に
   再適応が起動することはありません。取得元の skill を一意に選べない場合は拒否します。
   skill が削除されても intent が残っている場合は、

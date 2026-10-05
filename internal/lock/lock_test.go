@@ -233,11 +233,7 @@ func TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes(t *testing.T) {
 		t.Fatal(err)
 	}
 	current.Skills["local"] = "previous-local-hash"
-	data, err := json.Marshal(current)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.write(lock.Lock, string(data))
+	f.write(lock.Lock, mustStateJSON(t, current.Skills))
 	f.commit()
 	plan := f.selection(t)
 	equal(t, plan.Skills, []string{}, "handwritten edits are not selected")
@@ -413,4 +409,13 @@ func mustIntents(t *testing.T, dir string) map[string]bool {
 		t.Fatal(err)
 	}
 	return names
+}
+
+func mustStateJSON(t *testing.T, hashes map[string]string) string {
+	t.Helper()
+	data, err := json.Marshal(map[string]any{"version": 1, "upstreams": map[string]any{}, "acceptedHashes": hashes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

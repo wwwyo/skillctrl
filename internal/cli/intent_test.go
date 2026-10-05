@@ -14,10 +14,10 @@ import (
 
 func TestNamedAddAndIntentLifecycle(t *testing.T) {
 	h := newHarness(t)
-	original := h.read(lock.Lock)
+	original := h.acceptedBytes()
 	h.run(0, "add", "fixture/source", "--skill", "new-skill", "--name", "local-name")
 	entry := h.upstreamSkills()["local-name"].(map[string]any)
-	if entry["skill"] != "new-skill" || !bytes.Equal(original, h.read(lock.Lock)) || h.log() != "" {
+	if entry["skill"] != "new-skill" || !bytes.Equal(original, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("named acquisition changed intent acceptance or lost upstream identity")
 	}
 	body := h.read(".agents/skills/local-name/SKILL.md")
@@ -26,7 +26,7 @@ func TestNamedAddAndIntentLifecycle(t *testing.T) {
 	}
 	h.run(1, "record", "local-name")
 	h.write(".agents/skillctrl/intents/local-name.md", "Preserve the local workflow.\n")
-	if !bytes.Equal(original, h.read(lock.Lock)) || h.log() != "" {
+	if !bytes.Equal(original, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("saving intent reviewed or accepted content")
 	}
 	h.run(0, "record", "local-name")
@@ -37,10 +37,10 @@ func TestNamedAddAndIntentLifecycle(t *testing.T) {
 	h.writeOrigin("skills/new-skill/SKILL.md", manifest("canonical-new-skill", "changed original"))
 	h.originGit("add", "-A")
 	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "update named source")
-	accepted := h.read(lock.Lock)
+	accepted := h.acceptedBytes()
 	h.run(0, "check", "local-name")
 	h.run(0, "update", "local-name")
-	if !strings.Contains(string(h.read(".agents/skills/local-name/SKILL.md")), "changed original") || !bytes.Equal(accepted, h.read(lock.Lock)) || h.log() != "" {
+	if !strings.Contains(string(h.read(".agents/skills/local-name/SKILL.md")), "changed original") || !bytes.Equal(accepted, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("named update failed to refresh its original without accepting it")
 	}
 	if err := os.Remove(filepath.Join(h.root, lock.Intents, "local-name.md")); err != nil {
@@ -61,7 +61,7 @@ func TestNamedAddAndIntentLifecycle(t *testing.T) {
 
 func TestPureMergeProducesRoutingWithoutIntent(t *testing.T) {
 	h := newHarness(t)
-	before := h.read(lock.Lock)
+	before := h.acceptedBytes()
 	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
 	body := string(h.read(".agents/skills/combined/SKILL.md"))
 	for _, ref := range []string{"references/manual/SKILL.md", "references/new-skill/SKILL.md"} {
@@ -72,7 +72,7 @@ func TestPureMergeProducesRoutingWithoutIntent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !bytes.Equal(before, h.read(lock.Lock)) || h.log() != "" {
+	if !bytes.Equal(before, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("pure merge reviewed or accepted content")
 	}
 	if _, err := os.Stat(filepath.Join(h.root, ".agents/skillctrl/intents/combined.md")); !os.IsNotExist(err) {
@@ -84,7 +84,7 @@ func TestPureMergeProducesRoutingWithoutIntent(t *testing.T) {
 	if !strings.Contains(body, "[new-skill](references/new-skill/SKILL.md)") {
 		t.Fatal("reconfigured merge kept outdated routing")
 	}
-	if !bytes.Equal(before, h.read(lock.Lock)) {
+	if !bytes.Equal(before, h.acceptedBytes()) {
 		t.Fatal("reconfigured merge accepted content")
 	}
 }
@@ -127,11 +127,11 @@ func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.
 		}
 	}
 	var registration map[string]any
-	if err := json.Unmarshal(h.read(".agents/skillctrl/upstreams.json"), &registration); err != nil {
+	if err := json.Unmarshal(h.read(".agents/skillctrl/lock.json"), &registration); err != nil {
 		t.Fatal(err)
 	}
-	delete(registration["skills"].(map[string]any)["combined"].(map[string]any), "sourceLayout")
-	h.write(".agents/skillctrl/upstreams.json", mustJSON(registration))
+	delete(registration["upstreams"].(map[string]any)["combined"].(map[string]any), "sourceLayout")
+	h.write(".agents/skillctrl/lock.json", mustJSON(registration))
 	legacyBody := "Legacy routing to .skillctrl-sources/0/SKILL.md and .skillctrl-sources/1/SKILL.md.\n"
 	h.write(".agents/skills/combined/SKILL.md", legacyBody)
 	h.commitAll()

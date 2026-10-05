@@ -1,16 +1,15 @@
 // Package lock records accepted skill trees and selects the hashes that still
 // differ from acceptance.
 //
-// Upstream tracking describes where a skill came from; the accepted lock in this package records what the maintainer has
-// accepted for an upstream-managed skill with saved intent. Other skills remain outside
-// this management. Only Git tree object IDs are stored, so a hash covers the
+// Provenance and accepted hashes share the private skillctrl lock. This package
+// selects and advances only hashes for upstream-managed skills with saved intent.
+// Other skills remain outside acceptance. Git tree object IDs cover the
 // whole skill directory including body, references, scripts, and executable
 // bits, and never covers the intent document itself.
 package lock
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
-	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
@@ -27,7 +26,7 @@ import (
 const (
 	Skills  = ".agents/skills/"
 	Intents = ".agents/skillctrl/intents/"
-	Lock    = Intents + "lock.json"
+	Lock    = skillstate.Lock
 	Version = 2
 )
 
@@ -134,30 +133,20 @@ func copySkills(input map[string]string) map[string]string {
 
 // Local reads accepted hashes including uncommitted local updates.
 func Local(dir string) (Entry, error) {
-	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(Lock)))
-	if errors.Is(err, os.ErrNotExist) {
-		return Empty(), nil
-	}
+	state, err := skillstate.Local(dir)
 	if err != nil {
 		return Entry{}, err
 	}
-	return Parse(data)
+	return Entry{Version: Version, Skills: state.AcceptedHashes}, nil
 }
 
 // Read loads accepted hashes from the selected commit.
 func Read(dir, ref string) (Entry, error) {
-	tree, err := entries(dir, ref, Intents, false)
+	state, err := skillstate.Read(dir, ref)
 	if err != nil {
 		return Entry{}, err
 	}
-	if _, ok := tree[Lock]; !ok {
-		return Empty(), nil
-	}
-	out, err := gitx.Output(dir, "show", ref+":"+Lock)
-	if err != nil {
-		return Entry{}, err
-	}
-	return Parse(out)
+	return Entry{Version: Version, Skills: state.AcceptedHashes}, nil
 }
 
 // IntentRegistered limits acceptance to upstream-managed skills with saved intent.
@@ -227,7 +216,7 @@ func Select(current, recorded Entry, intents map[string]bool, registered map[str
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}
-		for _, relative := range []string{upstream.Lock, upstream.LegacyLock, upstream.Tracking} {
+		for _, relative := range []string{upstream.Lock, upstream.LegacyLock, skillstate.Lock, skillstate.LegacyUpstreams, skillstate.LegacyAccepted} {
 			registered, err := entries(dir, "HEAD", relative, false)
 			if err != nil {
 				return "", err
@@ -282,32 +271,13 @@ func Record(dir string, current, recorded Entry, names []string, eligible map[st
 		}
 	}
 	result := Entry{Version: Version, Skills: values}
-	path := filepath.Join(dir, filepath.FromSlash(Lock))
-	if _, err := os.Stat(path); err == nil {
-		existing, err := os.ReadFile(path)
-		if err == nil {
-			var previous Entry
-			if json.Unmarshal(existing, &previous) == nil && sameSkills(previous, result) {
-				// Rewriting an unchanged lock would dirty the working tree for
-				// no reason and hide "the lock did not move" from the caller.
-				return result, nil
-			}
-		}
+	state, err := skillstate.Local(dir)
+	if err != nil {
+		return Entry{}, err
 	}
-	if err := jsonfmt.WriteFile(path, result); err != nil {
+	state.AcceptedHashes = values
+	if err := skillstate.Write(dir, state); err != nil {
 		return Entry{}, err
 	}
 	return result, nil
-}
-
-func sameSkills(a, b Entry) bool {
-	if len(a.Skills) != len(b.Skills) {
-		return false
-	}
-	for name, hash := range a.Skills {
-		if b.Skills[name] != hash {
-			return false
-		}
-	}
-	return true
 }

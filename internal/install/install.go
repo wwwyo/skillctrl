@@ -14,6 +14,7 @@ import (
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/lock"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
@@ -160,23 +161,10 @@ func Import(repo, target, upstreamLock string) error {
 		if err := upstream.ValidateTracking(tracking); err != nil {
 			return err
 		}
-		for _, relative := range []string{".agents", ".agents/skillctrl"} {
-			info, err := os.Lstat(filepath.Join(repo, relative))
-			if os.IsNotExist(err) {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				return fmt.Errorf("upstream tracking requires a real directory: %s", relative)
-			}
-		}
-		if info, err := os.Lstat(filepath.Join(repo, upstream.Tracking)); err == nil && !info.Mode().IsRegular() {
-			return fmt.Errorf("upstream tracking must be a regular file")
-		} else if err != nil && !os.IsNotExist(err) {
+		if err := skillstate.ValidateDestination(repo); err != nil {
 			return err
 		}
+
 	}
 	existing := filepath.Join(repo, filepath.FromSlash(SkillsDir))
 	before, err := os.ReadDir(existing)
@@ -282,11 +270,18 @@ func Import(repo, target, upstreamLock string) error {
 		}
 	}
 	if trackingErr == nil {
-		path := filepath.Join(repo, upstream.Tracking)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		private, err := skillstate.Parse(tracking)
+		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, tracking, 0o644); err != nil {
+		// Acquisition may take minutes. Preserve acceptance recorded while it
+		// was preparing originals rather than restoring the prepared snapshot.
+		latest, err := skillstate.Local(repo)
+		if err != nil {
+			return err
+		}
+		private.AcceptedHashes = latest.AcceptedHashes
+		if err := skillstate.Write(repo, private); err != nil {
 			return err
 		}
 	}
@@ -394,7 +389,7 @@ func Selection(repo string) (lock.Selection, error) {
 	if err != nil {
 		return lock.Selection{}, err
 	}
-	recorded, err := lock.Local(repo)
+	recorded, err := lock.Read(repo, tree)
 	if err != nil {
 		return lock.Selection{}, err
 	}

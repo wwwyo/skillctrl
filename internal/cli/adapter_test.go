@@ -143,7 +143,7 @@ func TestCheckReportsSelectedLocalDriftWithoutAcceptingIt(t *testing.T) {
 	h.write(".agents/skills/new-skill/SKILL.md", manifest("new-skill", "new skill local edit"))
 	h.write("notes.md", "unrelated staged notes\n")
 	h.git("add", "--", "notes.md")
-	index, accepted := h.read(".fixture-git/index"), h.read(".agents/skillctrl/intents/lock.json")
+	index, accepted := h.read(".fixture-git/index"), h.acceptedBytes()
 	before := h.git("status", "--porcelain")
 	result := h.run(0, "check", "manual")
 	local := result["local"].(map[string]any)
@@ -154,7 +154,7 @@ func TestCheckReportsSelectedLocalDriftWithoutAcceptingIt(t *testing.T) {
 	}
 	local = h.run(0, "check")["local"].(map[string]any)
 	equal(t, list(local["skills"]), []string{"manual"}, "only intent-bound local drift")
-	if h.git("status", "--porcelain") != before || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(accepted, h.read(".agents/skillctrl/intents/lock.json")) || h.log() != "" {
+	if h.git("status", "--porcelain") != before || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(accepted, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("check changed files, staging, acceptance, or invoked a reviewer")
 	}
 }

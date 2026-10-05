@@ -8,16 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
 )
 
 // Tracking holds skillctrl-only registrations; the native project lock keeps
 // only entries that the skills CLI can restore without interpreting extensions.
-const Tracking = ".agents/skillctrl/upstreams.json"
+const Tracking = skillstate.Lock
 
 // PreparedTracking is the staged companion of the prepared native project lock.
-const PreparedTracking = "skillctrl-upstreams.json"
+const PreparedTracking = "skillctrl-lock.json"
 
 // PreparedNative is the native-only project lock staged beside import results.
 const PreparedNative = "native-skills-lock.json"
@@ -28,38 +28,11 @@ func Load(dir string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, relative := range []string{".agents", ".agents/skillctrl"} {
-		info, err := os.Lstat(filepath.Join(dir, relative))
-		if os.IsNotExist(err) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if !info.IsDir() {
-			return nil, fmt.Errorf("upstream tracking requires a real directory: %s", relative)
-		}
-	}
-	path := filepath.Join(dir, filepath.FromSlash(Tracking))
-	info, err := os.Lstat(path)
-	if os.IsNotExist(err) {
-		return combine(native, nil)
-	}
+	private, err := skillstate.Local(dir)
 	if err != nil {
 		return nil, err
 	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("upstream tracking must be a regular file: %s", Tracking)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	tracking, err := parseLock(data)
-	if err != nil {
-		return nil, err
-	}
-	return combine(native, tracking)
+	return combineState(native, private)
 }
 
 // Read reads both registration files from the same immutable Git tree.
@@ -68,17 +41,15 @@ func Read(dir, ref string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	listing, err := gitx.Output(dir, "ls-tree", ref, "--", Tracking)
+	private, err := skillstate.Read(dir, ref)
 	if err != nil {
 		return nil, err
 	}
-	if len(listing) == 0 {
-		return combine(native, nil)
-	}
-	if !strings.HasPrefix(string(listing), "100644 blob ") && !strings.HasPrefix(string(listing), "100755 blob ") {
-		return nil, fmt.Errorf("upstream tracking must be a regular file: %s", Tracking)
-	}
-	data, err := gitx.Output(dir, "show", ref+":"+Tracking)
+	return combineState(native, private)
+}
+
+func combineState(native *Record, private *skillstate.Record) (*Record, error) {
+	data, err := jsonfmt.Compact(map[string]any{"version": Version, "skills": private.Upstreams})
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +57,12 @@ func Read(dir, ref string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	return combine(native, tracking)
+	result, err := combine(native, tracking)
+	if err != nil {
+		return nil, err
+	}
+	result.state = private
+	return result, nil
 }
 
 func sameRegistration(a, b any) bool {
@@ -98,7 +74,7 @@ func sameRegistration(a, b any) bool {
 func combine(native, tracking *Record) (*Record, error) {
 	result := *native
 	result.Skills = maps.Clone(native.Skills)
-	result.native, result.tracking = native, tracking
+	result.native = native
 	if tracking == nil {
 		return &result, nil
 	}
@@ -172,9 +148,6 @@ func writeRecord(path string, value, previous *Record) error {
 func (record *Record) writePrepared(directory, combinedPath string) error {
 	native := &Record{Version: record.Version, Skills: map[string]any{}, Extra: maps.Clone(record.Extra)}
 	tracking := &Record{Version: Version, Skills: map[string]any{}}
-	if record.tracking != nil {
-		tracking.Extra = maps.Clone(record.tracking.Extra)
-	}
 	for name, raw := range record.Skills {
 		entry := raw.(map[string]any)
 		previous, _ := record.native.Skills[name].(map[string]any)
@@ -201,14 +174,13 @@ func (record *Record) writePrepared(directory, combinedPath string) error {
 	if err := writeRecord(combinedPath, record, nil); err != nil {
 		return err
 	}
-	if len(tracking.Skills) > 0 || record.tracking != nil {
-		return writeRecord(filepath.Join(directory, PreparedTracking), tracking, record.tracking)
-	}
-	return nil
+	private := *record.state
+	private.Upstreams = tracking.Skills
+	return jsonfmt.WriteFile(filepath.Join(directory, PreparedTracking), &private)
 }
 
 // ValidateTracking checks that private metadata can be imported as a record.
 func ValidateTracking(data []byte) error {
-	_, err := parseLock(data)
+	_, err := skillstate.Parse(data)
 	return err
 }

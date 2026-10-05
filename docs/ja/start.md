@@ -116,8 +116,7 @@ mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 .agents/skills/<name>/                  skill body and bundled resources
 .agents/skillctrl/intents/<name>.md     optional local customization requirements
 skills-lock.json                      native upstream registrations at repository root
-.agents/skillctrl/upstreams.json        aliases, merged inputs, supplemental provenance
-.agents/skillctrl/intents/lock.json     recorded hashes for upstream + intent skills
+.agents/skillctrl/lock.json             provenance and explicitly recorded hashes
 ```
 
 プロジェクト用 lock は root の `skills-lock.json` に保持します。
@@ -134,7 +133,7 @@ skill だけが対象です。導入に CI、scheduler、モデルの credential
 導入先の `.agents/skills/skillctrl/SKILL.md` を読み、相対パスで参照するリソースを確認します。
 特定した CLI の実行方法で `skillctrl list` を実行し、`skillctrl` が一覧にあることを確認します。
 新しいファイル、リポジトリの差分、root の `skills-lock.json` と、あれば
-`.agents/skillctrl/upstreams.json` を確認します。
+`.agents/skillctrl/lock.json` を確認します。
 結果に含まれる `repo` は、選んだ checkout を示している必要があります。
 
 現在の agent が skill を探索する設定を確認し、既存のリポジトリ用 skill ディレクトリの規約を使います。

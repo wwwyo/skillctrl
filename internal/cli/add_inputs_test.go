@@ -37,7 +37,7 @@ func TestAddInputsTracksSeparateSourcesAndNames(t *testing.T) {
 	if h.upstreamSkills()["new-skill"].(map[string]any)["source"] != "fixture/second" || h.upstreamSkills()["manual"].(map[string]any)["source"] != "fixture/source" {
 		t.Fatal("separate source registrations lost their identity")
 	}
-	if !bytes.Equal(h.originalLock, h.read(".agents/skillctrl/intents/lock.json")) || !bytes.Equal(index, h.read(".fixture-git/index")) || h.log() != "" {
+	if !bytes.Equal(h.originalLock, h.acceptedBytes()) || !bytes.Equal(index, h.read(".fixture-git/index")) || h.log() != "" {
 		t.Fatal("add inputs reviewed, accepted, or changed staging")
 	}
 	h.commitAll()
@@ -72,7 +72,7 @@ func TestAddInputsRejectsInvalidInputsWithoutAcquisition(t *testing.T) {
 		}
 	}
 	h.run(0, "add", "fixture/source:new-skill", "--dry-run")
-	if before != h.git("status", "--porcelain") || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || !bytes.Equal(h.originalLock, h.read(".agents/skillctrl/intents/lock.json")) || h.log() != "" {
+	if before != h.git("status", "--porcelain") || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || !bytes.Equal(h.originalLock, h.acceptedBytes()) || h.log() != "" {
 		t.Fatal("invalid inputs or dry run changed project state")
 	}
 }
@@ -93,7 +93,7 @@ func TestAddInputsPreparesEveryInputBeforeImporting(t *testing.T) {
 			h.git("add", "notes.md")
 			before, index := h.git("status", "--porcelain"), h.read(".fixture-git/index")
 			h.run(1, "add", "fixture/source:new-skill", "fixture/source:"+second)
-			if before != h.git("status", "--porcelain") || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || !bytes.Equal(h.originalLock, h.read(".agents/skillctrl/intents/lock.json")) || h.log() != "" {
+			if before != h.git("status", "--porcelain") || !bytes.Equal(index, h.read(".fixture-git/index")) || !bytes.Equal(h.originalUpstream, h.read("skills-lock.json")) || !bytes.Equal(h.originalLock, h.acceptedBytes()) || h.log() != "" {
 				t.Fatal("failed batch partially imported or accepted a skill")
 			}
 		})

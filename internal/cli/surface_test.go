@@ -189,7 +189,7 @@ func TestInjectedVersionWins(t *testing.T) {
 // stdout free for results.
 func TestFailuresAreJSONOnStderr(t *testing.T) {
 	h := newHarness(t)
-	h.write(".agents/skillctrl/intents/lock.json", "invalid lock\n")
+	h.write(".agents/skillctrl/lock.json", "invalid lock\n")
 	stdout, stderr, code := h.try("check")
 	if code != 1 {
 		t.Fatalf("exit %d want 1", code)
