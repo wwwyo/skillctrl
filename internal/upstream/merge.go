@@ -7,12 +7,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/wwwyo/skillctrl/internal/gitx"
 )
 
 // SourceDirectory holds immutable originals inside a merged skill. Keeping the
-// originals in the skill tree binds review and CI to the same fetched inputs.
+// originals in the skill tree includes them in the whole-directory hash.
 const SourceDirectory = "references"
 
 // LegacySourceDirectory is the original numeric snapshot layout.
@@ -273,84 +271,4 @@ func mergeSkill(dir, name, target string, previous map[string]any, inputs []Inpu
 		result["sourceLayout"] = SourceDirectory
 	}
 	return result, nil
-}
-
-// ValidateMergedImport checks source identities, original hashes, and output
-// preservation independently of the process that fetched scheduled inputs.
-func ValidateMergedImport(dir, base, tree, name string, previous, current map[string]any) error {
-	oldSources, err := sources(previous, name)
-	if err != nil {
-		return err
-	}
-	newSources, err := sources(current, name)
-	if err != nil {
-		return err
-	}
-	if _, ok := current["sources"]; !ok {
-		return fmt.Errorf("scheduled update changed upstream identity: %s", name)
-	}
-	if _, ok := previous["sources"]; !ok || len(oldSources) != len(newSources) {
-		return fmt.Errorf("scheduled update changed upstream identity: %s", name)
-	}
-	if current["sourceLayout"] != previous["sourceLayout"] {
-		return fmt.Errorf("scheduled update changed source layout: %s", name)
-	}
-	paths, err := SourcePaths(current, name)
-	if err != nil {
-		return err
-	}
-	prefix := ".agents/skills/" + name + "/"
-	arguments := []string{"ls-tree", "-z", tree, "--"}
-	for _, path := range paths {
-		arguments = append(arguments, prefix+path)
-	}
-	listing, err := gitx.Output(dir, arguments...)
-	if err != nil {
-		return err
-	}
-	snapshots := map[string]treeFile{}
-	for _, row := range strings.Split(string(listing), "\x00") {
-		if row == "" {
-			continue
-		}
-		metadata, path, found := strings.Cut(row, "\t")
-		fields := strings.Fields(metadata)
-		if !found || len(fields) != 3 {
-			return fmt.Errorf("invalid imported source snapshot: %s", name)
-		}
-		snapshots[path] = treeFile{mode: fields[0], kind: fields[1], oid: fields[2]}
-	}
-	for index, value := range newSources {
-		old := oldSources[index]
-		if field(value, "source") != field(old, "source") || field(value, "skill") != field(old, "skill") {
-			return fmt.Errorf("scheduled update changed upstream identity: %s", name)
-		}
-		snapshot, found := snapshots[prefix+paths[index]]
-		if !found || snapshot.oid != field(value, "skillFolderHash") {
-			return fmt.Errorf("imported source differs from its original hash: %s", name)
-		}
-		if snapshot.kind != "tree" || snapshot.mode != "040000" {
-			return fmt.Errorf("imported source snapshot is not a directory: %s", name)
-		}
-	}
-	out, err := gitx.Output(dir, "diff", "--name-only", "-z", "--no-renames", base, tree, "--", ".agents/skills/"+name+"/")
-	if err != nil {
-		return err
-	}
-	for _, path := range strings.Split(string(out), "\x00") {
-		if path == "" {
-			continue
-		}
-		allowed := false
-		for _, snapshot := range paths {
-			if strings.HasPrefix(path, prefix+snapshot+"/") {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return fmt.Errorf("upstream import changed merged output: %s", name)
-		}
-	}
-	return nil
 }

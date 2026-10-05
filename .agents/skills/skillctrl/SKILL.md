@@ -149,7 +149,7 @@ skillctrl check
 `record NAME` computes the current whole skill-directory hash and creates or
 replaces NAME in the accepted lock. NAME selects a skill, not a supplied hash.
 Only upstream-registered skills with saved intent are eligible; caller staging is preserved. It does not review or adapt the skill. Handwritten
-skills are excluded from accepted hashes, checks, and automatic intent review,
+skills are excluded from accepted hashes, checks, and local hash checks,
 even if they have an intent document; do not run `record` for them or invent an
 upstream registration. Legacy handwritten hashes are pruned on the next
 accepted-lock write. Do not edit the lock JSON by hand.
@@ -170,8 +170,8 @@ update uses the stored upstream name; check reads only local accepted hashes.
 State the actual working copy, selected source and names, changed paths, checks
 performed, unresolved items, and any remaining integration step. Distinguish
 files changed in the selected repository from skills enabled in the user's active agent.
-Reserve `ci` and `schedule` publication commands for an explicit CI integration
-task; they have different side effects from local management commands.
+Local and automated work use the same commands. Keep agent execution, timers,
+repository checks, and draft PR publication in the caller's workflow.
 
 ## Acquisition adapters
 
@@ -179,7 +179,7 @@ Use the shared `find/add/list/check/update/remove` commands. `install`, `search`
 `ls`, and `rm` are aliases. `check` reports local accepted-hash drift offline,
 with optional skill names. It contacts no upstreams and invokes no acquisition
 adapter or reviewer. Upstream
-acquisition belongs to explicit `update` or `schedule prepare`. CI-only helpers are `ci plan` and `ci prompt`. Default acquisition uses the
+acquisition belongs to explicit `update`. Default acquisition uses the
 pinned `skills` executable. Select `--adapter gh` for GitHub CLI or `--adapter git`
 for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in
 disposable staging and the project lock remains at root `skills-lock.json`.

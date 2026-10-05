@@ -40,7 +40,7 @@ jobs:
           mkdir smoke
           tar -xzf "dist/skillctrl_0.0.0_${platform}.tar.gz" -C smoke
           test "$(smoke/skillctrl --version)" = 'skillctrl version v0.0.0'
-          smoke/skillctrl ci --help
+          smoke/skillctrl check --help
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-smoke-${{ matrix.os }}

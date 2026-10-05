@@ -98,7 +98,6 @@ skillctrl check chosen-skill
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
 | `merge` | skillctrl-specific routing skill containing ordered upstream originals; no intent or AI required. |
 | `record` | Compute current skill-directory hashes and create or replace the named lock entries after verifying content yourself. |
-| `ci`, `schedule` | Optional automation; `ci plan` selects fixed-commit inputs and `ci prompt` provides reviewer instructions. |
 
 Acquisition runs in a disposable directory and home, so installer-owned global
 locks do not replace or relocate the project's root `skills-lock.json`. Only
@@ -113,7 +112,7 @@ backend; switching backends can produce a different original to inspect and cust
 Do not interpret the adapters as identical upstream resolvers. The direct Git
 backend records source commits; command adapters record paths and content hashes
 without inventing a commit identifier. Intent review, import protection, accepted
-hashes, and CI validation are shared by all adapters.
+hashes are shared by all adapters.
 
 Adapter selection is per invocation. Backend discovery, source resolution and
 file modes may differ; choose an adapter explicitly when that distinction matters.
@@ -136,26 +135,16 @@ it records your acceptance rather than verifying that the saved intent is met.
 use `check [NAME...]` to inspect local drift.
 Only named upstream-registered skills with saved intent advance; other eligible hashes remain unchanged. Ineligible entries are pruned. With no names, `record` only prunes ineligible entries and accepts no content, including after every intent file has been deleted.
 
-`ci plan` selects from fixed commits for a CI job without fetching upstreams.
-`ci prompt` prints the embedded review instructions after preparation, for the
-external job to pass to its reviewer. These helpers live under `ci` and are not
-needed for local editing or recording.
-
 `check` reports local drift in `local` without contacting upstreams. It compares
 skill-directory hashes with the accepted lock and does not run a model to assess
 whether the current instructions satisfy the intent. Differences are reported
 in JSON, not treated as command failures. With no names, it checks all skills
 with both upstream registration and saved intent; explicit names select a subset.
-CI uses fixed commits so another job can recompute the
-exact review input. Upstream changes are acquired only by an explicit `update`
-or `schedule prepare`; a new upstream version alone does not change local
-acceptance or the CI plan.
-
-`ci` separates preparation, agent-output validation, and publication for a
-pull-request workflow. `schedule` prepares upstream updates and can publish a
-draft update PR after validation. Neither installs a workflow nor starts a
-timer: an external CI platform or scheduler must call the phases described in
-[CI integration](ci.md).
+Upstream changes are acquired only by an explicit `update`; a new upstream
+version alone does not change local acceptance. Local and automated updates use
+the same commands. A CI job can fail on `.local.lock_changed` in the check JSON;
+a scheduler calls `update` before review, editing, and explicit recording.
+See [CI integration](ci.md) for the common flow.
 
 To update originals deliberately, first inspect local customization, then run:
 
@@ -175,12 +164,9 @@ result, then run `record chosen-skill` to accept it. Intent-free skills remain
 outside the accepted lock. Inspect the resulting changes before committing them.
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `0` means success
-and exit `1` means failure. These local
-commands change the selected repository in place and never commit, push, or open
-a pull request. The `ci` and `schedule` phases are the deliberate exception: they
-exist to commit a validated repair, push it, and report on the pull request, and
-they are documented separately in [CI integration](ci.md).
-
+and exit `1` means failure. Commands operate in the current repository and never
+start AI, commit, push, or open a pull request. External automation uses the same
+commands and manages its own agent, timer, and draft PR.
 
 ## Merge upstream skills
 
@@ -249,8 +235,7 @@ combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs 
 - **The accepted hash covers the whole skill directory** - body, references,
   scripts, and executable mode - and never the intent document. Changing or
   deleting an intent is a decision in itself and never triggers adaptation on its
-  own. An ambiguous skill is left untouched with its old hash and reported as
-  unresolved. A deleted skill with a surviving intent is reported, not restored.
+  own. An ambiguous upstream selection is refused. A deleted skill with a surviving intent is reported, not restored.
 - **Pending edits are allowed.** `add`, `merge`, `update`, and `remove` preserve
   unrelated working files and the caller's staging area. An import that would
   replace a skill directory containing pending edits is refused before any skill
@@ -258,12 +243,8 @@ combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs 
   and linked worktrees are both modified in place. skillctrl never creates a
   worktree or changes the working directory. Run commands from the target repository;
   change repositories with `cd` before invoking skillctrl.
-- **AI execution belongs to the external workflow.** Local commands do not
-  start a reviewer. CI preparation provides trusted configuration and review
-  instructions; the adopting workflow runs its agent and supplies the artifacts.
-  `skillctrl ci apply` applies a validated patch to the Git index only.
-- **Agent output is untrusted.** A separate, credential-free path re-derives the
-  plan and refuses an edit outside the selected skills, an incomplete
-  accepted/unresolved partition, a changed unresolved skill, or the inference
-  credential appearing in a report, result, patch, or staged blob. See
-  [CI integration](ci.md) for the exact contract.
+- **Review and publication belong to the caller.** skillctrl does not launch AI
+  or validate an agent's judgment. Verify the skill against its saved intent
+  before recording it. Automation should use the same checks and keep scope,
+  tests, credentials, and PR publication in its repository-owned workflow; see
+  [CI integration](ci.md).

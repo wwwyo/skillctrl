@@ -1,8 +1,8 @@
 # Source behavior to Go test parity
 
-This table maps each behavior of the previous implementation to the Go code and
-the test that pins it. A row marked as a gap names what is not covered and why;
-no row is listed because it is unimportant.
+This table maps current supported behaviors to Go code and observable tests.
+Acquisition and accepted hashes retain their safety contracts; external
+automation replaces the previous internal CI phase protocol.
 
 The fixtures are ports, not transcriptions: they run the real binary against
 throwaway Git repositories and fake upstreams reached through Git's
@@ -43,22 +43,18 @@ These behaviors extend the previous single-source implementation.
 | An ignored merged entrypoint is refused; the first merge in a main checkout uses the current empty skills directory | `internal/upstream.mergeSkill`, `internal/install.PrepareSkills` | `TestMergeDryRunAndPreparationFailureDoNotWrite`, `TestFirstMergeUsesTheMainCheckout` |
 | Malformed or duplicate source registrations are refused; legacy records are preserved | `internal/upstream.Load`, `internal/upstream.sources` | `TestSourcesArrayRejectsInvalidIdentitiesAndPreservesLegacyRecords` |
 | Inputs from separate repositories follow relocation and retain executable modes; snapshot manifests are not independently discovered | `internal/upstream.mergeSkill`, `internal/upstream.indexSkills` | `TestMergedSourcesFromDifferentRepositoriesFollowRelocations` |
-| Scheduled preparation validates every original and preserves output until review | `internal/upstream.ValidateMergedImport` | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
-
-CI inference uses an external stub reviewer. Live multi-source synthesis and
-hosted scheduled publication are unverified.
 
 ## Accepted hashes and selection
 
 | Behavior | Go code | Test |
 | --- | --- | --- |
 | A hash covers the whole skill directory, including executable mode | `internal/lock.Snapshot` | `TestExecutableBitIsCovered` |
-| An accepted hash stops review | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
-| Only upstream-registered skills with intent enter accepted hashes and review; handwritten intents do not opt in | `internal/lock.Select`, `internal/cli.runRecord` | `TestUpstreamOperationsIgnoreHandwrittenSkills`, `TestHandwrittenRepositoryNeedsNoLockOrReview` |
-| Legacy handwritten hashes are pruned without reviewing or changing their content | `internal/lock.Select`, `internal/lock.Record` | `TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes`, `TestRecordPrunesLegacyHandwrittenHashesWithoutReview`, `TestApplyPrunesHandwrittenHashesWithoutReviewOrContentChanges` |
+| Matching an accepted hash clears content drift | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
+| Only upstream-registered skills with intent enter accepted hashes and drift selection; handwritten intents do not opt in | `internal/lock.Select`, `internal/cli.runRecord` | `TestUpstreamOperationsIgnoreHandwrittenSkills`, `TestHandwrittenRepositoryNeedsNoLockOrReview` |
+| Legacy handwritten hashes are pruned without reviewing or changing their content | `internal/lock.Select`, `internal/lock.Record` | `TestSelectionIgnoresHandwrittenSkillsAndPrunesLegacyHashes`, `TestRecordPrunesLegacyHandwrittenHashesWithoutReview` |
 | An intent change alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | An intent deletion alone never triggers adaptation | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
-| A removed skill with a surviving intent is reported, not restored | `internal/lock.Compare` | `TestHashesDetectUnrecordedEdits`, `TestAcceptedRequiresACompletePartition/removed_skill...` |
+| A removed skill with a surviving intent is reported, not restored | `internal/lock.Select` | `TestHashesDetectUnrecordedEdits` |
 | Recording a removed skill clears its entry | `internal/lock.Record` | `TestRecordPreservesUnrelatedEntries` |
 | The working tree is hashed through a private index | `internal/lock.WorkingTree` | `TestWorkingTreePreserveStaging` |
 | An unsupported lock version is refused | `internal/lock.Parse` | `TestParseRejectsUnsupportedLocks` |
@@ -76,59 +72,13 @@ hosted scheduled publication are unverified.
 | Search results are bounded and unusable entries are skipped | `internal/upstream.Find` | `TestFindBoundsAndSkips` |
 | Invalid search input never reaches the network | `internal/upstream.Find` | `TestFindBoundsAndSkips` |
 
-## Intent verification and CI
+## Automation uses basic commands
 
-| Behavior | Go code | Test |
-| --- | --- | --- |
-| Only the trusted tool pins and release policy are used | `internal/toolchain.Trusted`, `internal/adapt.Prepare` | `TestPrepareUsesOnlyTrustedPins` |
-| A version range is refused as a pin | `internal/toolchain.NodeVersion` | `TestToolchainRequiresExactPins` |
-| An incomplete trusted configuration is refused | `internal/toolchain.Trusted` | `TestToolchainRefusesAnIncompleteConfiguration` |
-| A moved head is refused | `internal/adapt.ValidateHead` | `TestPrepareRefusesHeadDrift`, `TestApplyRecordsFromTheIndexOnly` |
-| A plan or checker source that is not a commit is refused | `internal/adapt.ValidateHead`, `internal/toolchain.Trusted` | `TestTrustedSourceMustBeACommit`, `TestTrustedSourceMustBeACommit/plan_without_a_commit` |
-| A refused validation restores the caller's index exactly, including its own staged changes | `internal/adapt.saveIndex`, `internal/adapt.restoreIndex` | `TestApplyLeavesNoHalfValidatedRepair` |
-| The accepted hash comes from the validated index, not the working tree | `internal/adapt.Apply` | `TestApplyRecordsFromTheIndexOnly` |
-| Edits to an intent, another skill, or a policy file are refused | `internal/adapt.ValidatePaths` | `TestApplyRefusesEditsOutsideTheSelection` |
-| The accepted/unresolved partition must be complete and exact | `internal/adapt.Accepted` | `TestAcceptedRequiresACompletePartition` |
-| An unresolved skill must be unchanged | `internal/adapt.Accepted` | `TestAcceptedRequiresACompletePartition/unresolved_skill...` |
-| A credential is refused in the body, report, result, or a staged blob | `internal/adapt.ValidateSecret` | `TestWriteRepairArtifactRefusesCredentials` |
-| A missing credential is itself a refusal | `internal/adapt.ValidateSecret` | `TestWriteRepairArtifactRefusesCredentials/a_missing_credential...` |
-| The report is bounded before it reaches GitHub | `internal/adapt.ReadReport` | `TestReadReportBounds` |
-| A closed, moved, forked, or self-targeted pull request is refused | `internal/adapt.Publish` | `TestPublishRefusesAnythingButTheCurrentPullRequest` |
-| A rerun does not post a duplicate comment | `internal/adapt.Publish` | `TestPublishReportsOnce` |
-
-## Isolation of the reviewing agent
-
-These fixtures keep three directories apart - the caller's, the checkout under
-review, and the prepared trusted configuration - so a regression cannot pass by
-accident.
-
-| Behavior | Go code | Test |
-| --- | --- | --- |
-
-## Scheduled updates
-
-| Behavior | Go code | Test |
-| --- | --- | --- |
-| An unchanged original produces no work and no bundle | `internal/scheduled.Prepare` | `TestPrepareAndRestoreProduceAVerifiedInput/an_unchanged...` |
-| A changed original is validated before it becomes input | `internal/scheduled.ValidateImport` | `TestPrepareAndRestoreProduceAVerifiedInput/a_changed...` |
-| A forged plan does not restore | `internal/scheduled.Restore` | `TestPrepareAndRestoreProduceAVerifiedInput/the_input_restores...` |
-| An unregistered skill change is refused | `internal/scheduled.ValidateImport` | `TestValidateImportRefusesAnythingButOriginals/an_unregistered...` |
-| A changed upstream identity is refused | `internal/scheduled.ValidateImport` | `TestValidateImportRefusesAnythingButOriginals/a_changed_registration` |
-| A broken Claude link is refused | `internal/scheduled.ValidateImport` | `TestValidateImportRefusesAnythingButOriginals/a_broken_Claude_link` |
-| An added or removed registration is refused | `internal/scheduled.ValidateImport` | `TestValidateImportRefusesAnythingButOriginals/an_added_registration` |
-| A failing repository test stops publication | `internal/scheduled.Publish` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/a_failing...` |
-| A moved default branch stops publication | `internal/scheduled.Publish` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/a_moved...` |
-| A verified update opens one draft pull request | `internal/scheduled.Publish` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/a_verified...` |
-| An unresolved skill keeps the update unresolved | `internal/scheduled.Publish` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/an_unresolved...` |
-| An existing update is reused instead of duplicated | `internal/scheduled.OpenUpdate` | `TestPublishRunsVerificationBeforeOpeningAPullRequest/an_unresolved...` |
-
-## The documented CI sequence
-
-`TestDocumentedPhaseSequence` in `internal/integration` runs docs/ci.md end to
-end through the built binary: select, review in a checkout with no write
-permission, validate in a separate checkout, publish against a stubbed `gh` and
-a bare remote, and gate on the recomputed state. `TestPublishRefusesDryRun`
-proves no phase reaches the remote repository under `--dry-run`.
+The former CI and scheduled phase protocols are intentionally removed following
+the user's simplification decision. Their adaptation, publication, checker
+toolchain, and bundle fixtures are not part of the current contract. An external
+workflow uses `update`, direct review/editing, `record NAME`, and `check`; a fixed
+JSON predicate makes lock drift fail CI. See [CI integration](ci.md).
 
 ## Git plumbing
 
@@ -152,31 +102,16 @@ proves no phase reaches the remote repository under `--dry-run`.
 | Check reports selected local accepted-hash drift offline without accepting or reviewing | `internal/cli.newCheckCommand`, `internal/install.Selection` | `TestCheckReportsSelectedLocalDriftWithoutAcceptingIt`, `TestCheckIgnoresUpstreamChangesAndUnavailableAdapters` |
 | The bare invocation shows help | `internal/cli.New` | `TestBareInvocationShowsHelp` |
 | An argument or flag error exits non-zero with an explanation and a clean stdout | `internal/cli.Execute` | `TestArgumentErrorsAreReported` |
-| CI-only plan and prompt live under ci; removed top-level helpers are rejected | `internal/cli.newCICommand` | `TestHelpIsDiscoverable`, `TestArgumentErrorsAreReported`, `TestDocumentedPhaseSequence` |
 | A module installation reports its version without linker flags | `internal/cli.BuildVersion` | `TestVersionReflectsTheInstalledModule`, `TestInjectedVersionWins` |
-| `--dry-run` is refused where it cannot be honored | `internal/cli.rejectDryRun` | `TestDryRunIsRefusedWhereItCannotBeHonored`, `TestPublishRefusesDryRun` |
 | A failure is one JSON object on stderr | `internal/cli.fail` | `TestFailuresAreJSONOnStderr` |
 
 ## Gaps
 
-- **Live reviewer.** The reviewer is a stub in every test. Nothing here
-  demonstrates that a real model produces a patch that passes the same
-  validation; the contract is verified on both sides of the boundary only. The
-  real model, provider, and context window are unverified.
-- **Live `skills.sh`.** Search parsing runs against a fixed local response. The
-  public endpoint was exercised manually during this port (a real `find golang`
-  returned 20 usable entries), so the response shape matches today, but no test
-  pins it and it can change without notice.
-- **Live `mise`.** Trusted toolchain resolution is exercised through a stub that
-  reports its working directory and returns the environment. The real `mise env
-  --json` output shape is trusted, not verified here.
-- **`gh-aw` engine.** The sandbox handoff is driven by a harness in
-  `internal/adapt/testdata/engine.cjs` that mirrors the gh-aw engine's arguments
-  and steps. The real gh-aw sandbox, its AWF policy, and its credential redaction
-  are unverified; only the contract this tool defines is tested.
-- **Live `gh`.** Publication is exercised against a stubbed `gh` and a local bare
-  remote. The real GitHub API responses, permissions model, and
-  `gh auth setup-git` behavior are unverified.
+Acquisition fixtures use controlled sources. Public backend acquisition has also
+been exercised separately, but not every host, discovery convention, release,
+or locale is covered. Repository-specific agent review, hosted timers, scope
+lint, and PR publication are external integrations and are not verified by the
+CLI tests. A matching accepted hash does not prove intent satisfaction.
 
 ## Project lock compatibility
 
@@ -222,12 +157,6 @@ Native source tracking with a missing path is refused before export (`TestComman
 | --- | --- |
 | Re-merge retains handwritten references, removes obsolete originals, and rejects colliding names or unregistered reference overlap | `TestNamedMergePreservesUnregisteredReferencesAndRejectsCollisions` |
 | Legacy numeric layouts update in place; explicit merge migrates sources and routing | `TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences` |
-| Scheduled validation independently checks named and numeric snapshots, hashes, identities, and output preservation | `TestScheduledMergedInputsVerifyEachOriginalAndKeepOutputUntouched` |
-
-The public scheduled restore command recomputes the artifact plan without
-`SKILL_PLAN`; publication still requires the verified environment plan.
-`TestNamedScheduleRestoreRecomputesPlanWithoutEnvironmentPlan` exercises the
-documented prepare/restore sequence through the built binary.
 
 ## Shared upstream input syntax
 
@@ -247,12 +176,11 @@ documented prepare/restore sequence through the built binary.
 | Name-free record prunes ineligible hashes without accepting eligible edits, even after every intent is removed; skill content and staging remain unchanged | `TestRecordWithoutNamesOnlyPrunesIneligibleHashes` |
 | Removed intent commands and worktree-provider flags are rejected | `TestArgumentErrorsAreReported` |
 
-External review boundaries remain covered by `internal/adapt` and the public CLI
-phase sequence in `internal/integration`; local commands do not launch an agent.
-
 ## Native lock compatibility
 
 | Behavior | Implementation | Evidence |
 | --- | --- | --- |
 | Keep alias/merge registrations outside native root lock; preserve its bytes and caller staging | `internal/upstream.tracking`, `internal/install.Import` | `TestNamedAndMergedRegistrationsLeaveNativeLockUntouched` |
 | Emit native ordinary registrations; invalidate supplemental metadata after native edits/removal | `internal/upstream.combine`, `nativeEntry` | `TestOrdinaryNativeRegistrationWinsOverSupplementalMetadata` |
+
+| Legacy recognized provenance moves to private tracking only after successful import; future unknown fields remain native | `internal/upstream.nativeEntry` | `TestLegacyProvenanceMovesOutOfNativeLockOnlyOnImport` |

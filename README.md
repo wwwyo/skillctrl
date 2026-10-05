@@ -130,10 +130,9 @@ go to stderr. Exit `0` means success and `1` means failure.
 
 ## Optional automation
 
-`ci` prepares intent review for changes in a pull request, validates external
-agent output, and can publish a repair. `schedule` fetches upstream updates and
-can publish a draft update PR. An external workflow supplies the agent and timer;
-local commands need neither. See [CI integration](docs/ci.md) for the phases.
+CI checks the JSON from `check`; a scheduler calls `update`. Both use the same
+review, edit, and `record NAME` flow as local work. Your external workflow runs
+its agent and opens the draft PR. See [CI integration](docs/ci.md).
 
 ## Development
 

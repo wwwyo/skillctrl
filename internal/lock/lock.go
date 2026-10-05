@@ -1,8 +1,7 @@
 // Package lock records accepted skill trees and selects the hashes that still
-// need adaptation.
+// differ from acceptance.
 //
-// Two locks exist by design. The upstream lock describes where a skill came
-// from; the accepted lock in this package records what the maintainer has
+// Upstream tracking describes where a skill came from; the accepted lock in this package records what the maintainer has
 // accepted for an upstream-managed skill with saved intent. Other skills remain outside
 // this management. Only Git tree object IDs are stored, so a hash covers the
 // whole skill directory including body, references, scripts, and executable
@@ -24,7 +23,7 @@ import (
 )
 
 // Repository-relative locations. These are part of the on-disk contract and are
-// shared with the CI workflow, so they are constants rather than flags.
+// shared with the installer, so they are constants rather than flags.
 const (
 	Skills  = ".agents/skills/"
 	Intents = ".agents/skillctrl/intents/"
@@ -38,28 +37,17 @@ type Entry struct {
 	Skills  map[string]string `json:"skills"`
 }
 
-// Plan is the immutable selection handed to adaptation and to CI.
-type Plan struct {
-	Base         string            `json:"base"`
-	Head         string            `json:"head"`
-	Comparison   string            `json:"comparison"`
-	Skills       []string          `json:"skills"`
-	ReviewSkills []string          `json:"review_skills"`
-	InputTrees   map[string]string `json:"input_trees"`
-	NeedsReview  bool              `json:"needs_review"`
-	LockChanged  bool              `json:"lock_changed"`
+// Selection reports local hash differences for registered skills with saved intent.
+type Selection struct {
+	Skills       []string `json:"skills"`
+	ReviewSkills []string `json:"review_skills"`
+	NeedsReview  bool     `json:"needs_review"`
+	LockChanged  bool     `json:"lock_changed"`
 }
 
-// Empty returns a plan with the collection fields initialized, so that a plan
-// round-trips through JSON without turning empty lists into null. CI compares
-// stored plans against recomputed ones, and null versus [] would read as a
-// mismatch.
+// Empty returns an accepted lock with an initialized skills map.
 func Empty() Entry {
 	return Entry{Version: Version, Skills: map[string]string{}}
-}
-
-func emptyPlan() Plan {
-	return Plan{Skills: []string{}, ReviewSkills: []string{}, InputTrees: map[string]string{}}
 }
 
 // Entry is one result of a Git tree listing.
@@ -198,17 +186,15 @@ func IntentsAt(dir, ref string) (map[string]bool, error) {
 	return intents, nil
 }
 
-// Select chooses differing hashes for automatic review of registered skills
-// with intent. Intent changes alone do not trigger automatic review. Explicit
-// application can review a named skill even when its hash is already accepted.
-func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Plan {
+// Select reports differing hashes for registered skills with saved intent.
+// Intent documents do not participate in skill hashes.
+func Select(current, recorded Entry, intents map[string]bool, registered map[string]any) Selection {
 	registered = IntentRegistered(registered, intents)
-	plan := emptyPlan()
+	plan := Selection{Skills: []string{}, ReviewSkills: []string{}}
 	names := make([]string, 0, len(current.Skills)+len(recorded.Skills))
 	for name := range current.Skills {
 		if _, ok := registered[name]; ok {
 			names = append(names, name)
-			plan.InputTrees[name] = current.Skills[name]
 		}
 	}
 	for name := range recorded.Skills {
@@ -233,40 +219,6 @@ func Select(current, recorded Entry, intents map[string]bool, registered map[str
 	plan.NeedsReview = len(plan.ReviewSkills) > 0
 	plan.LockChanged = plan.LockChanged || len(plan.Skills) > 0
 	return plan
-}
-
-// Compare builds a full plan for CI, comparing skill hashes only against the
-// accepted lock at head.
-func Compare(dir, base, head, since string) (Plan, error) {
-	current, err := Snapshot(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	recorded, err := Read(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	comparison := base
-	if since != "" && exists(dir, since+"^{commit}") {
-		comparison = since
-	}
-	intents, err := IntentsAt(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	registered, err := upstream.Read(dir, head)
-	if err != nil {
-		return Plan{}, err
-	}
-	plan := Select(current, recorded, intents, registered.ManagedSkills())
-	plan.Base = base
-	plan.Head = head
-	plan.Comparison = comparison
-	return plan, nil
-}
-
-func exists(dir, object string) bool {
-	return gitx.Run(dir, "cat-file", "-e", object) == nil
 }
 
 // WorkingTree hashes selected working files through a private index so that the

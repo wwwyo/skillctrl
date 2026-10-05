@@ -17,7 +17,7 @@ import (
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
-// Paths shared with the accepted lock and the CI workflow.
+// Paths define the repository-local installation layout.
 const (
 	SkillsDir    = ".agents/skills"
 	ClaudeDir    = ".claude/skills"
@@ -385,37 +385,28 @@ func copyDirectory(source, destination string) error {
 
 // Selection returns the working-copy hashes using a private index and the
 // current intents.
-func Selection(repo string) (lock.Plan, error) {
+func Selection(repo string) (lock.Selection, error) {
 	tree, err := lock.WorkingTree(repo)
 	if err != nil {
-		return lock.Plan{}, err
+		return lock.Selection{}, err
 	}
 	current, err := lock.Snapshot(repo, tree)
 	if err != nil {
-		return lock.Plan{}, err
+		return lock.Selection{}, err
 	}
 	recorded, err := lock.Local(repo)
 	if err != nil {
-		return lock.Plan{}, err
+		return lock.Selection{}, err
 	}
-	head, err := gitx.Output(repo, "rev-parse", "HEAD")
-	if err != nil {
-		return lock.Plan{}, err
-	}
-	commit := gitx.Trimmed(head)
 	intents, err := Intents(repo)
 	if err != nil {
-		return lock.Plan{}, err
+		return lock.Selection{}, err
 	}
 	registered, err := upstream.Read(repo, tree)
 	if err != nil {
-		return lock.Plan{}, err
+		return lock.Selection{}, err
 	}
-	plan := lock.Select(current, recorded, intents, registered.ManagedSkills())
-	plan.Base = commit
-	plan.Head = commit
-	plan.Comparison = commit
-	return plan, nil
+	return lock.Select(current, recorded, intents, registered.ManagedSkills()), nil
 }
 
 // Intents reads saved intent names from the working copy.

@@ -65,7 +65,8 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"malformed merge input", []string{"merge", "--name", "combined", "owner/repo"}, "owner/repo:skill"},
 		{"duplicate merge input", []string{"merge", "--name", "combined", "owner/repo:skill", "owner/repo:skill"}, "duplicate upstream"},
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
-		{"plan without a base", []string{"ci", "plan"}, "requires --base"},
+		{"removed CI", []string{"ci"}, "unknown command"},
+		{"removed schedule", []string{"schedule"}, "unknown command"},
 		{"removed status", []string{"status"}, "unknown command"},
 		{"removed repo flag", []string{"check", "--repo", "/another-repository"}, "unknown flag"},
 	}
@@ -105,27 +106,6 @@ func TestBareInvocationShowsHelp(t *testing.T) {
 	}
 }
 
-func TestCIPromptReportsOutputFailure(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "prompt.txt")
-	if err := os.WriteFile(path, []byte("existing instructions\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	output, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer output.Close()
-	command := exec.Command(binaryPath(t), "ci", "prompt")
-	command.Stdout = output
-	var stderr strings.Builder
-	command.Stderr = &stderr
-	err = command.Run()
-	exit, ok := err.(*exec.ExitError)
-	if !ok || exit.ExitCode() != 1 || stderr.Len() == 0 {
-		t.Fatalf("prompt write failure was hidden: %v, stderr %q", err, stderr.String())
-	}
-}
-
 // TestHelpIsDiscoverable keeps the documented surface reachable without a
 // repository, since a new user has nothing but the binary.
 func TestHelpIsDiscoverable(t *testing.T) {
@@ -133,7 +113,7 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	if strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") || strings.Contains(stdout, "--repo") {
+	if strings.Contains(stdout, "\n  ci ") || strings.Contains(stdout, "\n  schedule ") || strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") || strings.Contains(stdout, "--repo") {
 		t.Fatalf("help advertises removed local orchestration:\n%s", stdout)
 	}
 	for _, command := range []string{"add", "merge", "update", "remove", "record", "find", "list", "check"} {
@@ -152,35 +132,11 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--name") || !strings.Contains(stdout, "skillctrl merge owner/repo:skill... --name NAME") {
 		t.Fatalf("merge help does not describe positional inputs:\n%s", stdout)
 	}
-	stdout, _, code = runBinary(t, nil, "ci", "--help")
-	if code != 0 || !strings.Contains(stdout, "plan") || !strings.Contains(stdout, "prompt") {
-		t.Fatalf("CI help omits integration helpers:\n%s", stdout)
-	}
+
 }
 
-// TestDryRunIsRefusedWhereItCannotBeHonored keeps a flag from implying a
-// guarantee the tool cannot make. The CI phases write the index, a lock, and a
-// remote pull request, so they refuse rather than silently doing the work.
-func TestDryRunIsRefusedWhereItCannotBeHonored(t *testing.T) {
-	for _, phase := range [][]string{
-		{"ci", "prepare", "/nonexistent-artifacts"}, {"ci", "export", "/nonexistent-artifacts"},
-		{"ci", "apply", "/nonexistent-artifacts"}, {"ci", "publish", "/nonexistent-artifacts"},
-		{"ci", "configure"}, {"schedule", "prepare", "/nonexistent-artifacts"},
-		{"schedule", "restore", "/nonexistent-artifacts"}, {"schedule", "publish", "/nonexistent-artifacts"},
-	} {
-		arguments := append([]string{"--dry-run"}, phase...)
-		stdout, stderr, code := runBinary(t, nil, arguments...)
-		if code != 1 {
-			t.Fatalf("%v exited %d want 1", phase, code)
-		}
-		if strings.TrimSpace(stdout) != "" {
-			t.Fatalf("%v wrote to stdout: %q", phase, stdout)
-		}
-		if !strings.Contains(stderr, "--dry-run applies to") {
-			t.Fatalf("%v did not explain the refusal: %q", phase, stderr)
-		}
-	}
-	// The installer commands keep the meaning the flag advertises.
+// TestDryRunRequiresARepository keeps target validation active in dry runs.
+func TestDryRunRequiresARepository(t *testing.T) {
 	command := exec.Command(binaryPath(t), "--dry-run", "update")
 	command.Dir = t.TempDir()
 	if output, err := command.CombinedOutput(); err == nil || !strings.Contains(string(output), "current repository must contain") {
@@ -266,13 +222,7 @@ func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
 		{"--dry-run", "add", "owner/repo", "--skill", "chosen"},
 		{"--dry-run", "merge", "owner/repo:chosen", "--name", "combined"},
 		{"--dry-run", "update"}, {"--dry-run", "remove", "chosen"},
-		{"check"}, {"ci", "prompt"}, {"ci", "plan", "--base", "HEAD"},
-		{"ci", "configure"}, {"ci", "prepare", "/nonexistent-artifacts"},
-		{"ci", "export", "/nonexistent-artifacts"}, {"ci", "apply", "/nonexistent-artifacts"},
-		{"ci", "publish", "/nonexistent-artifacts"},
-		{"schedule", "prepare", "/nonexistent-artifacts"},
-		{"schedule", "restore", "/nonexistent-artifacts"},
-		{"schedule", "publish", "/nonexistent-artifacts"},
+		{"check"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			for _, source := range []string{"flag", "environment"} {
@@ -290,18 +240,18 @@ func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
 		})
 	}
 	for _, value := range []string{"", "SKILLS", "gh ", "skills,gh"} {
-		stdout, stderr, code := runBinary(t, environment, "ci", "prompt", "--adapter="+value)
+		stdout, stderr, code := runBinary(t, environment, "--dry-run", "find", "review", "--adapter="+value)
 		if code != 1 || stdout != "" || !strings.Contains(stderr, "expected skills, gh, or git") {
 			t.Fatalf("invalid value %q: exit %d, stdout %q, stderr %q", value, code, stdout, stderr)
 		}
 	}
 	for _, name := range []string{"skills", "gh", "git"} {
-		stdout, stderr, code := runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense"), "ci", "prompt", "--adapter", name)
-		if code != 0 || !strings.Contains(stdout, "# Skill intent review") {
+		stdout, stderr, code := runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER=nonsense"), "--dry-run", "find", "review", "--adapter", name)
+		if code != 0 || !strings.Contains(stdout, `"dry_run":true`) {
 			t.Fatalf("explicit adapter %s did not override environment: %d %s", name, code, stderr)
 		}
-		stdout, stderr, code = runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER="+name), "ci", "prompt")
-		if code != 0 || !strings.Contains(stdout, "# Skill intent review") {
+		stdout, stderr, code = runBinary(t, append(append([]string{}, environment...), "SKILLCTRL_ADAPTER="+name), "--dry-run", "find", "review")
+		if code != 0 || !strings.Contains(stdout, `"dry_run":true`) {
 			t.Fatalf("environment adapter %s failed: %d %s", name, code, stderr)
 		}
 	}

@@ -156,7 +156,7 @@ skillctrl check
 対象は upstream 登録と保存した intent の両方がある skill だけで、呼び出し元の staging は保持する。
 skill のレビューや調整は行わない。
 
-手書きの skill は、intent ファイルがあっても記録用 hash、check、自動の intent レビューの対象外。
+手書きの skill は、intent ファイルがあっても記録用 hash、check、ローカルの hash チェックの対象外。
 それらに `record` を実行したり、架空の upstream 登録を作ったりしない。
 旧方式で記録された手書き skill の hash は、次の記録用 lock 書き込みで取り除く。
 lock の JSON は手動で編集しない。
@@ -180,8 +180,8 @@ intent を削除すると、その skill は hash 記録の対象から外れ、
 選んだリポジトリのファイルが変わったことと、ユーザーが使っている agent で
 skill が有効になったことを区別する。
 
-`ci` と `schedule` の公開コマンドは、CI 連携を明示的に依頼された場合に使う。
-ローカルの管理コマンドとは副作用が異なる。
+ローカルと自動化で同じコマンドを使う。agent の実行、タイマー、repo の検査、
+draft PR の作成は呼び出し側の workflow が担当する。
 
 ## 取得 adapter を選ぶ
 
@@ -189,8 +189,7 @@ skill が有効になったことを区別する。
 `install / search / ls / rm` はそれぞれの別名。
 `check` はローカルの記録済み hash との差分をオフラインで報告し、名前で対象を絞れる。
 upstream の参照、取得 adapter や reviewer の実行は行わない。
-上流の取得は、明示的な `update` または `schedule prepare` で行う。
-CI 専用の補助コマンドは `ci plan` と `ci prompt`。
+上流の取得は、明示的な `update` で行う。
 
 既定の取得処理は、バージョンを固定した `skills` 実行ファイルを使う。
 GitHub CLI は `--adapter gh`、直接 Git で取り込む場合は `--adapter git` を選ぶ。

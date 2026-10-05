@@ -34,22 +34,6 @@ func BuildVersion() string {
 	return Version
 }
 
-// dryRunRejection explains why the CI phases refuse --dry-run. Those phases
-// write the Git index, a lock file, and a remote pull request; there is no
-// partial execution to offer, and silently ignoring the flag would let a caller
-// believe nothing was published.
-const dryRunRejection = "--dry-run applies to find, check, add, merge, update, remove, and record; " +
-	"this phase writes the index, the lock, and the remote repository"
-
-// rejectDryRun refuses a phase that has no defined dry-run semantics before it
-// can perform any side effect.
-func rejectDryRun(command *cobra.Command) error {
-	if dry, _ := command.Flags().GetBool("dry-run"); dry {
-		return fmt.Errorf(dryRunRejection)
-	}
-	return nil
-}
-
 // Execute runs the command tree and returns the process exit code.
 func Execute() int {
 	root := New()
@@ -78,7 +62,7 @@ func New() *cobra.Command {
 		Short: "Manage agent skills while preserving locally recorded intent",
 		Long: "skillctrl imports and registers skills through the selected acquisition adapter.\n" +
 			"Edit skills and intent files directly, then use record to compute and save verified skill hashes.\n" +
-			"CI and scheduled automation are optional.",
+			"Use the same commands locally and in external automation.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -91,8 +75,8 @@ func New() *cobra.Command {
 		"report what would happen without changing anything; applies to find, check, add, merge, update, remove, and record")
 
 	registerAdapterFlag(root)
-	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Local acceptance:"}, &cobra.Group{ID: "automation", Title: "Automation:"})
-	root.SetHelpCommandGroupID("automation")
+	root.AddGroup(&cobra.Group{ID: "skills", Title: "Skill management:"}, &cobra.Group{ID: "intent", Title: "Local acceptance:"}, &cobra.Group{ID: "help", Title: "Help:"})
+	root.SetHelpCommandGroupID("help")
 	root.AddCommand(
 		newListCommand(),
 		newCheckCommand(),
@@ -102,8 +86,6 @@ func New() *cobra.Command {
 		newUpdateCommand(),
 		newRemoveCommand(),
 		newRecordCommand(),
-		newCICommand(),
-		newScheduleCommand(),
 	)
 	for _, command := range root.Commands() {
 		switch command.Name() {
@@ -112,7 +94,7 @@ func New() *cobra.Command {
 		case "record":
 			command.GroupID = "intent"
 		default:
-			command.GroupID = "automation"
+			command.GroupID = "help"
 		}
 	}
 	return root

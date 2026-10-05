@@ -85,7 +85,6 @@ skillctrl check chosen-skill
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
 | `merge` | skillctrl 独自の routing skill 作成。intent や AI は不要です。 |
 | `record` | 現在の skill ディレクトリから hash を計算し、指定 skill の lock の値を作成・置換します。内容は実行前に確認します。 |
-| `ci`, `schedule` | 任意の自動化。`ci plan` は固定 commit の対象選択、`ci prompt` は reviewer 用の指示を担当します。 |
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
 `skills-lock.json` の管理場所は変更しません。GitHub CLI が埋め込む追跡 metadata は
@@ -113,16 +112,14 @@ native の登録と原本の追跡情報は更新しません。
 upstream 登録と intent のある指定 skill の hash だけを更新し、他の対象の hash は保持します。対象外の記録は取り除きます。
 引数なしの `record` は対象外の記録の整理だけを行い、内容を受理しません。intent を全部削除した後にも使えます。
 
-`ci plan` は固定 commit から CI のレビュー対象を選び、`ci prompt` は準備後に外部の
-agent へ渡すレビュー指示を表示します。ローカルの編集や `record` には不要です。
 `check` は upstream を参照せず、手元の差分だけを `local` に報告します。
 skill ディレクトリ全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
 差分があるだけでは異常終了せず、JSON で報告します。名前を省略すると upstream 登録と
 intent の両方がある全 skill を比較し、名前を指定するとその範囲に絞ります。
-upstream の取得は明示的な `update` または `schedule prepare` で行います。upstream の更新だけでは手元の受理状態や CI の対象は変わりません。
-`ci` は PR の検証・修復・公開、`schedule` は upstream 更新の準備と検証後の
-更新 PR 作成を担います。workflow の導入やタイマーの起動はせず、外部の CI や scheduler
-から各段階を呼び出す必要があります。
+upstream の取得は明示的な `update` で行います。upstream の更新だけでは手元の受理状態は変わりません。
+ローカルと自動化で同じコマンドを使います。CI は check の JSON にある `.local.lock_changed`
+で失敗を判定し、scheduler は `update` の後に確認・編集・明示的な record を行います。
+具体的な手順は [CI の文書](ci.md)を参照してください。
 
 原本を更新するときは、現在のローカル調整を確認してから次を実行します。
 
@@ -140,10 +137,9 @@ git diff -- .agents/skills/chosen-skill .agents/skillctrl/intents/lock.json
 確認後に `record chosen-skill` で明示的に受理します。intent のない skill は受理 lock の対象外です。
 commit 前に最終的な変更を確認します。
 
-標準出力は JSON、ログとエラーは stderr に出ます。exit 0 は成功、exit 1 は失敗です。上記のローカルコマンドは作業内容を作業ディレクトリに
-残し、commit・push・PR 作成は行いません。`ci` / `schedule` の公開コマンドは
-検証した変更を commit・push するためのもので、[CI の文書](../ci.md)に手順を記載しています。
-
+標準出力は JSON、ログとエラーは stderr に出ます。exit 0 は成功、exit 1 は失敗です。
+全コマンドが現在の repo で動き、AI の起動・commit・push・PR 作成は行いません。
+外部の自動化も同じコマンドを使い、agent・タイマー・draft PR の作成を管理します。
 
 ## 複数の原本を統合する
 
@@ -208,8 +204,8 @@ skillctrl record combined
   `.agents/skillctrl/intents/lock.json`（version 2）は受け入れ済みの実体の
   Git tree hash です。skill ディレクトリ全体（本文・reference・実行属性）が
   hash に含まれ、意図ファイルは含まれません。意図の変更・削除だけを理由に
-  再適応が起動することはありません。判断がつかない skill はそのまま残し、古い
-  hash を保持して未確定として報告します。skill が削除されても intent が残っている場合は、
+  再適応が起動することはありません。取得元の skill を一意に選べない場合は拒否します。
+  skill が削除されても intent が残っている場合は、
   自動復旧せず報告します。
 - **未コミットの編集があっても使えます。** `add` / `merge` / `update` / `remove`
   は、無関係な作業内容と呼び出し元の staging を保持します。未コミットの編集を
@@ -217,10 +213,7 @@ skillctrl record combined
   変わっていなければ、その編集を上書きしません。main checkout も linked worktree も、
   指定した repo をその場で変更します。worktree の作成や作業ディレクトリの変更は行いません。
   別の repo を対象にする場合は、`cd` で移動してから実行します。
-- **AI の実行は外部 workflow の責務です。** 通常の CLI は agent を起動しません。
-  CI の準備コマンドは信頼済み設定とレビュー指示を提供し、採用側の workflow が agent を
-  起動して成果物を渡します。`skillctrl ci apply` は検証済み patch を index にだけ適用します。
-- **成果物は無信頼です。** agent の出力は、認証情報を持たない別の経路が
-  再計算した plan と照合します。対象 skill 以外の変更、accepted / unresolved
-  の不完全な分割、未確定 skill の変更、機密情報の混入（report・result・patch・
-  変更 blob のすべて）を検査してからだけ hash を記録します。
+- **確認と公開は呼び出し側の責務です。** skillctrl は AI を起動せず、agent の判断も検証しません。
+  保存した intent に沿っているか確認してから record します。自動化でも同じ確認を使い、
+  変更範囲・テスト・認証情報・PR の作成は repo 側の workflow で管理します。
+  手順は [CI の文書](ci.md)を参照してください。

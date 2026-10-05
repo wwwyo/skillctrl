@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -162,33 +161,5 @@ func TestLegacyMergeUpdatesInPlaceAndExplicitMergeMigratesReferences(t *testing.
 	}
 	if !strings.Contains(string(h.read(".agents/skills/combined/SKILL.md")), "references/new-skill/SKILL.md") {
 		t.Fatal("migration did not update routing")
-	}
-}
-
-func TestNamedScheduleRestoreRecomputesPlanWithoutEnvironmentPlan(t *testing.T) {
-	h := newHarness(t)
-	h.run(0, "merge", "--name", "combined", "fixture/source:manual", "fixture/source:new-skill")
-	h.commitAll()
-	base := h.git("rev-parse", "HEAD")
-	h.publishSecondVersion(t)
-	if err := os.WriteFile(filepath.Join(h.binDir, "gh"), []byte("#!/bin/sh\nprintf '[]'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	h.env = slices.DeleteFunc(h.env, func(value string) bool {
-		return strings.HasPrefix(value, "SKILL_PLAN=") || strings.HasPrefix(value, "CHECKER_SOURCE=")
-	})
-	h.env = append(h.env, "CHECKER_SOURCE="+base)
-	artifacts := filepath.Join(h.base, "schedule-artifacts")
-	result := h.run(0, "schedule", "prepare", artifacts)
-	if result["changed"] != true {
-		t.Fatal("schedule did not prepare changed named references")
-	}
-	h.git("checkout", "--detach", base)
-	restored := h.run(0, "schedule", "restore", artifacts)
-	if restored["head"] == base || !strings.Contains(string(h.read(".agents/skills/combined/references/manual/SKILL.md")), "upstream v2") {
-		t.Fatal("restore did not verify and restore named originals")
-	}
-	if h.log() != "" {
-		t.Fatal("schedule restoration invoked a reviewer")
 	}
 }
