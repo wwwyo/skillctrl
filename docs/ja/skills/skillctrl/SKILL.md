@@ -1,13 +1,16 @@
+# skillctrl
+
+これは配布用 [SKILL.md](../../../../.agents/skills/skillctrl/SKILL.md) の日本語訳です。
+導入対象との重複を避けるため、frontmatter は表示用のコードとして示します。
+
+```yaml
 ---
 name: skillctrl
 description: "ローカルで保存したカスタマイズの意図を維持しながら、skillctrl で agent skill を検索・導入・統合・作成・改善・更新・削除する。用途に合う skill の探索、リポジトリ内の skill 管理、上流を追跡しながらの統合、ワークフローの SKILL.md 化、既存 skill の改善、変更内容と記録済み hash の確認を依頼されたときに使う。"
 license: "MIT; bundled upstream originals retain their own licenses"
 compatibility: "管理コマンドには Git と skillctrl CLI が必要。検索と上流からの取り込みにはネットワーク接続が必要。ローカルのカスタマイズは既存のエディタや agent で行い、管理コマンドはモデルを起動しない。"
 ---
-
-# skillctrl
-
-これは配布用 [SKILL.md](../../../../.agents/skills/skillctrl/SKILL.md) の日本語訳です。
+```
 
 ユーザーが選んだ Git リポジトリで、skill の導入から更新・削除までを管理する。
 用途に合う既存 skill があれば優先し、ユーザー固有のワークフローや適切な取得元がない場合は、
@@ -76,6 +79,12 @@ skillctrl add owner/repo:chosen-name
 skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
+
+導入済みのこのパッケージを `wwwyo/skillctrl` から更新する場合は、
+`skillctrl --adapter git update skillctrl` を使う。配布元は自身のパッケージを
+`.agents/skills/` と root の lock で管理しており、`skills` 1.7.0 はこのような
+登録済みパッケージを探索から除外する。adapter は実行ごとに選ぶ。
+他のパッケージが異なる探索条件を必要とする場合は、adapter ごとに更新を分ける。
 
 コマンドは現在の作業ディレクトリから Git root を特定する。
 別のリポジトリで作業する場合は `cd` で移動する。`--repo` flag はない。

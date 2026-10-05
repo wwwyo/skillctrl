@@ -21,7 +21,7 @@ skillctrl は upstream の原本と確認済みの内容を記録し、編集は
 例えば「指示は簡潔にし、コード変更の完了前にテストを要求する」と書きます。
 保存した patch が適切でなくなっても、intent をもとに自分や agent が変更を判断できます。
 
-[skillctrl skill](skills/skillctrl/SKILL.md) は、検索・導入・作成・改善・更新・削除の
+[skillctrl skill の日本語訳](skills/skillctrl/SKILL.md) は、検索・導入・作成・改善・更新・削除の
 手順を agent に伝えます。作成ガイドは必要なときだけ読み込み、検索用・作成用の skill を
 別々に導入する必要はありません。CLI 自体が AI を起動することはありません。
 
@@ -108,14 +108,17 @@ cooldown を満たす互換版がなければ、導入を止めます。Go・Hom
 互換性の確認手順は[導入ガイド](start.md)に記載しています。
 
 デフォルトの adapter は mise で版を固定し、7日間の cooldown を適用して導入します。
-既存の互換 pin は保持し、対象の Git リポジトリで skill を取り込みます。
+既存の互換 pin は保持します。このパッケージの導入は `git` adapter を明示します。
+`skills` 1.7.0 は配布元の lock に登録済みの `.agents/skills/` を探索から除外するためです。
+既定の adapter は `skills` のままです。
 
 ```sh
 mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
 mkdir -p .agents/skills
-mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
+mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
+このパッケージの更新には `skillctrl --adapter git update skillctrl` を使います。
 CLI と skill は別の配布物です。stdout は JSON、stderr は診断です。
 終了コードは成功が `0`、失敗が `1` です。
 

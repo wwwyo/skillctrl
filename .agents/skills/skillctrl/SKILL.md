@@ -74,6 +74,12 @@ skillctrl update chosen-name
 skillctrl remove chosen-name
 ```
 
+When refreshing this installed package from `wwwyo/skillctrl`, use
+`skillctrl --adapter git update skillctrl`. The upstream repository manages
+its own package in `.agents/skills/` and its root lock; `skills` 1.7.0 omits such
+registered packages from discovery. Adapter selection is per invocation. Split
+updates by adapter when other packages have different discovery requirements.
+
 Commands resolve the Git root from the current working directory; use `cd` to
 work in another repository. There is no `--repo` flag.
 

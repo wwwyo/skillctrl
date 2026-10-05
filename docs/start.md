@@ -85,17 +85,22 @@ version through the chosen manager rather than guessing unsupported flags.
 ## Install the repository-local skill
 
 Run from the selected repository. Create its skills directory if it is missing,
-then import only this package, using the CLI invocation resolved above:
+then import only this package, using the CLI invocation resolved above. Use the
+explicit `git` adapter for this import: `skills` 1.7.0 excludes registered skills
+under an upstream repository's `.agents/skills/`, including this self-managed
+package. This explicit selection does not change the default `skills` adapter.
+Later refreshes of the installed package also need
+`skillctrl --adapter git update skillctrl`:
 
 ```sh
 mkdir -p .agents/skills
-skillctrl add wwwyo/skillctrl --skill skillctrl
+skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
 For a mise-managed CLI and adapter, the import invocation is:
 
 ```sh
-mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
+mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
 The source package is `.agents/skills/skillctrl/` in `wwwyo/skillctrl`. The installed

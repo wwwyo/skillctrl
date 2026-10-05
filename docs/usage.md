@@ -109,6 +109,20 @@ backend records source commits; command adapters record paths and content hashes
 without inventing a commit identifier. Intent review, import protection, accepted
 hashes, and CI validation are shared by all adapters.
 
+`skills` 1.7.0 omits `.agents/skills/` entries whose name or directory appears in
+the source repository's root `skills-lock.json`, treating them as installed
+dependencies rather than distributable skills. For this repository's self-managed
+package, use `skillctrl --adapter git add wwwyo/skillctrl:skillctrl`. GitHub CLI
+can discover the hidden directory with `--allow-hidden-dirs`, which the `gh`
+adapter supplies. Japanese skill guides are documentation, without installable
+frontmatter, so they cannot substitute for the English package.
+
+The adapter is selected per invocation, not saved in a registration. Consumers
+must also use `skillctrl --adapter git update skillctrl`; when updating several
+skills with different discovery requirements, invoke updates separately with
+the appropriate adapter. In this source repository, the merged `skillctrl` entry
+tracks its Vercel/Anthropic inputs, so its own update uses the default adapter.
+
 CI is optional. Local commands need neither an AI reviewer nor its toolchain.
 Use your editor or existing agent to customize content before recording it.
 

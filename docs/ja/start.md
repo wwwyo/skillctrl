@@ -83,16 +83,20 @@ download を使ったりしません。必要な機能が導入済み CLI にな
 
 選んだリポジトリで実行します。skill ディレクトリがなければ作成し、
 前の手順で特定した CLI で、このパッケージだけを取り込みます。
+この取り込みでは `git` adapter を明示します。`skills` 1.7.0 は、配布元の
+`.agents/skills/` にあり lock に登録済みの skill を探索対象から除外するため、
+自身を管理対象にしたこのパッケージも除外します。この指定は、既定の `skills` adapter を変更しません。
+導入後のこのパッケージの更新にも `skillctrl --adapter git update skillctrl` を使います。
 
 ```sh
 mkdir -p .agents/skills
-skillctrl add wwwyo/skillctrl --skill skillctrl
+skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
 CLI と adapter を mise で管理している場合の取り込みコマンドは次のとおりです。
 
 ```sh
-mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
+mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
 配布元は `wwwyo/skillctrl` の `.agents/skills/skillctrl/` です。

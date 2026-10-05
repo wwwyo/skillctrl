@@ -116,14 +116,17 @@ command. If no compatible release meets the cooldown, stop. See
 [setup](docs/start.md) for Go and Homebrew alternatives and the full compatibility check.
 
 Install the default adapter through mise with an exact pin and seven-day cooldown,
-preserving existing compatible pins, then import the skill in your target Git repository:
+preserving existing compatible pins. Import this self-managed package with the
+explicit Git adapter: `skills` 1.7.0 excludes registered `.agents/skills/` packages
+from upstream discovery. The default adapter remains `skills`:
 
 ```sh
 mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
 mkdir -p .agents/skills
-mise exec -- skillctrl add wwwyo/skillctrl --skill skillctrl
+mise exec -- skillctrl --adapter git add wwwyo/skillctrl:skillctrl
 ```
 
+Refresh this package with `skillctrl --adapter git update skillctrl`.
 CLI and skill are separate artifacts. Results are JSON on stdout; diagnostics
 go to stderr. Exit `0` means success and `1` means failure.
 

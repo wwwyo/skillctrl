@@ -91,6 +91,17 @@ SKILL.md に残します。GitHub CLI は一時 home に切り替える前に既
 実行コマンドとして扱います。探索方法・release/ref の選択・取得ファイルの実行属性は
 backend の仕様に従います。切替で原本が変わった場合の調整は直接編集して行います。command adapter が
 取得 commit を提供しない場合、存在しない commit を記録しません。
+`skills` 1.7.0 は、配布元の root `skills-lock.json` に名前またはディレクトリ名が
+登録された `.agents/skills/` の skill を、導入済みの依存とみなして探索から除外します。
+この repo の自己管理パッケージには `skillctrl --adapter git add wwwyo/skillctrl:skillctrl` を使います。
+GitHub CLI は `--allow-hidden-dirs` で隠しディレクトリを探索でき、`gh` adapter はこの flag を渡します。
+日本語の skill ガイドは文書として掲載し、導入用の frontmatter を付けないため、英語のパッケージの代わりに選ばれません。
+
+adapter は登録には保存せず、実行ごとに選びます。導入先での更新にも
+`skillctrl --adapter git update skillctrl` を使います。異なる探索条件を持つ skill を
+まとめて更新する場合は、必要な adapter ごとに分けて実行します。配布元のこの repo では、
+統合した `skillctrl` が Vercel と Anthropic の入力を追跡するため、既定の adapter で原本を更新できます。
+
 CI は任意です。通常の CLI には reviewer やモデルの設定は不要です。
 エディタや今使っている agent で直接編集し、確認後に record します。
 
