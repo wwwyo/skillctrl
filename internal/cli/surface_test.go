@@ -43,7 +43,7 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown flag", []string{"status", "--nonsense"}, "unknown flag"},
+		{"unknown flag", []string{"check", "--nonsense"}, "unknown flag"},
 		{"unknown command", []string{"nonexistent"}, "unknown command"},
 		{"removed schema", []string{"schema"}, "unknown command"},
 		{"root plan moved", []string{"plan"}, "unknown command"},
@@ -66,7 +66,7 @@ func TestArgumentErrorsAreReported(t *testing.T) {
 		{"duplicate merge input", []string{"merge", "--name", "combined", "owner/repo:skill", "owner/repo:skill"}, "duplicate upstream"},
 		{"remove without names", []string{"remove"}, "requires at least 1 arg"},
 		{"plan without a base", []string{"ci", "plan"}, "requires --base"},
-		{"extra arguments", []string{"status", "extra"}, "unknown command"},
+		{"removed status", []string{"status"}, "unknown command"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -132,10 +132,10 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("--help failed")
 	}
-	if strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") {
+	if strings.Contains(stdout, "\n  status ") || strings.Contains(stdout, "\n  intent ") || strings.Contains(stdout, "--worktree-provider") {
 		t.Fatalf("help advertises removed local orchestration:\n%s", stdout)
 	}
-	for _, command := range []string{"add", "merge", "update", "remove", "status", "record", "find", "list", "check"} {
+	for _, command := range []string{"add", "merge", "update", "remove", "record", "find", "list", "check"} {
 		if !strings.Contains(stdout, "\n  "+command+" ") {
 			t.Fatalf("help does not list %s:\n%s", command, stdout)
 		}
@@ -144,11 +144,11 @@ func TestHelpIsDiscoverable(t *testing.T) {
 	if code != 0 {
 		t.Fatal("add --help failed")
 	}
-	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "owner/repo:skill") {
+	if !strings.Contains(stdout, "--skill") || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--repo") || !strings.Contains(stdout, "skillctrl add owner/repo:skill...") {
 		t.Fatalf("add help omits flags:\n%s", stdout)
 	}
 	stdout, _, code = runBinary(t, nil, "merge", "--help")
-	if code != 0 || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--name") || !strings.Contains(stdout, "owner/repo:skill") {
+	if code != 0 || strings.Contains(stdout, "--from") || !strings.Contains(stdout, "--name") || !strings.Contains(stdout, "skillctrl merge owner/repo:skill... --name NAME") {
 		t.Fatalf("merge help does not describe positional inputs:\n%s", stdout)
 	}
 	stdout, _, code = runBinary(t, nil, "ci", "--help")
@@ -230,7 +230,7 @@ func TestInjectedVersionWins(t *testing.T) {
 // stdout free for results.
 func TestFailuresAreJSONOnStderr(t *testing.T) {
 	h := newHarness(t)
-	stdout, stderr, code := h.try("status", "--repo", filepath.Join(h.root, "missing"))
+	stdout, stderr, code := h.try("check", "--repo", filepath.Join(h.root, "missing"))
 	if code != 1 {
 		t.Fatalf("exit %d want 1", code)
 	}
@@ -257,7 +257,7 @@ func TestAdapterEnumRejectsInvalidValuesBeforeExecution(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{
-		{"list"}, {"status"}, {"record", "chosen"},
+		{"list"}, {"record", "chosen"},
 		{"--dry-run", "find", "review"},
 		{"--dry-run", "add", "owner/repo", "--skill", "chosen"},
 		{"--dry-run", "merge", "owner/repo:chosen", "--name", "combined"},

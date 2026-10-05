@@ -77,7 +77,7 @@ func New() *cobra.Command {
 		Use:   "skillctrl",
 		Short: "Manage agent skills while preserving locally recorded intent",
 		Long: "skillctrl imports and registers skills through the selected acquisition adapter.\n" +
-			"Edit skills and intent files directly, then use record to accept verified content.\n" +
+			"Edit skills and intent files directly, then use record to compute and save verified skill hashes.\n" +
 			"CI and scheduled automation are optional.",
 		Version:       BuildVersion(),
 		SilenceUsage:  true,
@@ -97,7 +97,6 @@ func New() *cobra.Command {
 	root.AddCommand(
 		newListCommand(),
 		newCheckCommand(),
-		newStatusCommand(),
 		newFindCommand(),
 		newAddCommand(),
 		newMergeCommand(),
@@ -111,7 +110,7 @@ func New() *cobra.Command {
 		switch command.Name() {
 		case "find", "add", "merge", "list", "check", "update", "remove":
 			command.GroupID = "skills"
-		case "status", "record":
+		case "record":
 			command.GroupID = "intent"
 		default:
 			command.GroupID = "automation"

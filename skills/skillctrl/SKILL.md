@@ -22,7 +22,7 @@ next to the skill so later upstream changes can be reconciled with it.
 | Create a skill or improve its instructions | Read [authoring](references/authoring.md), then write and evaluate the skill |
 | Preserve a customization across updates | Write its intent, edit and verify the skill, then record the accepted content |
 | Refresh or remove installed skills | Update or remove the requested names, then inspect the result |
-| Explain a pending change or accept a manual edit | Inspect status and the whole skill directory before recording |
+| Explain a pending change or accept a manual edit | Inspect local drift with check and the whole skill directory before recording |
 
 Use the task's existing authorization. A search request authorizes discovery;
 an explicit install, edit, update, or removal request authorizes that operation.
@@ -47,7 +47,7 @@ wants completed, or silently replace another skill manager's registrations.
    Never reset or commit user edits merely to run the CLI.
 
 ```sh
-skillctrl --repo /absolute/path/to/project status
+skillctrl --repo /absolute/path/to/project check
 ```
 
 The managed paths inside the target are:
@@ -103,7 +103,7 @@ skillctrl --repo /absolute/path/to/project remove chosen-name
 Read stdout as JSON and stderr as diagnostics. Exit `0` is success, `1` is
 failure. Local commands never launch a reviewer. An install/update/remove
 result's `repo` is the actual working copy: use that path for subsequent reads,
-edits, status, and recording. Commands modify the selected repository in place,
+edits, checks, and recording. Commands modify the selected repository in place,
 including main checkouts and linked worktrees. They never create a worktree or
 start an AI reviewer. Use the existing agent or editor to change content directly.
 
@@ -165,12 +165,13 @@ representative task, and inspect all changed content before accepting it:
 
 ```sh
 skillctrl --repo /actual/working-copy record chosen-name
-skillctrl --repo /actual/working-copy status
+skillctrl --repo /actual/working-copy check
 ```
 
-`record` accepts intentional edits to upstream-registered skills with saved intent in place and
-preserves caller staging. It does not review or adapt the skill. Handwritten
-skills are excluded from accepted hashes, status, and automatic intent review,
+`record NAME` computes the current whole skill-directory hash and creates or
+replaces NAME in the accepted lock. NAME selects a skill, not a supplied hash.
+Only upstream-registered skills with saved intent are eligible; caller staging is preserved. It does not review or adapt the skill. Handwritten
+skills are excluded from accepted hashes, checks, and automatic intent review,
 even if they have an intent document; do not run `record` for them or invent an
 upstream registration. Legacy handwritten hashes are pruned on the next
 accepted-lock write. Do not edit the lock JSON by hand.
@@ -178,7 +179,7 @@ accepted-lock write. Do not edit the lock JSON by hand.
 Write or edit `.agents/skillctrl/intents/chosen-name.md` and the skill directly.
 Verify that the whole skill meets the intent, then run `record chosen-name`.
 Removing the intent file excludes the skill from acceptance; stale accepted hashes
-are reported by check/status. Run `record` without names to prune ineligible
+are reported by check. Run `record` without names to prune ineligible
 entries without accepting any content; eligible hashes remain unchanged.
 Intent-free imports never enroll in the accepted lock. Acquisition is independent
 of intent. For one selected skill, `add owner/repo:upstream-name --name local-name`
@@ -198,8 +199,8 @@ task; they have different side effects from local management commands.
 
 Use the shared `find/add/list/check/update/remove` commands. `install`, `search`,
 `ls`, and `rm` are aliases. `check` reports local accepted-hash drift offline,
-with optional skill names; `status` reports all local acceptance. Neither
-contacts upstreams or invokes an acquisition adapter or reviewer. Upstream
+with optional skill names. It contacts no upstreams and invokes no acquisition
+adapter or reviewer. Upstream
 acquisition belongs to explicit `update` or `schedule prepare`. CI-only helpers are `ci plan` and `ci prompt`. Default acquisition uses the
 pinned `skills` executable. Select `--adapter gh` for GitHub CLI or `--adapter git`
 for direct Git imports; `SKILLCTRL_ADAPTER` sets a default. Acquisition occurs in

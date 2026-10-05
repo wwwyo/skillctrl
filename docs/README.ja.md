@@ -50,15 +50,15 @@ brew install wwwyo/tap/skillctrl
 lock ファイルはツールが作成します。上流の記録は
 `skills-lock.json`、受け入れ済みの hash は
 `.agents/skillctrl/intents/lock.json` に保存されます。
-受け入れ済み hash・`status`・意図のレビューは、upstream に登録され、かつ intent が
+受け入れ済み hash・`check`・意図のレビューは、upstream に登録され、かつ intent が
 ある skill だけが対象です。intent のない導入済み skill と自作 skill は対象外です。
 対象外の既存 hash は次の受理 lock 書き込み時に取り除きます。取得コマンドは受理 lock を
-書きません。`status` は削除待ちの記録を `lock_changed` で報告します。
+書きません。`check` は削除待ちの記録を `lock_changed` で報告します。
 
 `npx skills` のプロジェクト用 lock（version 1）は root に置いたまま読み、既存の
 version・他の provider の登録・未知のフィールドを保持します。skillctrl は Git の
 取得情報を追加します。旧 `.agents/.skill-lock.json` だけがある場合は、取り込みの
-成功後に root へ移行します。`status` や dry run では移動しません。root に既存の
+成功後に root へ移行します。`check` や dry run では移動しません。root に既存の
 lock があればそちらを優先します。統合済みの登録は skillctrl 独自の `sources`
 を使うため、skillctrl で管理します。
 
@@ -79,9 +79,9 @@ mkdir -p .agents/skillctrl/intents
 cp requirements.md .agents/skillctrl/intents/chosen-skill.md
 
 # Check differences from the accepted hashes
-skillctrl status
+skillctrl check
 
-# Accept a deliberate manual edit
+# Compute and save the hash after verifying a deliberate edit
 skillctrl record chosen-skill
 
 # Remove the skill, its saved intent, and registrations
@@ -116,7 +116,7 @@ skillctrl check chosen-skill
 | `check` | 手元の受け入れ済み hash の差分だけをオフラインで確認。名前で対象を限定できます。upstream 参照・取り込み・reviewer 実行はしません。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
 | `merge` | skillctrl 独自の routing skill 作成。intent や AI は不要です。 |
-| `status`, `record` | skillctrl 独自の受理 hash の管理。intent と skill は直接編集し、確認済みの内容を `record` で受理します。 |
+| `record` | 現在の skill ディレクトリから hash を計算し、指定 skill の lock の値を作成・置換します。内容は実行前に確認します。 |
 | `ci`, `schedule` | 任意の自動化。`ci plan` は固定 commit の対象選択、`ci prompt` は reviewer 用の指示を担当します。 |
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
@@ -129,9 +129,13 @@ backend の仕様に従います。切替で原本が変わった場合の調整
 CI は任意です。通常の CLI には reviewer やモデルの設定は不要です。
 エディタや今使っている agent で直接編集し、確認後に record します。
 
-`record NAME` は現在の skill ディレクトリ全体の hash を受け入れ済み lock に記録します。
+`record NAME` は現在の skill ディレクトリ全体から hash を計算し、
+`.agents/skillctrl/intents/lock.json` の NAME の値を作成・置換します。
+NAME は対象 skill 名で、hash を渡す引数ではありません。同じ内容なら同じ hash になります。
+root の `skills-lock.json` にある原本の hash は更新しません。
 本文・upstream 登録・Git の staging は変更せず、reviewer も実行しません。
-手動で編集して確認した内容を承認する操作であり、意図を満たすかの検証ではありません。
+意図を満たすかの検証は実行前に自分で行います。
+`record --dry-run` は操作の概要だけを表示し、hash の計算・比較はしません。差分の確認には `check [NAME...]` を使います。
 upstream 登録と intent のある指定 skill の hash だけを更新し、他の対象の hash は保持します。対象外の記録は取り除きます。
 引数なしの `record` は対象外の記録の整理だけを行い、内容を受理しません。intent を全部削除した後にも使えます。
 
@@ -139,7 +143,8 @@ upstream 登録と intent のある指定 skill の hash だけを更新し、�
 agent へ渡すレビュー指示を表示します。ローカルの編集や `record` には不要です。
 `check` は upstream を参照せず、手元の差分だけを `local` に報告します。
 skill ディレクトリ全体と受け入れ済み hash の比較であり、意図を満たすかの AI 検証ではありません。
-差分があるだけでは異常終了せず、JSON で報告します。`status` は同じローカル状態を全対象について報告します。
+差分があるだけでは異常終了せず、JSON で報告します。名前を省略すると upstream 登録と
+intent の両方がある全 skill を比較し、名前を指定するとその範囲に絞ります。
 upstream の取得は明示的な `update` または `schedule prepare` で行います。upstream の更新だけでは手元の受理状態や CI の対象は変わりません。
 `ci` は PR の検証・修復・公開、`schedule` は upstream 更新の準備と検証後の
 更新 PR 作成を担います。workflow の導入やタイマーの起動はせず、外部の CI や scheduler

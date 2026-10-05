@@ -271,7 +271,7 @@ func exists(dir, object string) bool {
 
 // WorkingTree hashes selected working files through a private index so that the
 // caller's staging area and commits are never touched. Reading uncommitted state
-// is required for `status` and `record` in a main checkout with pending edits.
+// is required for `check` and `record` in a main checkout with pending edits.
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}

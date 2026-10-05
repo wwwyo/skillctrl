@@ -55,14 +55,14 @@ where each skill came from; `.agents/skillctrl/intents/lock.json` records the
 accepted hash of each whole skill directory that has both an upstream
 registration and saved intent. Intent-free imports and handwritten skills stay
 outside this accepted lock. Existing ineligible entries are pruned on the next
-accepted-lock write; acquisition does not write that lock. `status` remains
+accepted-lock write; acquisition does not write that lock. `check` remains
 read-only and reports pending cleanup through `lock_changed`.
 
 Existing `npx skills` project locks (version 1) are read in place, preserving their
 version, other providers, and unknown fields. New locks use version 1, with extra
 Git source metadata for skillctrl. Legacy version 3 records remain readable. If
 only `.agents/.skill-lock.json` exists, a successful import migrates it to the
-root; `status` and dry runs never move it. An existing root lock takes precedence.
+root; `check` and dry runs never move it. An existing root lock takes precedence.
 Merged entries use skillctrl's `sources` extension; manage those with skillctrl.
 
 ## Work with skills
@@ -88,9 +88,9 @@ mkdir -p .agents/skillctrl/intents
 cp requirements.md .agents/skillctrl/intents/chosen-skill.md
 
 # what still differs from the accepted hashes
-skillctrl status
+skillctrl check
 
-# accept a deliberate manual edit
+# compute and save the hash after verifying a deliberate edit
 skillctrl record chosen-skill
 
 # remove the skill, its saved intent, and registrations
@@ -128,7 +128,7 @@ skillctrl check chosen-skill
 | `check` | Report local accepted-hash drift offline without importing or reviewing; optional names scope the report. No acquisition adapter executable is needed. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
 | `merge` | skillctrl-specific routing skill containing ordered upstream originals; no intent or AI required. |
-| `status`, `record` | skillctrl-specific acceptance workflow. Edit skills and intent files directly; `status` checks local acceptance offline and `record` accepts verified content without reviewing it. |
+| `record` | Compute current skill-directory hashes and create or replace the named lock entries after verifying content yourself. |
 | `ci`, `schedule` | Optional automation; `ci plan` selects fixed-commit inputs and `ci prompt` provides reviewer instructions. |
 
 Acquisition runs in a disposable directory and home, so installer-owned global
@@ -149,10 +149,15 @@ hashes, and CI validation are shared by all adapters.
 CI is optional. Local commands need neither an AI reviewer nor its toolchain.
 Use your editor or existing agent to customize content before recording it.
 
-`record NAME` hashes the current whole skill directory and updates only the
-accepted lock. It runs no reviewer, changes no skill content, and leaves the
+`record NAME` computes the current whole skill-directory hash and creates or
+replaces the entry for NAME in `.agents/skillctrl/intents/lock.json`. NAME selects
+a skill; you do not supply a hash. Unchanged content produces the same hash. It
+does not update the original-source hashes in root `skills-lock.json`. It updates
+only the accepted lock. It runs no reviewer, changes no skill content, and leaves the
 Git index alone. Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
+`record --dry-run` previews the operation without computing or comparing hashes;
+use `check [NAME...]` to inspect local drift.
 Only named upstream-registered skills with saved intent advance; other eligible hashes remain unchanged. Ineligible entries are pruned. With no names, `record` only prunes ineligible entries and accepts no content, including after every intent file has been deleted.
 
 `ci plan` selects from fixed commits for a CI job without fetching upstreams.
@@ -163,8 +168,9 @@ needed for local editing or recording.
 `check` reports local drift in `local` without contacting upstreams. It compares
 skill-directory hashes with the accepted lock and does not run a model to assess
 whether the current instructions satisfy the intent. Differences are reported
-in JSON, not treated as command failures. `status` reports the same local state
-for all managed skills. CI uses fixed commits so another job can recompute the
+in JSON, not treated as command failures. With no names, it checks all skills
+with both upstream registration and saved intent; explicit names select a subset.
+CI uses fixed commits so another job can recompute the
 exact review input. Upstream changes are acquired only by an explicit `update`
 or `schedule prepare`; a new upstream version alone does not change local
 acceptance or the CI plan.

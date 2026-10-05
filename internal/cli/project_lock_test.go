@@ -55,7 +55,7 @@ func TestLegacyProjectLockMigratesOnlyAfterSuccessfulImport(t *testing.T) {
 	h.git("mv", "skills-lock.json", ".agents/.skill-lock.json")
 	h.commitAll()
 	before := h.read(".agents/.skill-lock.json")
-	h.run(0, "status")
+	h.run(0, "check")
 	h.run(0, "--dry-run", "update")
 	h.run(1, "add", "fixture/source", "--skill", "missing")
 	if string(h.read(".agents/.skill-lock.json")) != string(before) {
@@ -86,7 +86,7 @@ func TestExistingRootLockTakesPrecedenceOverTheLegacyLock(t *testing.T) {
 		t.Fatal("legacy entries were merged into the root lock")
 	}
 	h.write("skills-lock.json", "invalid root lock")
-	h.run(1, "status")
+	h.run(1, "check")
 	if string(h.read("skills-lock.json")) != "invalid root lock" {
 		t.Fatal("invalid root lock was overwritten with legacy data")
 	}

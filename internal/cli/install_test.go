@@ -67,8 +67,8 @@ func TestUpstreamOperationsIgnoreHandwrittenSkills(t *testing.T) {
 			if h.log() != "" {
 				t.Fatal("handwritten intent triggered a reviewer")
 			}
-			got := h.run(0, "status")
-			equal(t, list(got["skills"]), []string{}, "handwritten drift is ignored")
+			got := h.run(0, "check")
+			equal(t, list(got["local"].(map[string]any)["skills"]), []string{}, "handwritten drift is ignored")
 			h.run(1, "record", "other")
 			if _, ok := h.lockedSkills()["other"]; ok {
 				t.Fatal("record enrolled a handwritten skill")
@@ -85,12 +85,12 @@ func TestRecordPrunesLegacyHandwrittenHashesWithoutReview(t *testing.T) {
 	h.write(".agents/skills/other/SKILL.md", "intentional handwritten edit\n")
 	h.commitAll()
 	before := h.read(".agents/skills/other/SKILL.md")
-	got := h.run(0, "status")
-	if got["lock_changed"] != true {
+	got := h.run(0, "check")
+	if got["local"].(map[string]any)["lock_changed"] != true {
 		t.Fatal("legacy handwritten hash did not request cleanup")
 	}
 	if h.git("status", "--porcelain") != "" {
-		t.Fatal("status wrote the lock")
+		t.Fatal("check wrote the lock")
 	}
 	h.run(0, "update")
 	h.run(0, "record", "manual")
@@ -224,8 +224,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		if acceptedBefore == string(h.read(lock.Lock)) {
 			t.Fatal("accepted lock did not move")
 		}
-		if got := h.run(0, "status"); len(list(got["skills"])) != 0 {
-			t.Fatalf("status still reports drift: %v", got["skills"])
+		if got := h.run(0, "check"); len(list(got["local"].(map[string]any)["skills"])) != 0 {
+			t.Fatalf("check still reports drift: %v", got["local"].(map[string]any)["skills"])
 		}
 		if staged := h.git("diff", "--cached", "--name-only"); staged != "" {
 			t.Fatalf("installer staged changes: %s", staged)
@@ -379,8 +379,8 @@ func TestInstallerLifecycle(t *testing.T) {
 		if h.git("diff", "--cached", "--binary") != staged {
 			t.Fatal("record disturbed the caller's staging")
 		}
-		got := h.run(0, "status")
-		equal(t, list(got["skills"]), []string{}, "status ignores handwritten edits after record")
+		got := h.run(0, "check")
+		equal(t, list(got["local"].(map[string]any)["skills"]), []string{}, "check ignores handwritten edits after record")
 	})
 }
 

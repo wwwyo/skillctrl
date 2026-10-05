@@ -54,28 +54,6 @@ func fail(repository string, err error) error {
 	return silenceError{err}
 }
 
-func newStatusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status",
-		Short: "Show which intent-managed skills differ from the accepted lock",
-		Args:  cobra.NoArgs,
-		RunE: func(command *cobra.Command, args []string) error {
-			repo, err := repository(command)
-			if err != nil {
-				return fail("", err)
-			}
-			plan, err := install.Selection(repo)
-			if err != nil {
-				return fail(repo, err)
-			}
-			// The input trees are an internal review input; the status report
-			// only needs the differences.
-			plan.InputTrees = nil
-			return emit(plan)
-		},
-	}
-}
-
 func newFindCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:     "find query...",
@@ -105,7 +83,7 @@ func newFindCommand() *cobra.Command {
 
 func newAddCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:     "add inputs...",
+		Use:     "add owner/repo:skill...",
 		Aliases: []string{"install", "a"},
 		Short:   "Import and register upstream skills without intent review",
 		Long: "Import separate skills using positional owner/repo:skill inputs,\n" +
@@ -154,7 +132,7 @@ func newUpdateCommand() *cobra.Command {
 
 func newMergeCommand() *cobra.Command {
 	command := &cobra.Command{
-		Use:   "merge inputs... --name NAME",
+		Use:   "merge owner/repo:skill... --name NAME",
 		Short: "Register upstream skills under one routing skill without intent review",
 		Long: "Register named GitHub originals under one repository-local routing skill.\n" +
 			"Use positional owner/repo:skill inputs and --name for the routing skill.\n" +
@@ -326,9 +304,11 @@ func runRecord(repo string, values []string) error {
 func newRecordCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "record [names...]",
-		Short: "Accept named skills with registered upstreams and saved intent",
-		Long: "Accept only named skills after verifying their content. No reviewer runs.\n" +
-			"With no names, remove ineligible lock entries without accepting any skill.",
+		Short: "Compute and write current skill-directory hashes to the lock",
+		Long: "Compute the current whole-directory hash for each named skill and create or\n" +
+			"replace its lock entry. Names select skills, not hashes. Registered upstreams\n" +
+			"and saved intent are required. Verify content first; no reviewer runs.\n" +
+			"With no names, only remove ineligible lock entries; eligible hashes stay unchanged.",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			return runInstall(command, "record", "", args)

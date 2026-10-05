@@ -47,7 +47,12 @@ func newListCommand() *cobra.Command {
 
 func newCheckCommand() *cobra.Command {
 	return &cobra.Command{
-		Use: "check [names...]", Short: "Check local accepted hashes offline without changing files", Args: cobra.ArbitraryArgs,
+		Use: "check [names...]", Short: "Check local accepted hashes offline without changing files",
+		Long: "Compare current whole-directory hashes with the lock for skills having both\n" +
+			"registered upstreams and saved intent. With no names, check all eligible skills;\n" +
+			"names limit the report. No upstream fetch or reviewer runs. Files stay unchanged\n" +
+			"and differences are reported without failing the command.",
+		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			repo, err := repository(command)
 			if err != nil {
