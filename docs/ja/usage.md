@@ -119,7 +119,7 @@ intent の両方がある全 skill を比較し、名前を指定するとその
 upstream の取得は明示的な `update` で行います。upstream の更新だけでは手元の受理状態は変わりません。
 ローカルと自動化で同じコマンドを使います。CI は check の JSON にある `.local.lock_changed`
 で失敗を判定し、scheduler は `update` の後に確認・編集・明示的な record を行います。
-具体的な手順は [CI の文書](ci.md)を参照してください。
+具体的な手順は [agent workflow のガイド](skills/skillctrl/references/ci.md)を参照してください。
 
 原本を更新するときは、現在のローカル調整を確認してから次を実行します。
 
@@ -216,4 +216,4 @@ skillctrl record combined
 - **確認と公開は呼び出し側の責務です。** skillctrl は AI を起動せず、agent の判断も検証しません。
   保存した intent に沿っているか確認してから record します。自動化でも同じ確認を使い、
   変更範囲・テスト・認証情報・PR の作成は repo 側の workflow で管理します。
-  手順は [CI の文書](ci.md)を参照してください。
+  手順は [agent workflow のガイド](skills/skillctrl/references/ci.md)を参照してください。

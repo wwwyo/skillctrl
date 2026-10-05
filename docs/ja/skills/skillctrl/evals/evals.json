@@ -36,6 +36,44 @@
         "移植性を確認し、現実的な評価ケースを含める。",
         "配布用の原本を、.agents/skills に導入済みであるかのように record しない。"
       ]
+    },
+    {
+      "id": 4,
+      "prompt": "skill の PR チェックを GitHub Agentic Workflows で設定してください。intent は変更されていますが、skillctrl check は成功し、local.lock_changed=false を報告しました。コマンド実行や編集をせず、次の処理を説明してください。",
+      "expected_output": "固定の hash 判定は成功し、AI 起動・upstream 取得・intent の変更検知は行わない。",
+      "files": [],
+      "expectations": [
+        "自動化の案内として references/ci.md を読む。",
+        "check の終了コードと JSON の条件を区別し、hash 一致なら成功とする。",
+        "intent だけの変更で AI を起動したり、intent の変更検知を追加したりしない。",
+        "PR のチェックで update を実行しない。"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "PR の hash 判定が落ちました。browser は現在の intent を満たし、deploy は intent 違反の疑いがあり、docs は証拠不足で判断できません。コマンド実行や編集をせず、agent workflow の処理結果を説明してください。",
+      "expected_output": "該当する skill 全体を審査し、根拠を示して browser だけ記録する。deploy と docs はコメントし、必須チェック全体を失敗にする。",
+      "files": [],
+      "expectations": [
+        "現在の intent、差分、対象 skill のディレクトリ全体を読む。",
+        "根拠を示してから record browser を使い、deploy と docs は記録しない。",
+        "違反の疑いについて、関連する intent・差分・修正案をコメントする。",
+        "判断不能の不明点をコメントし、必須チェック全体を失敗にする。",
+        "PR の skill 本文を自動修正せず、upstream も取得しない。"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "GitHub Agentic Workflows で、PR の hash チェックとは別に upstream の週次更新を設定したいです。二つの workflow と公開時の検証を、コマンド実行や編集をせず説明してください。",
+      "expected_output": "PR は hash 不一致だけを審査し、定期更新は原本の取得・intent に沿った調整と検証・対象の記録を行い、変更がある場合だけ draft PR を作る。",
+      "files": [],
+      "expectations": [
+        "PR のトリガーと定期・手動更新のトリガーを分ける。",
+        "定期更新だけが update・編集できる内容の調整・変更がある場合の draft PR 作成を行う。",
+        "統合 skill の登録済み原本 snapshot を変更しない。",
+        "検証後の対象を指定した record と、公開後の最終 commit のチェックを要求する。",
+        "GITHUB_TOKEN の push でチェックが再実行されると仮定せず、bot の commit の CI 起動方法を扱う。"
+      ]
     }
   ]
 }

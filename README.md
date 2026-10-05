@@ -7,7 +7,7 @@
 
 [![Go 1.27](https://img.shields.io/badge/go-1.27-blue.svg)](go.mod) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[日本語](docs/ja/README.md) · [Command details](docs/usage.md) · [CI integration](docs/ci.md)
+[日本語](docs/ja/README.md) · [Command details](docs/usage.md) · [Agent workflow guide](.agents/skills/skillctrl/references/ci.md)
 
 Manage agent skills in a Git repository while keeping the intent behind your
 local customizations. skillctrl tracks upstream originals and the content you
@@ -130,9 +130,10 @@ go to stderr. Exit `0` means success and `1` means failure.
 
 ## Optional automation
 
-CI checks the JSON from `check`; a scheduler calls `update`. Both use the same
-review, edit, and `record NAME` flow as local work. Your external workflow runs
-its agent and opens the draft PR. See [CI integration](docs/ci.md).
+Use separate agent workflows: PR checks review only hash drift reported by
+`check`; scheduled updates call `update`, adapt and verify changed skills, and
+open a draft PR. Verified content is accepted with `record NAME`.
+See the [agent workflow guide](.agents/skills/skillctrl/references/ci.md).
 
 ## Development
 

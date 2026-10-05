@@ -1,6 +1,6 @@
 ---
 name: skillctrl
-description: "Find, install, merge, create, improve, update, and remove agent skills with skillctrl while preserving local customization intent. Use when the user asks to find a skill for a task, add or manage skills in a repository, combine skills while tracking their upstreams, turn a workflow into a SKILL.md, improve an existing skill, or reconcile skill changes and accepted hashes."
+description: "Find, install, merge, create, improve, update, and remove agent skills with skillctrl while preserving local customization intent. Use when the user asks to find a skill for a task, add or manage skills in a repository, combine skills while tracking their upstreams, turn a workflow into a SKILL.md, improve an existing skill, reconcile skill changes and accepted hashes, or configure skill PR checks and scheduled updates with GitHub Agentic Workflows."
 license: "MIT; bundled upstream originals retain their own licenses"
 compatibility: "Requires Git and the skillctrl CLI for management commands, and network access for discovery and upstream imports. Local customization uses the existing editor or agent; management commands do not launch a model."
 ---
@@ -32,6 +32,7 @@ Their licenses are preserved [here](references/find-skills-LICENSE.txt) and
 | Preserve a customization across updates | Write its intent, edit and verify the skill, then record the accepted content |
 | Refresh or remove installed skills | Update or remove the requested names, then inspect the result |
 | Explain a pending change or accept a manual edit | Inspect local drift with check and the whole skill directory before recording |
+| Set up PR checks or scheduled upstream updates | Read [CI and scheduled updates](references/ci.md); use separate agent workflows |
 
 Use the task's existing authorization. A search request authorizes discovery;
 an explicit install, edit, update, or removal request authorizes that operation.
@@ -172,6 +173,8 @@ performed, unresolved items, and any remaining integration step. Distinguish
 files changed in the selected repository from skills enabled in the user's active agent.
 Local and automated work use the same commands. Keep agent execution, timers,
 repository checks, and draft PR publication in the caller's workflow.
+For GitHub automation, read [CI and scheduled updates](references/ci.md). PR checks
+start AI review only after hash drift; scheduled updates acquire and adapt originals.
 
 ## Acquisition adapters
 
