@@ -60,14 +60,22 @@ skillctrl remove chosen-skill
 置き換えてください。意図には、例えば「指示を簡潔にし、コード変更の完了前に
 テストを要求する」といった振る舞いを記載します。
 
-取得処理は adapter に委ねます。既定の `skills` は `npx skills` と同じ
-パッケージの `skills` CLI を呼び、`--adapter gh` は `gh skill install` を
+取得処理は adapter に委ねます。既定の `skills` は PATH にある安定版の
+`skills` 1.x（1.7.0 以上）を再利用します。見つからない、互換性がない、または
+版を確認できない場合は `npx --yes --ignore-scripts skills@1.7.0` を呼びます。
+skills の個別導入は任意で、npx を使う場合は Node.js と npm が必要です。
+skills は Node.js 22.20.0 以上を要求します。`--adapter gh` は `gh skill install` を
 呼びます。`--adapter git` で従来の直接 Git 取得も選べます。
 `SKILLCTRL_ADAPTER` で既定値を設定でき、明示した flag が優先されます。
 `--adapter` の値は `skills`・`gh`・`git` に限定します。無効な flag 値や、実際に
 使われる `SKILLCTRL_ADAPTER` の値は、ローカル操作や dry run でも実行前に拒否します。
-依存コマンドがなければエラーにし、別の adapter へ勝手に切り替えません。
-ツールは mise で管理し、repo では `skills` 1.7.0 と `gh` 2.101.0 を固定しています。
+互換 skills CLI と npx の両方がなければ、導入方法を示してエラーを返します。
+npx を使うことは stderr に表示し、固定版を初回に取得する場合があります。
+npm cache は一時 staging 外に保持し、明示設定か呼び出し元の ~/.npm を使います。
+project の依存や global CLI は導入しません。取得処理が失敗しても npx や別の adapter で再試行しません。
+実行環境は mise で管理し、既存の pin と cooldown を保持します。
+skillctrl は版を指定しない npm package を要求しません。
+ローカル操作と dry run は skills や npx の解決・実行を行いません。
 
 ```sh
 skillctrl --adapter skills add owner/repo:chosen-skill

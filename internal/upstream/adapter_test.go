@@ -13,6 +13,7 @@ func TestCommandAdapterRejectsMissingTrackingPath(t *testing.T) {
 	bin := t.TempDir()
 	script := `#!/bin/sh
 set -eu
+if [ "$1" = --version ]; then printf '1.7.0\n'; exit 0; fi
 mkdir -p .agents/skills/chosen
 printf '%s\n' '---' 'name: chosen' '---' 'original' > .agents/skills/chosen/SKILL.md
 cat > skills-lock.json <<'LOCK'

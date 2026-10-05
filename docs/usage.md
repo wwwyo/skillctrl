@@ -71,16 +71,24 @@ source and skill. An intent describes behavior, for example: "Keep instructions
 concise and require tests before completing code changes."
 
 `add`, `update`, and merged inputs use a replaceable acquisition adapter. The
-default `skills` adapter invokes the pinned `skills` CLI (the same package used
-by `npx skills`); `--adapter gh` invokes `gh skill install`. `--adapter git`
+default `skills` adapter reuses a stable `skills` 1.x CLI at least 1.7.0 on PATH.
+If missing, incompatible, or unable to report its version, it invokes
+`npx --yes --ignore-scripts skills@1.7.0` instead. A separate skills installation
+is optional; the npx path needs Node.js/npm (skills requires Node.js >=22.20.0).
+`--adapter gh` invokes `gh skill install`. `--adapter git`
 retains the direct Git importer for existing integrations. Set
 `SKILLCTRL_ADAPTER` to choose a default; an explicit flag takes precedence.
 `--adapter` accepts only `skills`, `gh`, or `git`. Invalid flag values and invalid
 effective `SKILLCTRL_ADAPTER` values are rejected before command execution, even
-for local-only commands and dry runs. Missing tools are errors, not automatic fallbacks. Install the adapter tools
-with mise; the repository pins `skills` 1.7.0 and `gh` 2.101.0 with a seven-day
-release cooldown. The skills executable must be on PATH; skillctrl does not
-use an unpinned `npx` download.
+for local-only commands and dry runs. If neither a compatible skills CLI nor npx
+is available, acquisition fails with setup guidance. The npx path reports its
+use on stderr and may fetch its fixed package on first use. npm's cache is kept
+outside disposable staging, honoring an explicit npm cache setting or using the
+caller's ~/.npm. It does not add project dependencies or install a global CLI.
+Installer failures are returned without retrying via npx or another adapter.
+Manage runtime tools with mise and preserve repository pins and release cooldowns;
+skillctrl never requests an unpinned npm package. Local commands and dry runs
+never resolve or invoke skills/npx.
 
 ```sh
 skillctrl --adapter skills add owner/repo:chosen-skill

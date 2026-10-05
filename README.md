@@ -83,7 +83,9 @@ skillctrl merge owner/first:first-skill owner/second:second-skill --name combine
 can choose a local name while tracking the original upstream name. Inputs above
 are placeholders; use inspected sources.
 
-Acquisition defaults to the separately installed, pinned `skills` CLI.
+Acquisition defaults to `skills`: reuse a compatible CLI on PATH, or use npx.
+Installing skills separately is optional;
+the npx path requires Node.js and npm.
 `--adapter gh` and `--adapter git` select GitHub CLI or direct Git instead.
 Root `skills-lock.json` keeps native registrations. Alias/merge tracking and extra
 provenance stay in `.agents/skillctrl/upstreams.json`; accepted hashes stay in
@@ -104,23 +106,24 @@ the skill package, and checking whether your agent can load it.
 
 ## Manual installation
 
-From the target Git repository, install an exact CLI version with a seven-day cooldown:
+From the target Git repository, install the CLI:
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d github:wwwyo/skillctrl@latest
+mise use --path ./mise.toml github:wwwyo/skillctrl@latest
 mise exec -- skillctrl --help
 ```
 
 Before importing, require help to show `list`, `check`, `record`, and
 `--adapter skills|gh|git`, with no `--repo`, `--worktree-provider`, or `intent`
-command. If no compatible release meets the cooldown, stop. See
+command. See
 [setup](docs/start.md) for Go and Homebrew alternatives and the full compatibility check.
 
-Install the default adapter through mise with an exact pin and seven-day cooldown,
-preserving existing compatible pins, then import the package with the default adapter:
+For the default adapter, reuse an existing compatible `skills` CLI or provide
+Node.js/npm for the pinned npx path. Install Node.js only if needed, preserving
+existing compatible pins, then import the package:
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
+mise use --path ./mise.toml node@lts
 mkdir -p .agents/skills
 mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```

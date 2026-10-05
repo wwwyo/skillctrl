@@ -191,12 +191,11 @@ draft PR の作成は呼び出し側の workflow が担当する。
 upstream の参照、取得 adapter や reviewer の実行は行わない。
 上流の取得は、明示的な `update` で行う。
 
-既定の取得処理は、バージョンを固定した `skills` 実行ファイルを使う。
+既定の取得処理は `skills` backend を使う。
 GitHub CLI は `--adapter gh`、直接 Git で取り込む場合は `--adapter git` を選ぶ。
 `SKILLCTRL_ADAPTER` で既定値を設定できる。
 取得は使い捨ての staging で行い、プロジェクト用 lock は root の `skills-lock.json` に保持する。
 
 backend によって探索方法、release の選択、埋め込み metadata、ファイルの実行属性が異なることがある。
 adapter の切り替え後は、intent に沿っているか再確認が必要になる場合がある。
-必要なツールがなければエラーになる。依存ツールは mise で導入し、
-バージョンを固定していない npx の download は使わない。
+必要なツールがなければエラーになる。取得に必要な依存は CLI の診断に従って解決する。

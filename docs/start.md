@@ -67,18 +67,28 @@ executable is reachable by this agent; a successful installation with an
 inaccessible executable is incomplete setup.
 
 Inspect `skillctrl add --help`. The default acquisition adapter is `skills`,
-which requires Node.js and a pinned `skills` executable on PATH. Install missing
-dependencies through the repository's tool manager. For mise, only when these
-tools are needed and no compatible pins already exist:
+which reuses a stable `skills` 1.x version at least 1.7.0 on PATH. If it is absent,
+incompatible, or cannot report its version, skillctrl runs
+`npx --yes --ignore-scripts skills@1.7.0`. A separate skills installation is optional.
+The npx path requires Node.js/npm; the package requires Node.js 22.20.0 or newer.
+Confirm that help mentions `pinned npx` before relying on this behavior; older
+skillctrl releases require a separately installed skills CLI. Install missing
+Node.js through the repository's tool manager. For mise, only when needed and no
+compatible pin already exists:
 
 ```sh
-mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts npm:skills@latest
-mise exec -- skills --version
+mise use --path ./mise.toml --pin --minimum-release-age 7d node@lts
+mise exec -- node --version
+mise exec -- npx --version
 ```
 
 Keep an explicitly selected `gh` or `git` adapter if the user or repository
 already chose it. `gh` needs GitHub CLI; `git` uses Git directly. Do not silently
-switch adapters when a tool is missing, or use an unpinned npx download. If the
+switch adapters when a tool is missing, or use an unpinned npx download. The pinned
+npx path may download the package on first use and caches it without modifying
+the project's package.json or installing a global CLI. Respect an explicitly
+configured npm cache; otherwise use the caller's ~/.npm outside disposable staging.
+Acquisition failures are errors, not a reason to retry with another backend. If the
 installed CLI lacks a feature needed here, resolve a published compatible
 version through the chosen manager rather than guessing unsupported flags.
 
