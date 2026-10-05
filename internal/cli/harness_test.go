@@ -138,10 +138,10 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	delete(value.Skills, "other")
-	h.write(lock.Lock, mustJSON(value))
+	h.write(lock.Lock, mustJSON(map[string]any{"version": 1, "upstreams": map[string]any{}, "acceptedHashes": value.Skills}))
 	h.commitAll()
 	h.head = h.git("rev-parse", "HEAD")
-	h.originalLock = h.read(lock.Lock)
+	h.originalLock = h.acceptedBytes()
 	h.originalUpstream = h.read("skills-lock.json")
 
 	h.installFakes()
@@ -305,13 +305,20 @@ func (h *harness) skillTree(name string) string {
 
 func (h *harness) lockedSkills() map[string]string {
 	h.t.Helper()
-	var value struct {
-		Skills map[string]string `json:"skills"`
-	}
-	if err := json.Unmarshal(h.read(lock.Lock), &value); err != nil {
+	value, err := lock.Local(h.root)
+	if err != nil {
 		h.t.Fatal(err)
 	}
 	return value.Skills
+}
+
+func (h *harness) acceptedBytes() []byte {
+	h.t.Helper()
+	value, err := lock.Local(h.root)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return []byte(mustJSON(value))
 }
 
 func (h *harness) upstreamSkills() map[string]any {
@@ -343,7 +350,16 @@ func lockBytes(t *testing.T, repo string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mustJSON(value)
+	var state map[string]any
+	data, err := os.ReadFile(filepath.Join(repo, lock.Lock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	state["acceptedHashes"] = value.Skills
+	return mustJSON(state)
 }
 
 func mustJSON(value any) string {

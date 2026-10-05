@@ -112,15 +112,15 @@ func TestOrdinaryNativeRegistrationWinsOverSupplementalMetadata(t *testing.T) {
 	if !bytes.Equal(nativeBytes, h.read("skills-lock.json")) {
 		t.Fatal("unchanged ordinary update rewrote native metadata")
 	}
-	privateBytes := h.read(".agents/skillctrl/upstreams.json")
+	privateBytes := h.read(".agents/skillctrl/lock.json")
 	var tracking map[string]any
 	if err := json.Unmarshal(privateBytes, &tracking); err != nil {
 		t.Fatal(err)
 	}
-	tracking["skills"].(map[string]any)["new-skill"].(map[string]any)["source"] = "fixture/other"
-	h.write(".agents/skillctrl/upstreams.json", mustJSON(tracking))
+	tracking["upstreams"].(map[string]any)["new-skill"].(map[string]any)["source"] = "fixture/other"
+	h.write(".agents/skillctrl/lock.json", mustJSON(tracking))
 	h.run(1, "check")
-	h.write(".agents/skillctrl/upstreams.json", string(privateBytes))
+	h.write(".agents/skillctrl/lock.json", string(privateBytes))
 	entry["computedHash"] = "changed-by-native-manager"
 	h.write("skills-lock.json", mustJSON(native))
 	h.run(0, "list")

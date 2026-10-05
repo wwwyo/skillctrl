@@ -53,7 +53,7 @@ intent に沿うかの判断は行わず、hash の不一致だけではコマ�
 
 ```sh
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 # Edit and verify the updated skill against its intent
 skillctrl record chosen-skill
 ```
@@ -81,8 +81,8 @@ npx を使います。skills の個別導入は任意で、
 npx を使う場合は Node.js と npm が必要です。
 `--adapter gh` は GitHub CLI、`--adapter git` は直接 Git を使います。
 通常の取得元は native 形式の root `skills-lock.json` に登録します。
-別名・統合・追加の取得情報は `.agents/skillctrl/upstreams.json`、確認済み hash は別の
-`.agents/skillctrl/intents/lock.json` に保存します。検索・一覧・削除には `find`・`list`・`remove` を使います。
+別名・統合・追加の取得情報と確認済み hash は、
+`.agents/skillctrl/lock.json` にまとめて保存します。検索・一覧・削除には `find`・`list`・`remove` を使います。
 adapter・lock・細かな挙動は[コマンドの詳細](usage.md)を参照してください。
 
 ## AI に導入を任せる
@@ -143,6 +143,6 @@ mise exec -- go build .
 [リリース手順](../releasing.md)にまとめています。[MIT](../../LICENSE)で公開しています。
 
 配布する skill 自体も、この repo の `.agents/skills/skillctrl/` で管理します。
-`.agents/skillctrl/upstreams.json` は検索・作成の取得元を追跡し、
+`.agents/skillctrl/lock.json` は検索・作成の取得元を追跡し、
 `.agents/skillctrl/intents/skillctrl.md` は統合方針を保存します。
 同じ `update skillctrl`・直接編集・`record skillctrl`・`check skillctrl` の流れを使います。

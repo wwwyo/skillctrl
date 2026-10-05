@@ -91,8 +91,8 @@ main checkout と linked worktree のどちらも、その場で変更する。
 worktree の作成や AI reviewer の起動は行わず、既存の agent やエディタで直接編集する。
 
 リポジトリの差分、新しいファイル、リンクを確認する。
-native 形式の root `skills-lock.json` と `.agents/skillctrl/upstreams.json` にある取得元の情報と、
-`.agents/skillctrl/intents/lock.json` にある記録済み hash も、ファイルがあれば確認する。
+native 形式の root `skills-lock.json` と、`.agents/skillctrl/lock.json` にまとめた
+取得元の情報・記録済み hash も、ファイルがあれば確認する。
 実行可能な scripts と references を含め、skill ディレクトリ全体を見る。
 ローカルのコマンドは commit・push・PR 作成を行わない。
 それらは、依頼済みか、ユーザーが認めたリポジトリの作業手順で必要な場合だけ行う。

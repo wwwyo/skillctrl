@@ -89,7 +89,7 @@ originals and edit skill content to preserve intent:
 set -euo pipefail
 skillctrl check chosen-skill
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 ```
 
 Omit names from `update` only when the requested scope is every registered skill.

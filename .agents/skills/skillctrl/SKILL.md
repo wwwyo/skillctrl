@@ -86,8 +86,8 @@ including main checkouts and linked worktrees. They never create a worktree or
 start an AI reviewer. Use the existing agent or editor to change content directly.
 
 Inspect the repository's diff, new files, links, native root `skills-lock.json` registrations, skillctrl
-tracking in `.agents/skillctrl/upstreams.json`, and `.agents/skillctrl/intents/lock.json` accepted hashes when
-present. Check the whole skill directory, including executable scripts and references. Local
+provenance and accepted hashes in `.agents/skillctrl/lock.json` when present.
+Check the whole skill directory, including executable scripts and references. Local
 commands do not commit, push, or create a PR. Complete those steps only when
 already requested or required by the user's authorized repository workflow.
 

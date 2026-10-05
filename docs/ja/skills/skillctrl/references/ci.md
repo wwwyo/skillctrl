@@ -84,7 +84,7 @@ default branch の clean な checkout から始め、既存の hash の不一致
 set -euo pipefail
 skillctrl check chosen-skill
 skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/upstreams.json
+git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
 ```
 
 すべての登録済み skill が対象のときだけ、`update` の名前を省略する。

@@ -179,7 +179,7 @@ func TestInstallerLifecycle(t *testing.T) {
 		if stampOf(t, other) != otherStamp {
 			t.Fatal("updating one skill rewrote another")
 		}
-		if h.log() != "" || acceptedBefore != string(h.read(lock.Lock)) {
+		if h.log() != "" || acceptedBefore != string(h.acceptedBytes()) {
 			t.Fatal("pure update reviewed or accepted content")
 		}
 		if body := readAll(t, adapted); !strings.Contains(body, "generic browser") {
@@ -221,7 +221,7 @@ func TestInstallerLifecycle(t *testing.T) {
 		if entry["pluginName"] != "fixture-plugin" {
 			t.Fatal("an unrelated upstream field was dropped")
 		}
-		if acceptedBefore == string(h.read(lock.Lock)) {
+		if acceptedBefore == string(h.acceptedBytes()) {
 			t.Fatal("accepted lock did not move")
 		}
 		if got := h.run(0, "check"); len(list(got["local"].(map[string]any)["skills"])) != 0 {

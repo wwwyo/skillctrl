@@ -120,8 +120,7 @@ The managed paths are:
 .agents/skills/<name>/                  skill body and bundled resources
 .agents/skillctrl/intents/<name>.md     optional local customization requirements
 skills-lock.json                      native upstream registrations at repository root
-.agents/skillctrl/upstreams.json        aliases, merged inputs, supplemental provenance
-.agents/skillctrl/intents/lock.json     recorded hashes for upstream + intent skills
+.agents/skillctrl/lock.json             provenance and explicitly recorded hashes
 ```
 
 Keep the project lock at root `skills-lock.json`. Existing version-1 locks keep
@@ -139,7 +138,7 @@ credentials, or a locally launched reviewer.
 Read the installed `.agents/skills/skillctrl/SKILL.md` and check its relative
 resources. Run `skillctrl list` through the resolved invocation and confirm the
 installed `skillctrl` entry. Inspect new files, the repository diff, and root
-`skills-lock.json` and `.agents/skillctrl/upstreams.json` when present; the returned `repo` must identify the selected checkout.
+`skills-lock.json` and `.agents/skillctrl/lock.json` when present; the returned `repo` must identify the selected checkout.
 
 Check the current agent's existing skill-discovery configuration. Reuse its
 repository skill directory convention. If a relative link is required, follow

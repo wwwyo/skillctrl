@@ -11,6 +11,7 @@ import (
 	"github.com/wwwyo/skillctrl/internal/install"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
 	"github.com/wwwyo/skillctrl/internal/lock"
+	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
@@ -252,7 +253,7 @@ func runRecord(repo string, values []string) error {
 	if err != nil {
 		return fail(repo, err)
 	}
-	recorded, err := lock.Local(repo)
+	recorded, err := lock.Read(repo, tree)
 	if err != nil {
 		return fail(repo, err)
 	}
@@ -296,9 +297,17 @@ func newRecordCommand() *cobra.Command {
 }
 
 func pruneAcceptance(repo string) error {
-	if _, err := os.Lstat(filepath.Join(repo, lock.Lock)); os.IsNotExist(err) {
+	exists := false
+	for _, relative := range []string{skillstate.Lock, skillstate.LegacyAccepted, skillstate.LegacyUpstreams} {
+		if _, err := os.Lstat(filepath.Join(repo, relative)); !os.IsNotExist(err) {
+			exists = true
+			break
+		}
+	}
+	if !exists {
 		return nil
 	}
+
 	recorded, err := lock.Local(repo)
 	if err != nil {
 		return err

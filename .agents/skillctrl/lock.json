@@ -1,6 +1,8 @@
 {
-  "version": 1,
-  "skills": {
+  "acceptedHashes": {
+    "skillctrl": "b6efabb4298b8f589d0401826f6184d3e7ef0647"
+  },
+  "upstreams": {
     "skillctrl": {
       "sourceLayout": "references",
       "sources": [
@@ -28,5 +30,6 @@
         }
       ]
     }
-  }
+  },
+  "version": 1
 }
