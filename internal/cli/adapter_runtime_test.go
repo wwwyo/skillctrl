@@ -10,7 +10,7 @@ import (
 )
 
 func TestAcquisitionResolvesMiseBeforeIsolatingInstallerState(t *testing.T) {
-	for _, backend := range []string{"skills", "npx", "gh", "node", "path-override"} {
+	for _, backend := range []string{"skills", "npx", "gh", "node", "path-override", "path-spelling"} {
 		t.Run(backend, func(t *testing.T) {
 			h := newHarness(t)
 			tools, runtimes := filepath.Join(h.base, "tools"), filepath.Join(h.base, "runtimes")
@@ -28,7 +28,7 @@ func TestAcquisitionResolvesMiseBeforeIsolatingInstallerState(t *testing.T) {
 				t.Fatal(err)
 			}
 			name, adapter := backend, "skills"
-			if backend == "node" || backend == "path-override" {
+			if backend == "node" || backend == "path-override" || backend == "path-spelling" {
 				name = "skills"
 			}
 			if backend == "gh" {
@@ -83,6 +83,9 @@ func TestAcquisitionResolvesMiseBeforeIsolatingInstallerState(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := h.binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+			if backend == "path-spelling" {
+				path = h.binDir + string(os.PathSeparator) + string(os.PathListSeparator) + os.Getenv("PATH")
+			}
 			if backend == "node" {
 				path = tools + string(os.PathListSeparator) + path
 			}
@@ -115,17 +118,25 @@ func TestAcquisitionResolvesMiseBeforeIsolatingInstallerState(t *testing.T) {
 }
 
 func TestMiseRuntimeResolutionFailurePreservesProject(t *testing.T) {
-	h := newHarness(t)
-	h.executable("mise", "#!/bin/sh\nprintf 'fixture resolution failed\\n' >&2\nexit 1\n")
-	if err := os.Symlink(filepath.Join(h.binDir, "mise"), filepath.Join(h.binDir, "skills")); err != nil {
-		t.Fatal(err)
-	}
-	before := h.git("status", "--porcelain")
-	stdout, stderr, code := h.try("--adapter", "skills", "add", "fixture/source:new-skill")
-	if code != 1 || stdout != "" || !strings.Contains(stderr, "resolve adapter runtime with mise") || !strings.Contains(stderr, "fixture resolution failed") {
-		t.Fatalf("unexpected resolution failure: %d %s %s", code, stdout, stderr)
-	}
-	if h.git("status", "--porcelain") != before || string(h.read("skills-lock.json")) != string(h.originalUpstream) {
-		t.Fatal("runtime resolution failure changed project state")
+	for _, test := range []struct{ name, script, diagnostic string }{
+		{"command-failure", "printf 'fixture resolution failed\\n' >&2\nexit 1\n", "resolve adapter runtime with mise"},
+		{"empty-paths", "exit 0\n", "mise could not resolve adapter tool"},
+		{"relative-path", "printf 'relative/bin\\n'\n", "mise bin-paths must return absolute tool directories"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.executable("mise", "#!/bin/sh\n"+test.script)
+			if err := os.Symlink(filepath.Join(h.binDir, "mise"), filepath.Join(h.binDir, "skills")); err != nil {
+				t.Fatal(err)
+			}
+			before := h.git("status", "--porcelain")
+			stdout, stderr, code := h.try("--adapter", "skills", "add", "fixture/source:new-skill")
+			if code != 1 || stdout != "" || !strings.Contains(stderr, test.diagnostic) {
+				t.Fatalf("unexpected resolution failure: %d %s %s", code, stdout, stderr)
+			}
+			if h.git("status", "--porcelain") != before || string(h.read("skills-lock.json")) != string(h.originalUpstream) {
+				t.Fatal("runtime resolution failure changed project state")
+			}
+		})
 	}
 }

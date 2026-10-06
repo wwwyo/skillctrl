@@ -38,6 +38,9 @@ func adapterRuntime(ctx context.Context, name string, env []string) ([]string, e
 		}
 		var directories []string
 		for directory := range strings.SplitSeq(strings.TrimSpace(string(output)), "\n") {
+			if directory == "" {
+				continue
+			}
 			if !filepath.IsAbs(directory) {
 				return nil, fmt.Errorf("mise bin-paths must return absolute tool directories")
 			}
@@ -45,7 +48,7 @@ func adapterRuntime(ctx context.Context, name string, env []string) ([]string, e
 		}
 		var path []string
 		for _, directory := range filepath.SplitList(adapterEnv(env, "PATH")) {
-			if directory == filepath.Dir(executable) {
+			if filepath.Clean(directory) == filepath.Dir(executable) {
 				// Keep earlier user wrappers ahead of managed tools, while making
 				// child commands such as node resolve without the isolated shim.
 				path = append(path, directories...)
