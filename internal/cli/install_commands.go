@@ -160,7 +160,7 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		}
 		// repository falls back to the working directory for local inspection.
 		// First imports must not create skill directories outside Git.
-		if _, err := gitx.Output(repo, "rev-parse", "--show-toplevel"); err != nil {
+		if err := gitx.Run(repo, "rev-parse", "--show-toplevel"); err != nil {
 			return fail(repo, fmt.Errorf("the current directory must be inside a Git repository"))
 		}
 	}
