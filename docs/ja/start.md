@@ -23,7 +23,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 ## CLI と取得用ツールを導入する
 
-必要に応じてリポジトリのツール管理方式を使い、`skillctrl --version` と
+必要に応じて既存のツール管理方式を使い、`skillctrl --version` と
 `skillctrl --help` を確認します。取り込み前に、その場で動作し reviewer を起動しない
 現在のコマンド構成かを確認します。root の help に `list`、`check`、`record`、
 `--adapter skills|gh|git` があり、`--repo`、`--worktree-provider`、ローカルの `intent`
@@ -31,14 +31,12 @@ cd "$(git rev-parse --show-toplevel)"
 reviewer 起動が残る CLI は、この手順には対応していません。
 
 互換性を確認してから導入済み CLI を再利用し、互換性のあるツールの固定バージョンを保持します。
-CLI がないか非対応の場合は、リポジトリが使っている導入方式を優先し、
-対応する公開済みリリースを選びます。対応する配布経路は次のとおりです。
+CLI がないか非対応の場合は、ユーザーが使っている導入方式を優先し、
+対応する公開済みリリースを選びます。次の配布経路から1つ選び、CLI は原則として
+グローバルに導入します。skill 本体はリポジトリ内に導入します。
+ユーザーやリポジトリが導入先や方式を明示している場合は、その指示に従います。
 
 ```sh
-# mise: install locally using the repository's version policy
-mise use --path ./mise.toml github:wwwyo/skillctrl@latest
-mise exec -- skillctrl --version
-
 # Go: use when Go is the selected installation method
 go install github.com/wwwyo/skillctrl@latest
 "$(go env GOPATH)/bin/skillctrl" --version
@@ -47,16 +45,25 @@ go install github.com/wwwyo/skillctrl@latest
 brew tap wwwyo/tap
 brew install wwwyo/tap/skillctrl
 skillctrl --version
+
+# mise
+mise use --global github:wwwyo/skillctrl@latest
+mise exec -- skillctrl --version
 ```
 
-方式は 1 つ選びます。mise の例は、このリポジトリ内の設定ファイルを明示しています。
-リポジトリの指示が別のファイルを指定していれば、`./mise.toml` の代わりにその repo 内の
-既存ファイルを使います。親ディレクトリから継承した設定には書き込みません。
+互換性のあるグローバルのツールを再利用します。CLI やその実行環境を導入するためだけに、
+対象リポジトリのツール設定を変更しません。
 
 `@latest` は公開済みのバージョンを解決します。
 バージョン固定と公開後の待機期間は、リポジトリの規約に従います。
-リポジトリ内のセットアップのためだけに、既存のグローバル導入を置き換えたり版を変更したりしません。
-以降は、特定した実行ファイルかツール管理コマンド経由で CLI を実行します。
+互換性のある導入済み CLI を再利用します。
+以降の例は PATH にある `skillctrl` を使う表記です。必要に応じて、特定した実行ファイル
+（`"$(go env GOPATH)/bin/skillctrl"` など）か、ツール管理方式の実行コマンド
+（mise で導入した場合は `mise exec -- skillctrl` など）に置き換えます。
+CLI を起動する環境の PATH に、Git と選択した adapter の実行に必要なツールが必要です。
+依存ツールをツール管理方式から供給する場合は、CLI 自体を Go や Homebrew で導入していても、
+その方式の実行コマンドを使います。別の環境で依存ツールの版を確認できても、
+skillctrl から使えるとは限りません。
 導入後も、必要なコマンド構成かを再確認します。互換性と待機期間の両方を満たす
 公開済みリリースがなければ、まだ導入を完了できないと報告します。
 旧 `add` を実行したり、待機期間を回避したりしません。
@@ -70,11 +77,12 @@ PATH にある安定版の `skills` 1.x（1.7.0 以上）を再利用します�
 npx を使う場合は Node.js と npm が必要で、skills は Node.js 22.20.0 以上を要求します。
 この挙動を使う前に、help に `pinned npx` があることを確認します。
 旧版の skillctrl では skills の個別導入が必要です。
-不足する Node.js はリポジトリのツール管理方式で導入します。
-mise の場合、必要なツールがなく、互換性のある固定版もないときに使う例は次のとおりです。
+不足する Node.js はユーザーの既存のツール管理方式で導入し、`node --version` と
+`npx --version` を確認します。必要に応じて、その方式の実行コマンドを使います。
+利用環境で mise を使っており、互換性のある固定版もない場合の例は次のとおりです。
 
 ```sh
-mise use --path ./mise.toml node@lts
+mise use --global node@lts
 mise exec -- node --version
 mise exec -- npx --version
 ```
@@ -90,18 +98,11 @@ cache の明示設定を尊重し、設定がなければ一時 staging 外の�
 
 ## リポジトリ内に skill を導入する
 
-選んだリポジトリで実行します。skill ディレクトリがなければ作成し、
-前の手順で特定した CLI で、このパッケージだけを取り込みます。
+選んだ Git リポジトリで、前の手順で特定した CLI を使い、このパッケージだけを取り込みます。
+skill ディレクトリがなければ CLI が作成します。
 
 ```sh
-mkdir -p .agents/skills
 skillctrl add wwwyo/skillctrl:skillctrl
-```
-
-CLI と adapter を mise で管理している場合の取り込みコマンドは次のとおりです。
-
-```sh
-mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 配布元は `wwwyo/skillctrl` の `.agents/skills/skillctrl/` です。

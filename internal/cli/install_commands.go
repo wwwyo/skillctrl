@@ -155,7 +155,14 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		return fail("", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
-		return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
+		if (kind != "add" && kind != "merge") || !os.IsNotExist(err) {
+			return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
+		}
+		// repository falls back to the working directory for local inspection.
+		// First imports must not create skill directories outside Git.
+		if err := gitx.Run(repo, "rev-parse", "--show-toplevel"); err != nil {
+			return fail(repo, fmt.Errorf("the current directory must be inside a Git repository"))
+		}
 	}
 	values, err := install.Names(requested)
 	if err != nil {
@@ -177,6 +184,11 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	}
 	dry, _ := command.Flags().GetBool("dry-run")
 	if dry {
+		if kind == "add" || kind == "merge" {
+			if err := install.ValidateSkillsDirectories(repo); err != nil {
+				return fail(repo, err)
+			}
+		}
 		result := map[string]any{"dry_run": true, "repo": repo, "command": kind,
 			"source": source, "skills": values}
 		if len(inputs) > 0 {

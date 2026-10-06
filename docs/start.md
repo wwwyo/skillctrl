@@ -24,7 +24,7 @@ several write targets are plausible, clarify the target before installing.
 
 ## Install or reuse the CLI and acquisition tools
 
-Check `skillctrl --version` and `skillctrl --help`, using the repository's tool
+Check `skillctrl --version` and `skillctrl --help`, using the existing tool
 manager if necessary. Before any import, require the current in-place,
 no-reviewer command surface: root help must include `list`, `check`, `record`,
 and `--adapter skills|gh|git`, and must not expose `--repo`, `--worktree-provider`,
@@ -32,15 +32,13 @@ or the local `intent` command. A binary that accepts `add` syntax but has the ol
 worktree or reviewer behavior is incompatible with this guide.
 
 Reuse an installation only after this compatibility check. Preserve compatible
-tool pins. If the CLI is missing or incompatible, prefer the repository's
-existing installation method and select a compatible published release. These
-are the supported distribution paths:
+tool pins. If the CLI is missing or incompatible, prefer the user's
+existing installation method and select a compatible published release. Choose
+one of the supported distribution paths below. Install the CLI globally by
+default; the skill package remains repository-local. Follow explicit user or
+repository instructions if they select a different installation scope or method.
 
 ```sh
-# mise: install locally using the repository's version policy
-mise use --path ./mise.toml github:wwwyo/skillctrl@latest
-mise exec -- skillctrl --version
-
 # Go: use when Go is the selected installation method
 go install github.com/wwwyo/skillctrl@latest
 "$(go env GOPATH)/bin/skillctrl" --version
@@ -49,17 +47,24 @@ go install github.com/wwwyo/skillctrl@latest
 brew tap wwwyo/tap
 brew install wwwyo/tap/skillctrl
 skillctrl --version
+
+# mise
+mise use --global github:wwwyo/skillctrl@latest
+mise exec -- skillctrl --version
 ```
 
-Choose one method. The mise examples explicitly select a configuration inside
-this repository; use its existing repo-local configuration file instead of
-`./mise.toml` if repository instructions select another file. Never let setup
-write an inherited ancestor configuration.
+Reuse compatible global tools. Do not change tool configuration in the target
+repository merely to install the CLI or its runtime dependencies.
 
 `@latest` resolves a published version; follow repository pinning and release-age
-rules. Do not replace an existing global installation or
-change its version merely to complete repository-local setup. Use the resolved
-executable or the tool manager's execution wrapper for the remaining commands.
+rules. Reuse an existing compatible installation. The remaining
+examples use `skillctrl` on PATH. If needed, substitute the resolved executable
+(such as `"$(go env GOPATH)/bin/skillctrl"`) or the tool manager's execution
+wrapper (such as `mise exec -- skillctrl` for a mise-managed install).
+The chosen invocation must expose Git and the selected adapter's runtime tools
+on PATH. If a tool manager supplies those dependencies, use its execution wrapper
+even when the CLI itself was installed through Go or Homebrew; dependency probes
+in a different environment do not make the tools available to skillctrl.
 Recheck the required command surface after installation. If no compatible
 published release meets the repository's release-age policy, report that setup cannot
 complete yet; do not invoke an older `add` or bypass the cooldown. Make sure the
@@ -73,11 +78,12 @@ incompatible, or cannot report its version, skillctrl runs
 The npx path requires Node.js/npm; the package requires Node.js 22.20.0 or newer.
 Confirm that help mentions `pinned npx` before relying on this behavior; older
 skillctrl releases require a separately installed skills CLI. Install missing
-Node.js through the repository's tool manager. For mise, only when needed and no
-compatible pin already exists:
+Node.js through the user's existing tool manager and verify `node --version`
+and `npx --version` through its execution wrapper when necessary. If the target
+environment uses mise and no compatible pin already exists, the example is:
 
 ```sh
-mise use --path ./mise.toml node@lts
+mise use --global node@lts
 mise exec -- node --version
 mise exec -- npx --version
 ```
@@ -94,18 +100,11 @@ version through the chosen manager rather than guessing unsupported flags.
 
 ## Install the repository-local skill
 
-Run from the selected repository. Create its skills directory if it is missing,
-then import only this package, using the CLI invocation resolved above:
+Run from the selected Git repository and import only this package, using the CLI
+invocation resolved above. The CLI creates missing skill directories:
 
 ```sh
-mkdir -p .agents/skills
 skillctrl add wwwyo/skillctrl:skillctrl
-```
-
-For a mise-managed CLI and adapter, the import invocation is:
-
-```sh
-mise exec -- skillctrl add wwwyo/skillctrl:skillctrl
 ```
 
 The source package is `.agents/skills/skillctrl/` in `wwwyo/skillctrl`. The installed

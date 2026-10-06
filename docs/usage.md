@@ -4,8 +4,8 @@ Detailed command behavior, adapter differences, and lock compatibility. For an i
 
 ## Set up a repository
 
-`skillctrl` works on a Git repository that has a skills directory. Create the
-two paths it reads:
+`skillctrl` works on a Git repository. `add` and `merge` create `.agents/skills`
+if it is missing. Save customization requirements in an intent file when needed:
 
 ```
 .agents/skills/<name>/                  imported and adapted skills
@@ -101,7 +101,8 @@ use on stderr and may fetch its fixed package on first use. npm's cache is kept
 outside disposable staging, honoring an explicit npm cache setting or using the
 caller's ~/.npm. It does not add project dependencies or install a global CLI.
 Installer failures are returned without retrying via npx or another adapter.
-Manage runtime tools with mise and preserve repository pins and release cooldowns;
+Manage runtime tools through the target repository's existing tool manager and
+preserve its version pins and release cooldowns;
 skillctrl never requests an unpinned npm package. Local commands and dry runs
 never resolve or invoke skills/npx.
 

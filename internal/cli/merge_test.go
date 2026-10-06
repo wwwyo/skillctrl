@@ -111,9 +111,6 @@ func TestFirstMergeUsesTheMainCheckout(t *testing.T) {
 	h.write("skills-lock.json", `{"version":3,"skills":{}}`)
 	h.write(".agents/skillctrl/intents/lock.json", `{"version":2,"skills":{}}`)
 	h.commitAll()
-	if err := os.MkdirAll(filepath.Join(h.root, ".agents/skills"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Remove(filepath.Join(h.root, ".git")); err != nil {
 		t.Fatal(err)
 	}

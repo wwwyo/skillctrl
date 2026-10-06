@@ -28,12 +28,24 @@ const (
 // PrepareSkills creates missing skill directories in the selected repository and
 // refuses symlinked directory ancestors.
 func PrepareSkills(repo string) error {
+	return prepareSkills(repo, true)
+}
+
+// ValidateSkillsDirectories checks existing skill directory ancestors without
+// creating missing directories.
+func ValidateSkillsDirectories(repo string) error {
+	return prepareSkills(repo, false)
+}
+
+func prepareSkills(repo string, create bool) error {
 	for _, relative := range []string{".agents", SkillsDir} {
 		path := filepath.Join(repo, filepath.FromSlash(relative))
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
-			if err := os.Mkdir(path, 0o755); err != nil {
-				return err
+			if create {
+				if err := os.Mkdir(path, 0o755); err != nil {
+					return err
+				}
 			}
 		} else if err != nil {
 			return err

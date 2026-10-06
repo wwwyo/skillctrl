@@ -33,6 +33,11 @@ policy, the user's scope, or repository instructions.
   full benchmarking and description optimization are separate requested tasks.
 - Keep initial installation in docs/start.md, outside the installed runtime skill.
   Keep the package usable when installed independently of this source repository.
+- Reuse compatible global tools and follow the user's or repository's tool and
+  version policy for dependencies. Public setup defaults to a global CLI and a
+  repository-local skill package. Do not require this development repository's
+  mise configuration or add tool configuration to the target repository merely
+  to install the CLI.
 - Keep GitHub automation guidance inside the skill's references. Use separate
   agent workflows for PR checks and scheduled upstream updates. PR checks start
   AI review only on accepted-hash drift, use the current intent without detecting

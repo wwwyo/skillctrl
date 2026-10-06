@@ -4,7 +4,8 @@
 
 ## リポジトリ側の準備
 
-`skillctrl` は Git リポジトリを前提に動作します。次の 2 つを用意します。
+`skillctrl` は Git リポジトリを前提に動作します。`add` と `merge` は、
+`.agents/skills` がなければ作成します。カスタマイズの要件は、必要に応じて intent ファイルに保存します。
 
 ```
 .agents/skills/<name>/                  imported and adapted skills
@@ -86,7 +87,7 @@ skills は Node.js 22.20.0 以上を要求します。`--adapter gh` は `gh ski
 npx を使うことは stderr に表示し、固定版を初回に取得する場合があります。
 npm cache は一時 staging 外に保持し、明示設定か呼び出し元の ~/.npm を使います。
 project の依存や global CLI は導入しません。取得処理が失敗しても npx や別の adapter で再試行しません。
-実行環境は mise で管理し、既存の pin と cooldown を保持します。
+実行環境は対象リポジトリの既存のツール管理方式で管理し、その pin と cooldown を保持します。
 skillctrl は版を指定しない npm package を要求しません。
 ローカル操作と dry run は skills や npx の解決・実行を行いません。
 
