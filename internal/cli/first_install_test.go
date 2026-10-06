@@ -71,9 +71,16 @@ func TestFirstImportRefusesSymlinkedAncestors(t *testing.T) {
 			if err := os.Symlink(outside, filepath.Join(h.root, ancestor)); err != nil {
 				t.Fatal(err)
 			}
-			_, stderr, code := h.try("add", "fixture/source:new-skill")
-			if code != 1 || !strings.Contains(stderr, "skills require a real directory") {
-				t.Fatalf("symlinked ancestor was not refused: exit %d\n%s", code, stderr)
+			for _, args := range [][]string{{"add", "fixture/source:new-skill"}, mergeArguments()} {
+				for _, dry := range []bool{false, true} {
+					if dry {
+						args = append(args, "--dry-run")
+					}
+					_, stderr, code := h.try(args...)
+					if code != 1 || !strings.Contains(stderr, "skills require a real directory") {
+						t.Fatalf("symlinked ancestor was not refused: exit %d\n%s", code, stderr)
+					}
+				}
 			}
 			entries, err := os.ReadDir(outside)
 			if err != nil || len(entries) != 0 {

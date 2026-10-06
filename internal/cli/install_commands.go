@@ -184,6 +184,11 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	}
 	dry, _ := command.Flags().GetBool("dry-run")
 	if dry {
+		if kind == "add" || kind == "merge" {
+			if err := install.ValidateSkillsDirectories(repo); err != nil {
+				return fail(repo, err)
+			}
+		}
 		result := map[string]any{"dry_run": true, "repo": repo, "command": kind,
 			"source": source, "skills": values}
 		if len(inputs) > 0 {
