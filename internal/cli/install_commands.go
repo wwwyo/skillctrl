@@ -155,7 +155,14 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		return fail("", err)
 	}
 	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
-		return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
+		if (kind != "add" && kind != "merge") || !os.IsNotExist(err) {
+			return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
+		}
+		// repository falls back to the working directory for local inspection.
+		// First imports must not create skill directories outside Git.
+		if _, err := gitx.Output(repo, "rev-parse", "--show-toplevel"); err != nil {
+			return fail(repo, fmt.Errorf("the current directory must be inside a Git repository"))
+		}
 	}
 	values, err := install.Names(requested)
 	if err != nil {
