@@ -318,7 +318,12 @@ func runAdapter(name, directory, home string, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	env := removeEnv(gitx.Environment(), "OPENCODE_API_KEY")
-	executable, err := exec.LookPath(name)
+	env, err := adapterRuntime(ctx, name, env)
+	if err != nil {
+		return err
+	}
+	callerEnv := env
+	executable, err := adapterLookPath(name, env)
 	if name != "skills" && err != nil {
 		return fmt.Errorf("%s adapter requires '%s' on PATH; install it with mise", name, name)
 	}
@@ -347,7 +352,12 @@ func runAdapter(name, directory, home string, args []string) error {
 	env = append(env, "HOME="+home, "XDG_CONFIG_HOME="+filepath.Join(home, ".config"), "XDG_CACHE_HOME="+filepath.Join(home, ".cache"), "XDG_STATE_HOME="+filepath.Join(home, ".state"), "GH_CONFIG_DIR="+config, "DO_NOT_TRACK=1", "CI=1", "GIT_TERMINAL_PROMPT=0")
 	if name == "skills" {
 		if executable == "" || !compatibleSkills(ctx, executable, directory, env) {
-			executable, err = exec.LookPath("npx")
+			callerEnv, err = adapterRuntime(ctx, "npx", callerEnv)
+			if err != nil {
+				return err
+			}
+			env = append(removeEnv(env, "PATH"), "PATH="+adapterEnv(callerEnv, "PATH"))
+			executable, err = adapterLookPath("npx", env)
 			if err != nil {
 				return fmt.Errorf("skills adapter requires skills 1.x >= 1.7.0 on PATH or Node.js/npm with npx; install Node.js with mise")
 			}
