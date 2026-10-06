@@ -13,6 +13,8 @@ skillctrl は、導入した agent skill を自分のプロジェクトに合わ
 原本と変更の意図を記録することで、更新時にも普段の agent がカスタマイズを保ちながら
 新しい内容を取り込めるようにします。
 
+https://github.com/user-attachments/assets/48394b56-6be3-47a5-b21a-4e3b3c851d72
+
 ## QuickStart
 
 対象リポジトリで、使っている AI に次の prompt を渡します。
