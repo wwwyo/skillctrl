@@ -5,6 +5,7 @@ A Go CLI for managing agent skills while preserving locally recorded intent.
 ## Structure
 
 - `docs/`: shared project requirements and documentation.
+- `docs/adr/`: dated architecture decision records, indexed in `docs/adr/README.md`.
 - `.agents/skills/skillctrl/`: distributable skill, managed by skillctrl with
   upstream registrations in `.agents/skillctrl/upstreams.json` and saved integration intent.
 - Root `skills-lock.json`: native skills registrations; skillctrl-specific tracking stays separate.
