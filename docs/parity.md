@@ -17,6 +17,10 @@ throwaway Git repositories and fake upstreams reached through Git's
 | Unchanged original is not re-imported, so an adaptation is never discarded | `internal/install.Import` fingerprint comparison | `TestInstallerLifecycle/unchanged_original_is_not_re-imported` |
 | Binary content and executable modes survive an import | `internal/upstream.Export` | `TestInstallerLifecycle/changed_original_imports_bytes_and_modes` |
 | Unrelated upstream commits are ignored | `internal/upstream.Export` original-hash comparison | `TestInstallerLifecycle/unrelated_upstream_change_is_ignored` |
+| A changed original is three-way merged: non-overlapping local edits survive and the diff holds only the upstream change | `internal/upstream.reconcile`, `threeWay` | `TestUpdateMergesUpstreamChangesIntoLocalAdaptation`, `TestCommandAdapterUpdatesMergeFromTheSnapshot` |
+| Overlapping edits are reported with file paths and diff3 line ranges | `internal/upstream.mergeText` | `TestUpdateReportsConflictsWithLocations` |
+| The base comes from a verified snapshot, repository objects, or the recorded source commit; otherwise the skill is replaced and the reason reported | `internal/upstream.previousOriginal`, `gitAdapter.Original` | `TestUpdateRecoversTheBaseWithoutASnapshot`, `TestUpdateFallsBackToReplacementWithoutAVerifiedOriginal` |
+| Merged updates report refreshed inputs and keep no separate base | `internal/upstream.refreshed` | `TestUpdateReportsRefreshedMergedInputs` |
 | Unknown skill in a selection is rejected atomically | `internal/upstream.Install` | `TestInstallerLifecycle/rejected_imports_are_atomic/unknown_skill` |
 | Upstream symlink is refused | `internal/upstream.Export` mode and kind checks | `TestInstallerLifecycle/rejected_imports_are_atomic/symlink`, `TestRejectedUpstreamContent/symlink` |
 | Upstream `.gitignore` is refused | `internal/upstream.Export` | `TestInstallerLifecycle/rejected_imports_are_atomic/gitignore`, `TestRejectedUpstreamContent/gitignore` |

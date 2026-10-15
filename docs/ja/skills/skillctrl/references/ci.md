@@ -31,8 +31,12 @@ hash の不一致は JSON に報告され、コマンド自体は exit 0 で終�
 intent だけを編集しても審査は起動しない。
 
 hash の不一致が報告されたら、該当する skill だけを agent に渡す。
-現在の intent、PR の差分、skill のディレクトリ全体を読む。
-references・scripts・実行権限も確認し、次の表に従って判定する。
+現在の intent と、該当 skill の PR の差分（実行権限の変更を含む）を読む。
+差分から始め、ほかのファイルは差分や intent が必要とするときだけ読む。たとえば、
+変更箇所が参照する resource や、変更された script である。「特定の語を一切含めない」
+のような skill 全体に関わる intent の要件は、全ファイルを読まずに skill 内を検索して確認する。
+skill のディレクトリ全体を読むのは、新しく登録した skill のように比較対象の旧版がないときだけにする。
+次の表に従って判定する。
 
 | 状態 | 処理 |
 | --- | --- |
@@ -83,21 +87,38 @@ default branch の clean な checkout から始め、既存の hash の不一致
 ```bash
 set -euo pipefail
 skillctrl check chosen-skill
-skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
+skillctrl update chosen-skill > skillctrl-update.json
+jq -e '.updates | type == "array"' skillctrl-update.json
 ```
 
 すべての登録済み skill が対象のときだけ、`update` の名前を省略する。
-原本に変更がなければローカルの調整は保持される。単一の原本が変われば skill の内容が置き換わり、
+原本に変更がなければローカルの調整は保持され、`updates` にも現れない。
+単一の原本が変わると、現在の skill へ 3-way merge される。upstream の変更は適用され、
+それ以外の箇所のローカル編集は残り、同じ箇所の編集は衝突として報告される。
 統合 skill では登録済みの参照原本が更新され、routing 本文は保持される。
 統合 routing を調整するときは、登録済みの原本 snapshot を変更しない。
 
-変更された skill ごとに、現在の intent と取得したディレクトリ全体を読み、
-編集できる内容を調整・検証する。確認後にだけ `skillctrl record chosen-skill` を実行する。
+`updates` の各要素は、status に応じて必要なものだけを agent に渡す。
+すべての skill の patch 全体を渡さない。
+
+| `status` | agent に渡すもの | agent の作業 |
+| --- | --- | --- |
+| `merged` | intent と `git diff -- <path>` | 適用された upstream の変更を intent と照合し、intent に反する箇所だけ編集する |
+| `conflicted` | intent・`conflicts`・`git diff -- <path>` | 報告された箇所を intent に沿って解消する。バイナリや削除の衝突は `original` の新しい原本と比べる |
+| `replaced` | intent と skill のディレクトリ全体 | 旧原本がなかったため、新しい原本を intent に沿って一度だけ調整する。次回以降は merge される |
+| `refreshed` | 統合の intent・ルートの `SKILL.md`・変わった入力パスの `git diff` | 更新された原本に routing が合っているか確認する |
+
+`path` は skill のディレクトリ、`original` は保存した新しい原本である。merge 後の差分が
+分かりにくいときは、`original` の差分で upstream だけの変更を確認できる。差分以外は
+必要なときだけ読む。変更箇所が参照する resource をたどり、skill 全体に関わる intent の要件は
+skill 内の検索で確認する。record の前に、
+`git grep -n -e '^<<<<<<< local' -- .agents/skills/chosen-skill` などで衝突マーカーが
+残っていないことを確認する。確認後にだけ `skillctrl record chosen-skill` を実行する。
 intent がない skill は記録しない。公開前に hash の判定と repo のチェックを実行し、
 調整が未解決なら問題を報告して受理しない。
 
-確認済みの変更があれば、skill の変更・登録・受理済み hash・根拠を含む draft PR を作る。
+確認済みの変更があれば、skill の変更・`.agents/skillctrl/originals/` に保存した原本・
+登録・受理済み hash・根拠を含む draft PR を作る。
 変更がなければ PR を作らず終了する。その PR は通常の変更チェックを通す。
 upstream の新しい release だけを理由に、無関係な PR を失敗にしない。
 

@@ -101,7 +101,7 @@ skillctrl check chosen-skill
 | command | 役割 |
 | --- | --- |
 | `find` / `search` | `skills` / `git` は skills.sh API、`gh` は `gh skill search` で検索。skills 1.7.0 の find には JSON 出力がないため API を使います。 |
-| `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・登録を担当。AI と受理 hash 更新は行いません。 |
+| `add` / `install`, `update` | adapter で原本を取得し、skillctrl が検証・取り込み・登録を担当。原本が変わった skill は、手元の skill へ 3-way merge します。AI と受理 hash 更新は行いません。 |
 | `list` / `ls` | 手書きを含む project の skill 一覧。 |
 | `check` | 手元の受け入れ済み hash の差分だけをオフラインで確認。名前で対象を限定できます。upstream 参照・取り込み・reviewer 実行はしません。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
@@ -146,18 +146,55 @@ upstream の取得は明示的な `update` で行います。upstream の更新�
 原本を更新するときは、現在のローカル調整を確認してから次を実行します。
 
 ```sh
-skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
-# Edit and verify the skill against its saved intent
+skillctrl update chosen-skill > update.json
+jq '.updates' update.json
+git diff -- .agents/skills/chosen-skill
+# Resolve conflicts and check the upstream change against the saved intent
 skillctrl record chosen-skill
 git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
-単体 skill は原本が変わると本文を置き換え、merged skill は登録した references を
-更新してルート本文を保持します。Git diff は取り込み前後の差分であり、旧原本と新原本の
-比較を別途自動生成するものではありません。保存した intent に沿って skill を直接編集し、
-確認後に `record chosen-skill` で明示的に受理します。intent のない skill は受理 lock の対象外です。
-commit 前に最終的な変更を確認します。
+単体 skill の原本が変わると、update は新しい原本を現在の skill へファイル単位で
+3-way merge します。base は前回取り込んだ原本で、`.agents/skillctrl/originals/chosen-skill/`
+に未編集の snapshot として残ります。snapshot は `add` が作り、以後の update が更新します。
+upstream が変えていないファイルは手元の内容をそのまま残すため、upstream が同じ行を
+変えない限りローカル調整は消えません。merge は upstream の変更だけを適用するので、
+`git diff -- .agents/skills/chosen-skill` に現れるのは upstream の変更（と衝突マーカー）
+であり、失われた調整ではありません。旧原本と新原本だけの差分は
+`git diff -- .agents/skillctrl/originals/chosen-skill` で確認できます。snapshot は skill と一緒に commit します。
+
+update は、変更のあった skill ごとの結果を `updates` に出力します。
+
+```json
+{"repo": "/path/to/repo", "skills": ["chosen-skill"], "updates": [{
+  "name": "chosen-skill", "path": ".agents/skills/chosen-skill", "layout": "single",
+  "status": "conflicted", "base": "snapshot",
+  "original": ".agents/skillctrl/originals/chosen-skill",
+  "changes": [{"path": "SKILL.md", "upstream": "modified", "result": "conflict"},
+              {"path": "references/new.md", "upstream": "added", "result": "applied"}],
+  "conflicts": [{"path": "SKILL.md", "kind": "content", "lines": [[12, 20]]}]
+}]}
+```
+
+| `status` | 意味 |
+| --- | --- |
+| `merged` | upstream の変更をすべて適用し、ローカルの編集も残っています。 |
+| `conflicted` | 衝突しない変更は適用済みで、列挙したファイルの解消が必要です。テキストの衝突には `local`・`previous original`・`new original` のラベルが付いた diff3 マーカーを、報告した行範囲（1 始まり、両端を含む）に書き込みます。バイナリと変更/削除の衝突はローカル側を残すので、新しい原本は snapshot から取得します。 |
+| `replaced` | 検証できる旧原本がなく、従来どおり新しい原本で skill を置き換えました。理由は `reason` に出ます。 |
+| `refreshed` | merged skill の references を更新しました。変わった入力は `inputs` に出ます。ルート本文は保持します。 |
+
+`base` は旧原本の取得元です。検証済みの `snapshot`、repo の Git object（`repository`）、
+`git` adapter の場合は記録済みの source commit の再取得（`upstream`）の順に探します。
+snapshot は登録済みの原本 tree hash と一致するときだけ使うため、snapshot を編集しても
+merge の結果は変わりません。どれも使えないときは置き換えになります。たとえば、snapshot
+導入前に取り込み、すでに upstream が変わった skill の初回 update、source commit を
+記録しない command adapter、force push で消えた source commit などです。置き換え後は
+snapshot が残るので、次回の update から merge できます。衝突があっても exit 0 です。
+衝突は hash の差分と同じく結果として扱います。
+
+保存した intent に沿って skill を直接編集して衝突を解消し、確認後に
+`record chosen-skill` で明示的に受理します。衝突マーカーが残った内容は record しません。
+intent のない skill は受理 lock の対象外です。commit 前に最終的な変更を確認します。
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 0 は成功、exit 1 は失敗です。
 全コマンドが現在の repo で動き、AI の起動・commit・push・PR 作成は行いません。
@@ -221,6 +258,8 @@ skillctrl record combined
   追跡済み blob と実行属性を保持します。command adapter は各ツール本来の
   探索・導入仕様に従い、skillctrl は取得した skill の script を実行しません。
 - **更新で変わっていない原本は取り込みません。** これが手動適応を毎回失わずに保つ仕組みです。
+- **変わった原本は差し替えずに merge します。** update は旧原本と新原本の差分だけを手元の
+  skill に適用し、衝突を報告します。検証できる旧原本がない場合だけ skill を置き換え、その旨を報告します。
 - **受理 hash。** native の登録は root の `skills-lock.json`、別名・統合・追加の取得情報は
   `.agents/skillctrl/lock.json` に保存します。
   同じ lock の `acceptedHashes` は、受け入れ済みの実体の Git tree hash です。

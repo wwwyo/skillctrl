@@ -15,13 +15,13 @@
     },
     {
       "id": 2,
-      "prompt": "I ran skillctrl update browser from /tmp/project. It succeeded and reported {\"repo\":\"/tmp/project\",\"skills\":[\"browser\"]}. The imported skill no longer matches my saved intent, and check reports local.lock_changed=true. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
-      "expected_output": "Inspects the skill and saved intent in the selected repository, proposes direct verified editing, and uses record only after the content meets the intent.",
+      "prompt": "I ran skillctrl update browser from /tmp/project. It succeeded and reported {\"repo\":\"/tmp/project\",\"skills\":[\"browser\"],\"updates\":[{\"name\":\"browser\",\"path\":\".agents/skills/browser\",\"layout\":\"single\",\"status\":\"conflicted\",\"base\":\"snapshot\",\"original\":\".agents/skillctrl/originals/browser\",\"conflicts\":[{\"path\":\"SKILL.md\",\"kind\":\"content\",\"lines\":[[12,20]]}]}]}. check reports local.lock_changed=true. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
+      "expected_output": "Starts from the update report, the skill diff and the saved intent in the selected repository, resolves the reported conflict by direct verified editing, and uses record only after the content meets the intent.",
       "files": [],
       "expectations": [
         "Uses /tmp/project for inspection and does not propose creating or changing worktrees.",
-        "Explains that update imports originals without invoking AI or advancing the accepted lock.",
-        "Reads the whole skill and saved intent and proposes direct editing through the existing agent or editor.",
+        "Explains that update merged the upstream change mechanically without invoking AI or advancing the accepted lock.",
+        "Reads the saved intent, the reported conflict lines and the skill diff rather than the whole skill, and proposes resolving them through the existing agent or editor without leaving conflict markers.",
         "Uses record browser only after verification; does not propose removed intent commands or recording merely to clear a mismatch."
       ]
     },
@@ -52,10 +52,10 @@
     {
       "id": 5,
       "prompt": "Our PR hash gate failed. browser satisfies its current intent, deploy may violate its intent, and docs cannot be judged from the available evidence. Plan the agent workflow outcomes without executing commands or changing files.",
-      "expected_output": "Reviews the affected whole skills, reports evidence, records browser only, comments on deploy and docs, and leaves the overall required check failed.",
+      "expected_output": "Reviews the affected skills' diffs against their intents, reports evidence, records browser only, comments on deploy and docs, and leaves the overall required check failed.",
       "files": [],
       "expectations": [
-        "Reads current intents, the diff, and whole affected skill directories.",
+        "Reads current intents and the affected skills' diffs, reading other files only where the diff or intent requires them.",
         "Provides evidence before record browser and does not record deploy or docs.",
         "Comments with the relevant intent, diff, and proposed fix for the suspected violation.",
         "Comments with missing information for the unknown result and fails the overall required check.",
@@ -71,6 +71,7 @@
         "Separates PR triggers from scheduled/manual update triggers.",
         "Only the scheduled workflow invokes update, adapts editable content, and opens a draft PR for changes.",
         "Keeps registered merged-skill upstream snapshots intact.",
+        "Gives the agent each changed skill's update status, upstream diff, conflicts and intent instead of whole skill directories.",
         "Requires verification before named record and published final-commit checks before success.",
         "Addresses CI triggering for bot-written commits without assuming GITHUB_TOKEN pushes rerun checks."
       ]

@@ -24,3 +24,4 @@ one decision or milestone; filenames are `<date>-<slug>.md`.
 | 2026-10-05 | [Separate PR hash-mismatch review from scheduled upstream updates](2026-10-05-separate-pr-check-and-scheduled-update.md) |
 | 2026-10-05 | [Consolidate upstream tracking and accepted hashes in one private lock](2026-10-05-unified-private-lock.md) |
 | 2026-10-06 | [Ship v0.3.1 and announce it publicly](2026-10-06-v0-3-1-release.md) |
+| 2026-10-15 | [Merge upstream changes into adapted skills with a stored base](2026-10-15-three-way-update.md) |

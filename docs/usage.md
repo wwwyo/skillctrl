@@ -116,7 +116,7 @@ skillctrl check chosen-skill
 | Command | Responsibility |
 | --- | --- |
 | `find` / `search` | Search skills.sh for `skills` or `git`; use `gh skill search` for `gh`. The skills 1.7.0 find command has no JSON API, so its public index is queried directly. |
-| `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and register originals without AI or accepted hashes. Each update fetches an original into empty staging, preserving local adaptations when that original is unchanged. |
+| `add` / `install`, `update` | Delegate acquisition to the adapter, then validate, import, and register originals without AI or accepted hashes. Each update fetches an original into empty staging; an unchanged original leaves the skill untouched, and a changed one is three-way merged into the local skill. |
 | `list` / `ls` | Read project skill directories, including handwritten skills. |
 | `check` | Report local accepted-hash drift offline without importing or reviewing; optional names scope the report. No acquisition adapter executable is needed. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
@@ -173,19 +173,59 @@ See [agent workflow guide](../.agents/skills/skillctrl/references/ci.md) for the
 To update originals deliberately, first inspect local customization, then run:
 
 ```sh
-skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
-# Edit and verify the skill against its saved intent
+skillctrl update chosen-skill > update.json
+jq '.updates' update.json
+git diff -- .agents/skills/chosen-skill
+# Resolve conflicts and check the upstream change against the saved intent
 skillctrl record chosen-skill
 git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
-Single-input updates replace changed originals; merged updates refresh the
-registered references and retain the routing body. The Git diff shows the
-imported change, not a separately generated comparison of old and new upstream
-originals. Edit the skill directly to preserve its saved intent, verify the
-result, then run `record chosen-skill` to accept it. Intent-free skills remain
-outside the accepted lock. Inspect the resulting changes before committing them.
+A single-input update merges the changed original into the current skill, file
+by file. The base is the previous original, kept as a pristine snapshot in
+`.agents/skillctrl/originals/chosen-skill/`; `add` creates it and later updates
+refresh it. Files the upstream left alone keep their local content, so local
+adaptations survive unless the upstream changed the same lines. Because the
+merge applies only the upstream change, `git diff -- .agents/skills/chosen-skill`
+shows the upstream change (plus any conflict markers), not lost adaptations.
+`git diff -- .agents/skillctrl/originals/chosen-skill` shows the pure
+upstream-to-upstream difference. Commit the snapshot with the skill.
+
+`update` reports each changed skill in `updates`:
+
+```json
+{"repo": "/path/to/repo", "skills": ["chosen-skill"], "updates": [{
+  "name": "chosen-skill", "path": ".agents/skills/chosen-skill", "layout": "single",
+  "status": "conflicted", "base": "snapshot",
+  "original": ".agents/skillctrl/originals/chosen-skill",
+  "changes": [{"path": "SKILL.md", "upstream": "modified", "result": "conflict"},
+              {"path": "references/new.md", "upstream": "added", "result": "applied"}],
+  "conflicts": [{"path": "SKILL.md", "kind": "content", "lines": [[12, 20]]}]
+}]}
+```
+
+| `status` | Meaning |
+| --- | --- |
+| `merged` | Every upstream change applied; local edits are preserved. |
+| `conflicted` | Clean changes applied; listed files need resolution. Text conflicts carry diff3 markers labelled `local`, `previous original`, and `new original` at the reported 1-based, inclusive line ranges. Binary and modify/delete conflicts keep the local side; take the new original from the snapshot. |
+| `replaced` | No verified previous original was available; the new original replaced the skill as in earlier releases. `reason` says why. |
+| `refreshed` | A merged skill's registered references were replaced; `inputs` lists which changed. Its routing body is preserved. |
+
+`base` names where the previous original came from: the verified `snapshot`, the
+repository's Git objects (`repository`), or, for the direct Git adapter, the
+recorded source commit fetched again (`upstream`). The snapshot is trusted only
+when it matches the registered original tree hash, so editing it does not
+change a merge. A replacement happens when none of them is available: for
+example, the first update of a skill imported before snapshots existed whose
+upstream has already changed, a command adapter (which records no source
+commit), or a source commit removed by a force push. The replacement stores a
+snapshot, so the next update merges. A conflicting update exits `0`; conflicts
+are results, like hash drift.
+
+Edit the skill directly to resolve conflicts and keep its saved intent, verify
+the result, then run `record chosen-skill` to accept it. Never record content
+that still contains conflict markers. Intent-free skills remain outside the
+accepted lock. Inspect the resulting changes before committing them.
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `0` means success
 and exit `1` means failure. Commands operate in the current repository and never
@@ -256,6 +296,10 @@ combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs 
   by skillctrl.
 - **An unchanged original is never re-imported.** That is what keeps an
   adaptation alive across an update that did not touch it.
+- **A changed original is merged, not substituted.** Update applies only the
+  difference between the previous and new originals to the local skill and
+  reports conflicts; it replaces the skill only when no verified previous
+  original exists, and says so.
 - **The accepted hash covers the whole skill directory** - body, references,
   scripts, and executable mode - and never the intent document. Changing or
   deleting an intent is a decision in itself and never triggers adaptation on its

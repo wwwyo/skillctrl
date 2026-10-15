@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,10 @@ type ExportRequest struct {
 	Target      string
 	Directory   string
 	Previous    map[string]any
+	// Always writes the original to Target even when it matches Previous, whose
+	// registration is then returned unchanged. Update uses it to restore a
+	// missing base snapshot without re-importing the skill.
+	Always bool
 }
 
 // Adapter prepares originals in isolation; import protection and intent review
@@ -61,7 +66,15 @@ type gitAdapter struct{ repositories map[string]*Repository }
 func NewGitAdapter() Adapter { return &gitAdapter{repositories: map[string]*Repository{}} }
 
 func (adapter *gitAdapter) Export(request ExportRequest) (map[string]any, error) {
-	destination, source, skill, destinationName, target, directory, previous := request.Destination, request.Source, request.Skill, request.Name, request.Target, request.Directory, request.Previous
+	repository, err := adapter.repository(request)
+	if err != nil {
+		return nil, err
+	}
+	return repository.export(request.Destination, request.Skill, request.Name, request.Target, request.Previous, request.Always)
+}
+
+func (adapter *gitAdapter) repository(request ExportRequest) (*Repository, error) {
+	source, directory, previous := request.Source, request.Directory, request.Previous
 	ref := field(previous, "ref")
 	priorSource, _ := Source(field(previous, "source"))
 	if !strings.EqualFold(priorSource, source) {
@@ -77,8 +90,45 @@ func (adapter *gitAdapter) Export(request ExportRequest) (map[string]any, error)
 		}
 		adapter.repositories[key] = repository
 	}
-	return repository.export(destination, skill, destinationName, target, previous)
+	return repository, nil
 }
+
+// Original fetches the recorded source commit into the shallow clone and
+// returns the registered original only when its tree hash still matches.
+// GitHub serves reachable commits by identifier; a commit removed by a force
+// push fails here and leaves the update to its fallback.
+func (adapter *gitAdapter) Original(request ExportRequest) (map[string]file, error) {
+	previous := request.Previous
+	commit, tree := field(previous, "sourceCommit"), field(previous, "skillFolderHash")
+	if commit == "" || tree == "" {
+		return nil, fmt.Errorf("registration has no recorded source commit to fetch")
+	}
+	if priorSource, _ := Source(field(previous, "source")); !strings.EqualFold(priorSource, request.Source) {
+		return nil, fmt.Errorf("registered source changed")
+	}
+	if !commitPattern.MatchString(commit) {
+		return nil, fmt.Errorf("invalid recorded source commit")
+	}
+	repository, err := adapter.repository(request)
+	if err != nil {
+		return nil, err
+	}
+	env := removeEnv(gitx.Environment("GIT_TERMINAL_PROMPT=0"), "OPENCODE_API_KEY")
+	if err := gitx.SafeEnv(repository.path, env, "fetch", "--quiet", "--no-tags", "--depth", "1", "origin", commit); err != nil {
+		return nil, fmt.Errorf("recorded source commit %s is unavailable upstream", shortHash(commit))
+	}
+	treeish := commit + "^{tree}"
+	if folder := relativeSkillPath(field(previous, "skillPath")); folder != "" {
+		treeish = commit + ":" + folder
+	}
+	out, err := gitx.Safe(repository.path, "rev-parse", treeish)
+	if err != nil || gitx.Trimmed(out) != tree {
+		return nil, fmt.Errorf("recorded source commit %s does not contain the registered original", shortHash(commit))
+	}
+	return objectTree(repository.path, tree)
+}
+
+var commitPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 
 // InstallWithAdapter prepares a regular import with the selected backend.
 func InstallWithAdapter(dir, command string, selected []string, source, directory string, adapter Adapter) (string, string, error) {
@@ -299,13 +349,17 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	if adapter.name == "skills" && field(metadata, "computedHash") != field(result, "computedHash") {
 		return nil, fmt.Errorf("adapter content does not match its project lock")
 	}
-	if strings.EqualFold(priorSource, source) && (field(previous, "skillPath") == "" || field(previous, "skillPath") == field(result, "skillPath")) &&
+	unchanged := strings.EqualFold(priorSource, source) && (field(previous, "skillPath") == "" || field(previous, "skillPath") == field(result, "skillPath")) &&
 		((field(previous, "skillFolderHash") != "" && field(previous, "skillFolderHash") == field(result, "skillFolderHash")) ||
-			(field(previous, "skillFolderHash") == "" && field(previous, "computedHash") != "" && field(previous, "computedHash") == field(result, "computedHash"))) {
+			(field(previous, "skillFolderHash") == "" && field(previous, "computedHash") != "" && field(previous, "computedHash") == field(result, "computedHash")))
+	if unchanged && !request.Always {
 		return previous, nil
 	}
 	if err := writeExport(target, files, contents); err != nil {
 		return nil, err
+	}
+	if unchanged {
+		return previous, nil
 	}
 	result["nativeExport"] = maps.Clone(metadata)
 	if installed != destinationName {
