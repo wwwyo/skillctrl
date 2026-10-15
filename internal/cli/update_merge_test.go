@@ -318,3 +318,73 @@ func TestCommandAdapterUpdatesMergeFromTheSnapshot(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateReportsBinaryAndDeletionConflictsKeepingLocalFiles(t *testing.T) {
+	h := newHarness(t)
+	h.publishDemo(t, demoV1, map[string]string{"asset.bin": "\x00base", "drop.md": "drop v1\n", "keep.md": "keep v1\n"})
+	h.run(0, "add", "fixture/source:demo")
+	h.write(".agents/skills/demo/asset.bin", "\x00local")
+	h.write(".agents/skills/demo/drop.md", "drop adapted locally\n")
+	if err := os.Remove(filepath.Join(h.root, ".agents/skills/demo/keep.md")); err != nil {
+		t.Fatal(err)
+	}
+	h.commitAll()
+
+	h.writeOrigin("skills/demo/asset.bin", "\x00upstream")
+	h.writeOrigin("skills/demo/keep.md", "keep v2\n")
+	h.originGit("rm", "-q", "--", "skills/demo/drop.md")
+	h.originGit("add", "-A", "--", "skills")
+	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "demo v2")
+	update := onlyUpdate(t, h.run(0, "update", "demo"))
+
+	if update["status"] != "conflicted" {
+		t.Fatalf("non-text conflicts were not reported: %v", update)
+	}
+	kinds := map[string]string{}
+	for _, raw := range update["conflicts"].([]any) {
+		conflict := raw.(map[string]any)
+		if conflict["lines"] != nil {
+			t.Fatalf("a non-text conflict reported line ranges: %v", conflict)
+		}
+		kinds[str(conflict["path"])] = str(conflict["kind"])
+	}
+	want := map[string]string{"asset.bin": "binary", "drop.md": "modified locally, deleted upstream", "keep.md": "deleted locally, modified upstream"}
+	if len(kinds) != len(want) {
+		t.Fatalf("conflicts: got %v want %v", kinds, want)
+	}
+	for path, kind := range want {
+		if kinds[path] != kind {
+			t.Fatalf("conflicts: got %v want %v", kinds, want)
+		}
+	}
+	if string(h.read(".agents/skills/demo/asset.bin")) != "\x00local" || string(h.read(".agents/skills/demo/drop.md")) != "drop adapted locally\n" {
+		t.Fatal("a non-text conflict did not keep the local file")
+	}
+	if _, err := os.Stat(filepath.Join(h.root, ".agents/skills/demo/keep.md")); !os.IsNotExist(err) {
+		t.Fatal("a locally deleted file was restored")
+	}
+	if string(h.read(originals+"/demo/keep.md")) != "keep v2\n" || string(h.read(originals+"/demo/asset.bin")) != "\x00upstream" {
+		t.Fatal("the new original is not available beside the kept local files")
+	}
+}
+
+func TestUpdateIgnoresMarkerShapedTextInCleanMerges(t *testing.T) {
+	h := newHarness(t)
+	h.publishDemo(t, demoV1, nil)
+	h.run(0, "add", "fixture/source:demo")
+	h.adapt(t, "line one", "line one adapted locally")
+	h.commitAll()
+
+	// Documentation about conflicts may quote a complete diff3 block verbatim.
+	example := "line five\n\n<<<<<<< local\nmine\n||||||| previous original\nbase\n=======\ntheirs\n>>>>>>> new original"
+	h.publishDemo(t, strings.Replace(demoV1, "line five", example, 1), nil)
+	update := onlyUpdate(t, h.run(0, "update", "demo"))
+
+	if update["status"] != "merged" || update["conflicts"] != nil {
+		t.Fatalf("quoted markers were reported as a conflict: %v", update)
+	}
+	body := string(h.read(".agents/skills/demo/SKILL.md"))
+	if !strings.Contains(body, "line one adapted locally") || !strings.Contains(body, ">>>>>>> new original") {
+		t.Fatalf("merge lost content:\n%s", body)
+	}
+}

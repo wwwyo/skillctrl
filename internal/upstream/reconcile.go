@@ -397,12 +397,12 @@ func threeWay(scratch string, base, ours, theirs map[string]file) (map[string]fi
 				change.Result = "conflict"
 				conflicts = append(conflicts, Conflict{Path: name, Kind: conflictBinary})
 			default:
-				data, lines, err := mergeText(scratch, b.data, o.data, t.data)
+				data, conflicted, lines, err := mergeText(scratch, b.data, o.data, t.data)
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("merge %s: %w", name, err)
 				}
 				merged.data = data
-				if len(lines) > 0 {
+				if conflicted {
 					change.Result = "conflict"
 					conflicts = append(conflicts, Conflict{Path: name, Kind: conflictContent, Lines: lines})
 				}
@@ -427,44 +427,55 @@ const (
 
 // mergeText runs git merge-file with diff3 markers, which keep the previous
 // original between the local and upstream sides so a resolver sees all three.
-func mergeText(scratch string, base, ours, theirs []byte) ([]byte, [][2]int, error) {
+// Git's exit status decides whether the merge conflicted: skill text may itself
+// contain marker-shaped lines, so the markers only locate the conflicts.
+func mergeText(scratch string, base, ours, theirs []byte) ([]byte, bool, [][2]int, error) {
 	directory, err := os.MkdirTemp(scratch, "merge-")
 	if err != nil {
-		return nil, nil, err
+		return nil, false, nil, err
 	}
 	defer os.RemoveAll(directory)
 	paths := map[string][]byte{"local": ours, "base": base, "upstream": theirs}
 	for name, data := range paths {
 		if err := os.WriteFile(filepath.Join(directory, name), data, 0o600); err != nil {
-			return nil, nil, err
+			return nil, false, nil, err
 		}
 	}
-	// merge-file exits with the number of conflicts (capped at 127); higher
+	// merge-file exits with the number of conflicts, capped at 127; higher
 	// statuses are errors.
-	conflicts := make([]int, 127)
-	for index := range conflicts {
-		conflicts[index] = index + 1
-	}
-	out, err := gitx.OutputErr(directory, []string{"merge-file", "--stdout", "--diff3",
-		"-L", labelLocal, "-L", labelOriginal, "-L", labelUpstream, "local", "base", "upstream"}, nil, conflicts...)
+	out, count, err := gitx.OutputStatus(directory, []string{"merge-file", "--stdout", "--diff3",
+		"-L", labelLocal, "-L", labelOriginal, "-L", labelUpstream, "local", "base", "upstream"}, 127)
 	if err != nil {
-		return nil, nil, err
+		return nil, false, nil, err
 	}
-	return out, conflictLines(out), nil
+	if count == 0 {
+		return out, false, nil, nil
+	}
+	ranges := conflictLines(out)
+	if len(ranges) != count {
+		// Marker-shaped content made the blocks ambiguous; report the conflict
+		// without locations rather than point at the wrong lines.
+		ranges = nil
+	}
+	return out, true, ranges, nil
 }
 
+// conflictLines locates complete diff3 blocks: local, previous original,
+// separator, and new original markers in that order.
 func conflictLines(data []byte) [][2]int {
+	markers := []string{"<<<<<<< " + labelLocal, "||||||| " + labelOriginal, "=======", ">>>>>>> " + labelUpstream}
 	var ranges [][2]int
-	start := 0
+	start, next := 0, 0
 	for index, line := range strings.Split(string(data), "\n") {
-		number := index + 1
-		switch strings.TrimSuffix(line, "\r") {
-		case "<<<<<<< " + labelLocal:
-			start = number
-		case ">>>>>>> " + labelUpstream:
-			if start > 0 {
-				ranges = append(ranges, [2]int{start, number})
-				start = 0
+		line = strings.TrimSuffix(line, "\r")
+		switch {
+		case line == markers[0]:
+			start, next = index+1, 1
+		case next > 0 && line == markers[next]:
+			next++
+			if next == len(markers) {
+				ranges = append(ranges, [2]int{start, index + 1})
+				next = 0
 			}
 		}
 	}

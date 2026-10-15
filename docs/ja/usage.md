@@ -151,7 +151,7 @@ jq '.updates' update.json
 git diff -- .agents/skills/chosen-skill
 # Resolve conflicts and check the upstream change against the saved intent
 skillctrl record chosen-skill
-git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/originals/chosen-skill .agents/skillctrl/lock.json
 ```
 
 単体 skill の原本が変わると、update は新しい原本を現在の skill へファイル単位で
