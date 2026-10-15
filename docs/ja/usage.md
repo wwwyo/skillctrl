@@ -106,7 +106,7 @@ skillctrl check chosen-skill
 | `check` | 手元の受け入れ済み hash の差分だけをオフラインで確認。名前で対象を限定できます。upstream 参照・取り込み・reviewer 実行はしません。 |
 | `remove` / `rm` | ローカルの実体・対応する意図ファイル・登録を削除。ネットワークや adapter コマンドは不要。 |
 | `merge` | skillctrl 独自の routing skill 作成。intent や AI は不要です。 |
-| `record` | 現在の skill ディレクトリから hash を計算し、指定 skill の lock の値を作成・置換します。内容は実行前に確認します。 |
+| `record` | 現在の skill ディレクトリから hash を計算し、指定 skill の lock の値を作成・置換します。内容は実行前に確認します。未解決の衝突マーカーが残った skill は拒否します。 |
 
 adapter は一時ディレクトリと一時 home に取得し、project の root にある
 `skills-lock.json` の管理場所は変更しません。GitHub CLI が埋め込む追跡 metadata は
@@ -193,7 +193,7 @@ snapshot が残るので、次回の update から merge できます。衝突�
 衝突は hash の差分と同じく結果として扱います。
 
 保存した intent に沿って skill を直接編集して衝突を解消し、確認後に
-`record chosen-skill` で明示的に受理します。衝突マーカーが残った内容は record しません。
+`record chosen-skill` で明示的に受理します。`record` は衝突マーカーが残った skill ディレクトリを拒否するので、先に解消してください。
 intent のない skill は受理 lock の対象外です。commit 前に最終的な変更を確認します。
 
 標準出力は JSON、ログとエラーは stderr に出ます。exit 0 は成功、exit 1 は失敗です。
@@ -237,7 +237,7 @@ skillctrl record combined
 ```
 
 統合先の intent は `combined.md` です。既存の入力 skill とそのローカル intent
-は合成・削除しません。調整時には原本を保持し、未解決の内容は record しません。
+は合成・削除しません。調整時には原本を保持し、未解決の内容は record できません。
 指定した repo が作業先です。旧 skillctrl CLI は専用の追跡ファイルを読みません。
 
 単一の導入には `add owner/repo:upstream-name --name local-name` を使えます。ローカルの

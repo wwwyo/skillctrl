@@ -101,8 +101,8 @@ Important behavior:
   Local edits survive unless the upstream changed the same lines. Each changed
   skill appears in the JSON `updates` with `merged`, `conflicted` (resolve the
   reported diff3 regions), or `replaced` (no previous original was available:
-  re-adapt from the intent once). Commit the stored original with the skill and
-  never record content that still has conflict markers.
+  re-adapt from the intent once). Commit the stored original with the skill;
+  `record` refuses content that still has conflict markers.
 - `remove` deletes the skill, its saved intent document, and registrations.
 - `--dry-run` checks basic arguments and reports command metadata without making
   changes. It does not fetch or inspect source content, confirm that the selected

@@ -121,7 +121,7 @@ skillctrl check chosen-skill
 | `check` | Report local accepted-hash drift offline without importing or reviewing; optional names scope the report. No acquisition adapter executable is needed. |
 | `remove` / `rm` | Remove project content, its saved intent, and registrations locally; no network or adapter executable is needed. |
 | `merge` | skillctrl-specific routing skill containing ordered upstream originals; no intent or AI required. |
-| `record` | Compute current skill-directory hashes and create or replace the named lock entries after verifying content yourself. |
+| `record` | Compute current skill-directory hashes and create or replace the named lock entries after verifying content yourself; unresolved conflict markers are refused. |
 
 Acquisition runs in a disposable directory and home, so installer-owned global
 locks do not replace or relocate the project's root `skills-lock.json`. Only
@@ -153,7 +153,9 @@ replaces NAME in `acceptedHashes` in `.agents/skillctrl/lock.json`. NAME selects
 a skill; you do not supply a hash. Unchanged content produces the same hash. It
 does not update native registrations or original-source tracking. It updates
 only the accepted hashes, preserving acquisition metadata. It runs no reviewer, changes no skill content, and leaves the
-Git index alone. Use it after deliberately editing and checking a managed skill;
+Git index alone. It refuses a skill directory that still contains unresolved
+conflict markers, so a conflict-marker block can never become accepted content.
+Use it after deliberately editing and checking a managed skill;
 it records your acceptance rather than verifying that the saved intent is met.
 `record --dry-run` previews the operation without computing or comparing hashes;
 use `check [NAME...]` to inspect local drift.
@@ -223,9 +225,10 @@ snapshot, so the next update merges. A conflicting update exits `0`; conflicts
 are results, like hash drift.
 
 Edit the skill directly to resolve conflicts and keep its saved intent, verify
-the result, then run `record chosen-skill` to accept it. Never record content
-that still contains conflict markers. Intent-free skills remain outside the
-accepted lock. Inspect the resulting changes before committing them.
+the result, then run `record chosen-skill` to accept it. `record` refuses a
+skill directory that still contains unresolved conflict markers, so resolve
+them first. Intent-free skills remain outside the accepted lock. Inspect the
+resulting changes before committing them.
 
 Results are JSON on stdout; logs and errors go to stderr. Exit `0` means success
 and exit `1` means failure. Commands operate in the current repository and never

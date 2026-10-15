@@ -106,7 +106,7 @@ native 形式の root `skills-lock.json` と、`.agents/skillctrl/lock.json` に
   手元の skill へ 3-way merge する。upstream が同じ行を変えない限りローカルの編集は残る。
   変わった skill は JSON の `updates` に `merged`、`conflicted`（報告された diff3 の箇所を解消する）、
   `replaced`（前回の原本がなかったため、intent に沿って一度だけ調整し直す）のいずれかで現れる。
-  保存した原本は skill と一緒に commit し、衝突マーカーが残った内容は記録しない。
+  保存した原本は skill と一緒に commit する。`record` は衝突マーカーが残った skill ディレクトリを拒否する。
 - `remove` は skill、対応する intent ファイル、登録を削除する。
 - `--dry-run` は基本的な引数を確認し、変更せずに操作の概要を表示する。
   取得元の fetch・内容の確認、指定 skill が上流にあるかの確認、未コミットの編集との

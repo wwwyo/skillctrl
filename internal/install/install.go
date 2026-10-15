@@ -3,6 +3,7 @@
 package install
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -103,6 +104,61 @@ func CheckSkills(path string) error {
 		}
 	}
 	return nil
+}
+
+// conflictMarkers are the line prefixes Git writes for an unresolved merge: the
+// local, base (diff3 only), and upstream markers. They count only at the start
+// of a line, so documentation may quote a marker without being rejected.
+var conflictMarkers = [][]byte{[]byte("<<<<<<< "), []byte("||||||| "), []byte(">>>>>>> ")}
+
+// UnresolvedConflicts lists the repository-relative files that still contain
+// conflict markers inside the named skill directories. Recording such content
+// would make the markers part of the accepted hash and distribute a broken
+// skill, so record refuses it rather than trusting the caller to check first.
+func UnresolvedConflicts(repo string, names []string) ([]string, error) {
+	var found []string
+	for _, name := range names {
+		root := filepath.Join(repo, filepath.FromSlash(SkillsDir), name)
+		err := filepath.WalkDir(root, func(current string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !entry.Type().IsRegular() {
+				return nil
+			}
+			data, err := os.ReadFile(current)
+			if err != nil {
+				return err
+			}
+			if !hasConflictMarker(data) {
+				return nil
+			}
+			relative, err := filepath.Rel(repo, current)
+			if err != nil {
+				return err
+			}
+			found = append(found, filepath.ToSlash(relative))
+			return nil
+		})
+		// A recorded skill may have been deleted; record clears its entry instead
+		// of failing, so a missing directory has nothing to scan.
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	slices.Sort(found)
+	return found, nil
+}
+
+func hasConflictMarker(data []byte) bool {
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		for _, marker := range conflictMarkers {
+			if bytes.HasPrefix(line, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // fingerprint compares file names, contents, and permissions before replacing a
