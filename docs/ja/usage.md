@@ -237,7 +237,7 @@ skillctrl record combined
 ```
 
 統合先の intent は `combined.md` です。既存の入力 skill とそのローカル intent
-は合成・削除しません。調整時には原本を保持し、未解決の内容は record できません。
+は合成・削除しません。調整時には原本を保持し、衝突マーカーが残った内容は record できません。
 指定した repo が作業先です。旧 skillctrl CLI は専用の追跡ファイルを読みません。
 
 単一の導入には `add owner/repo:upstream-name --name local-name` を使えます。ローカルの
