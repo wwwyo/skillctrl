@@ -32,8 +32,13 @@ not a request to accept content. Do not fetch upstreams in this workflow or add
 intent-change detection. An intent edit alone does not trigger review.
 
 When the report shows hash drift, start the agent only for the affected skills.
-Read each current saved intent, the PR diff, and the complete skill directory,
-including references, scripts, and executable modes. Use this decision table:
+Read each current saved intent and the PR diff of the affected skill, including
+executable-mode changes. Start from the diff and read other files only when the
+diff or the intent needs them: resources the changed text points to, and changed
+scripts. Check an intent requirement about the whole skill, such as a term that
+must never appear, by searching the skill rather than reading every file. Read
+the complete skill directory only when no earlier version exists to diff
+against, such as a newly registered skill. Use this decision table:
 
 | State | Action |
 | --- | --- |
@@ -88,26 +93,43 @@ originals and edit skill content to preserve intent:
 ```bash
 set -euo pipefail
 skillctrl check chosen-skill
-skillctrl update chosen-skill
-git diff -- .agents/skills/chosen-skill skills-lock.json .agents/skillctrl/lock.json
+skillctrl update chosen-skill > skillctrl-update.json
+jq -e '.updates | type == "array"' skillctrl-update.json
 ```
 
 Omit names from `update` only when the requested scope is every registered skill.
-An unchanged original preserves local customization. A changed single-input
-original replaces its skill content; a merged update refreshes its registered
-references and preserves the routing body. Keep registered upstream snapshots
-intact while adapting merged routing.
+An unchanged original preserves local customization and has no `updates` entry.
+A changed single-input original is three-way merged into the current skill: the
+upstream change is applied, local edits elsewhere survive, and overlapping edits
+become reported conflicts. A merged update refreshes its registered references
+and preserves the routing body. Keep registered upstream snapshots intact while
+adapting merged routing.
 
-For each changed skill, read its current intent, inspect the whole imported
-directory, adapt the editable content, and verify the result. Run
+Hand each `updates` entry to the agent with only what its status needs. Do not
+give it the whole patch of every skill:
+
+| `status` | Give the agent | Agent task |
+| --- | --- | --- |
+| `merged` | Intent and `git diff -- <path>` | Check the applied upstream change against the intent; edit only where it violates the intent |
+| `conflicted` | Intent, `conflicts`, and `git diff -- <path>` | Resolve each reported region following the intent; for binary or deleted-file conflicts, compare with the new original under `original` |
+| `replaced` | Intent and the whole skill directory | No previous original was available: adapt the new original from the intent once; later updates merge |
+| `refreshed` | Integration intent, root `SKILL.md`, and `git diff` of each changed input path | Check that routing still fits the refreshed originals |
+
+`path` is the skill directory and `original` its stored new original; the diff
+of `original` is the pure upstream difference when the merged diff is unclear.
+Read beyond the diff only when needed: follow resources from changed text, and
+check whole-skill intent requirements with a search over the skill. Before
+recording, confirm that no conflict markers remain, for example with
+`git grep -n -e '^<<<<<<< local' -- .agents/skills/chosen-skill`. Run
 `skillctrl record chosen-skill` only after verification, and skip recording for
 intent-free skills. Run the hash gate and repository checks before publication.
 If adaptation is unresolved, report the problem and leave it unaccepted.
 
 When there are verified changes, open a draft PR containing the skill changes,
-registrations, accepted hashes, and evidence. When there are no changes, finish
-without creating a PR. The PR uses the ordinary PR check above; a new upstream
-release alone never makes an unrelated PR fail.
+stored originals under `.agents/skillctrl/originals/`, registrations, accepted
+hashes, and evidence. When there are no changes, finish without creating a PR.
+The PR uses the ordinary PR check above; a new upstream release alone never
+makes an unrelated PR fail.
 
 ## Configure the agent workflows in the caller's repository
 

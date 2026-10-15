@@ -159,6 +159,21 @@ func OutputErr(dir string, args []string, stdin []byte, tolerated ...int) ([]byt
 	return out, err
 }
 
+// OutputStatus runs a Git command whose documented non-zero statuses up to max
+// are results, returning that status beside stdout. merge-file reports its
+// conflict count this way.
+func OutputStatus(dir string, args []string, max int) ([]byte, int, error) {
+	out, err := run(dir, nil, nil, false, args)
+	if err == nil {
+		return out, 0, nil
+	}
+	var exit *ExitError
+	if errors.As(err, &exit) && exit.Code > 0 && exit.Code <= max {
+		return out, exit.Code, nil
+	}
+	return out, 0, err
+}
+
 // SafeRun executes a hardened Git command, discarding output.
 func SafeRun(dir string, args ...string) error {
 	return runTo(dir, nil, nil, true, args, io.Discard)

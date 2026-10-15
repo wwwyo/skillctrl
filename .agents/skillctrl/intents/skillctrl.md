@@ -26,8 +26,10 @@ policy, the user's scope, or repository instructions.
   registrations plus supplemental provenance in skillctrl-only tracking, and
   respect independently edited or removed native registrations.
 - Acquisition and acceptance stay separate. Only upstream-registered skills
-  with intent use accepted hashes. Review the entire skill before named record;
-  check remains offline and report-only.
+  with intent use accepted hashes. Review the change against the intent before
+  named record, starting from the diff; read the entire skill only when no
+  earlier version exists or the intent needs it. Check remains offline and
+  report-only.
 - Keep authoring guidance focused and available on demand. Preserve existing
   names and resources when improving a skill. Scale validation to the change;
   full benchmarking and description optimization are separate requested tasks.
@@ -42,8 +44,9 @@ policy, the user's scope, or repository instructions.
   agent workflows for PR checks and scheduled upstream updates. PR checks start
   AI review only on accepted-hash drift, use the current intent without detecting
   intent edits, record only verified names with evidence, and fail suspected
-  violations or unknown decisions with comments. Scheduled updates acquire and
-  adapt originals before opening a verified draft PR.
+  violations or unknown decisions with comments. Scheduled updates acquire originals,
+  let update merge upstream changes into adapted skills, adapt only the reported
+  changes and conflicts, and open a verified draft PR.
 - Keep public adapted instructions English, with faithful Japanese translations
   of the maintained guides and evaluation scenarios under docs/ja/skills/skillctrl/.
   Upstream snapshots and legal notices remain unchanged in their source language.

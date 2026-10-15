@@ -245,6 +245,10 @@ func Import(repo, target, upstreamLock string) error {
 		}
 		intentRemovals = append(intentRemovals, path)
 	}
+	originals, err := prepareOriginals(repo, filepath.Join(filepath.Dir(upstreamLock), upstream.PreparedOriginals))
+	if err != nil {
+		return err
+	}
 	claude := filepath.Join(repo, filepath.FromSlash(ClaudeDir))
 	if err := os.MkdirAll(claude, 0o755); err != nil {
 		return err
@@ -293,6 +297,9 @@ func Import(repo, target, upstreamLock string) error {
 			return err
 		}
 	}
+	if err := originals(); err != nil {
+		return err
+	}
 	if trackingErr == nil {
 		if err := skillstate.Write(repo, private); err != nil {
 			return err
@@ -323,6 +330,76 @@ func Import(repo, target, upstreamLock string) error {
 		return nil
 	}
 	return nil
+}
+
+// prepareOriginals validates the staged base snapshots and the destination
+// before any skill is replaced, and returns the step that publishes them.
+// Snapshots are skillctrl-owned copies of upstream originals, so they are
+// replaced without the pending-edit protection that guards skill content.
+func prepareOriginals(repo, prepared string) (func() error, error) {
+	if _, err := os.Stat(prepared); os.IsNotExist(err) {
+		return func() error { return nil }, nil
+	} else if err != nil {
+		return nil, err
+	}
+	if err := CheckSkills(prepared); err != nil {
+		return nil, err
+	}
+	existing := filepath.Join(repo, filepath.FromSlash(upstream.Originals))
+	for _, relative := range []string{".agents", ".agents/skillctrl", upstream.Originals} {
+		info, err := os.Lstat(filepath.Join(repo, filepath.FromSlash(relative)))
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("original snapshots require a real directory: %s", relative)
+		}
+	}
+	if _, err := os.Stat(existing); err == nil {
+		if err := CheckSkills(existing); err != nil {
+			return nil, err
+		}
+	}
+	return func() error {
+		names := map[string]bool{}
+		for _, directory := range []string{existing, prepared} {
+			entries, err := os.ReadDir(directory)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			for _, entry := range entries {
+				names[entry.Name()] = true
+			}
+		}
+		for _, name := range slices.Sorted(maps.Keys(names)) {
+			current, err := fingerprint(filepath.Join(existing, name))
+			if err != nil {
+				return err
+			}
+			replacement, err := fingerprint(filepath.Join(prepared, name))
+			if err != nil {
+				return err
+			}
+			if current != nil && sameFingerprint(current, replacement) {
+				continue
+			}
+			if err := os.RemoveAll(filepath.Join(existing, name)); err != nil {
+				return err
+			}
+			if replacement != nil {
+				if err := copyDirectory(filepath.Join(prepared, name), filepath.Join(existing, name)); err != nil {
+					return err
+				}
+			}
+		}
+		if entries, err := os.ReadDir(existing); err == nil && len(entries) == 0 {
+			return os.Remove(existing)
+		}
+		return nil
+	}, nil
 }
 
 // protectPendingSkills allows unrelated edits and unchanged originals, but a

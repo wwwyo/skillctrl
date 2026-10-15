@@ -244,7 +244,15 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 			return fail(repo, err)
 		}
 	}
-	return emit(map[string]any{"repo": repo, "skills": values})
+	result := map[string]any{"repo": repo, "skills": values}
+	if kind == "update" {
+		updates, err := upstream.ReadUpdates(isolated)
+		if err != nil {
+			return fail(repo, err)
+		}
+		result["updates"] = updates
+	}
+	return emit(result)
 }
 
 // runRecord accepts deliberate manual edits in place. It must not create a

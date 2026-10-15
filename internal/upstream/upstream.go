@@ -299,7 +299,8 @@ func (r *Repository) Path() string { return r.path }
 func (r *Repository) indexSkills() error {
 	manifests := map[string]string{}
 	for name, entry := range r.files {
-		if containsSourceDirectory(name) {
+		// Base snapshots duplicate installed skills; they are never separate skills.
+		if containsSourceDirectory(name) || strings.HasPrefix(name, Originals+"/") {
 			continue
 		}
 		if path.Base(name) != "SKILL.md" || entry.kind != "blob" {
@@ -367,11 +368,19 @@ func (r *Repository) Select(name, previous string) (string, error) {
 
 // Export copies tracked files only, rejecting links and filesystem escapes.
 func (r *Repository) Export(destination, name, target string, previous map[string]any) (map[string]any, error) {
-	return r.export(destination, name, name, target, previous)
+	return r.export(destination, name, name, target, previous, false)
 }
 
-func (r *Repository) export(destination, name, destinationName, target string, previous map[string]any) (map[string]any, error) {
-	result, files, contents, err := r.inspectExport(destination, name, destinationName, previous)
+// export writes a changed original to target. With always, an unchanged
+// original is written too, and previous is still returned as its registration.
+func (r *Repository) export(destination, name, destinationName, target string, previous map[string]any, always bool) (map[string]any, error) {
+	inspected := previous
+	if always {
+		inspected = maps.Clone(previous)
+		delete(inspected, "skillFolderHash")
+		delete(inspected, "computedHash")
+	}
+	result, files, contents, err := r.inspectExport(destination, name, destinationName, inspected)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +389,23 @@ func (r *Repository) export(destination, name, destinationName, target string, p
 			return nil, err
 		}
 	}
+	if always && sameOriginal(previous, result) {
+		return previous, nil
+	}
 	return result, nil
+}
+
+// sameOriginal applies the same-original rule of inspectExport to a fresh result.
+func sameOriginal(previous, result map[string]any) bool {
+	previousSource, _ := Source(field(previous, "source"))
+	if !strings.EqualFold(previousSource, field(result, "source")) {
+		return false
+	}
+	if field(previous, "skillFolderHash") != "" {
+		return field(previous, "skillPath") == field(result, "skillPath") && field(previous, "skillFolderHash") == field(result, "skillFolderHash")
+	}
+	return (field(previous, "skillPath") == "" || field(previous, "skillPath") == field(result, "skillPath")) &&
+		field(previous, "computedHash") != "" && field(previous, "computedHash") == field(result, "computedHash")
 }
 
 func (r *Repository) inspectExport(destination, name, destinationName string, previous map[string]any) (map[string]any, map[string]treeFile, map[string][]byte, error) {
@@ -512,9 +537,27 @@ func values(files map[string]treeFile) []string {
 // The rules are read from the destination repository, not from the clone: it is
 // the destination's ignore rules that would later hide the imported file.
 func rejectIgnored(destination, name string, files map[string]treeFile) error {
-	var request strings.Builder
+	paths := make([]string, 0, len(files))
 	for path := range files {
-		request.WriteString(".agents/skills/" + name + "/" + path + "\x00")
+		paths = append(paths, path)
+	}
+	return rejectIgnoredPaths(destination, ".agents/skills/"+name, name, paths)
+}
+
+// rejectIgnoredAt applies the same rule to a staged directory written elsewhere
+// in the destination, such as the base snapshot of a single-input skill.
+func rejectIgnoredAt(destination, prefix, staged string) error {
+	files, err := readTree(staged)
+	if err != nil {
+		return err
+	}
+	return rejectIgnoredPaths(destination, prefix, path.Base(prefix), slices.Collect(maps.Keys(files)))
+}
+
+func rejectIgnoredPaths(destination, prefix, name string, paths []string) error {
+	var request strings.Builder
+	for _, path := range paths {
+		request.WriteString(prefix + "/" + path + "\x00")
 	}
 	// check-ignore exits 1 when nothing matched; that is a result, not a failure.
 	out, err := gitx.OutputErr(destination, []string{"check-ignore", "--no-index", "-z", "--stdin"},
@@ -558,6 +601,18 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 	if err := copyTree(filepath.Join(dir, filepath.FromSlash(".agents/skills")), target); err != nil {
 		return "", "", err
 	}
+	originals := filepath.Join(directory, PreparedOriginals)
+	if err := os.MkdirAll(originals, 0o755); err != nil {
+		return "", "", err
+	}
+	if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(Originals))); err == nil {
+		if err := copyTree(filepath.Join(dir, filepath.FromSlash(Originals)), originals); err != nil {
+			return "", "", err
+		}
+	} else if !os.IsNotExist(err) {
+		return "", "", err
+	}
+	updates := []Update{}
 	if len(selected) == 0 {
 		selected = slices.Sorted(maps.Keys(value.ManagedSkills()))
 	}
@@ -582,6 +637,15 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 			if mergeErr != nil {
 				return "", "", mergeErr
 			}
+			if command == "update" {
+				if update, changed := refreshed(name, previous, exported); changed {
+					updates = append(updates, update)
+				}
+			}
+			// Merged originals live under references/ and need no separate base.
+			if err := os.RemoveAll(filepath.Join(originals, name)); err != nil {
+				return "", "", err
+			}
 			value.Skills[name] = exported
 			continue
 		}
@@ -591,6 +655,9 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 				return "", "", fmt.Errorf("unknown installed skill: %s", name)
 			}
 			if err := os.RemoveAll(filepath.Join(target, name)); err != nil {
+				return "", "", err
+			}
+			if err := os.RemoveAll(filepath.Join(originals, name)); err != nil {
 				return "", "", err
 			}
 			delete(value.Skills, name)
@@ -624,7 +691,13 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 		if command == "update" && field(previous, "skill") != "" {
 			skill = field(previous, "skill")
 		}
-		exported, err := adapter.Export(ExportRequest{Destination: dir, Source: source, Skill: skill, Name: name, Target: filepath.Join(target, name), Directory: directory, Previous: previous})
+		// The original is staged apart from the skill: an add installs it, and an
+		// update merges it into the current skill using the previous original.
+		staged := filepath.Join(directory, "exports", name)
+		snapshotDir := filepath.Join(originals, name)
+		_, snapshotValid := snapshot(snapshotDir, previous)
+		request := ExportRequest{Destination: dir, Source: source, Skill: skill, Name: name, Target: staged, Directory: directory, Previous: previous, Always: !snapshotValid}
+		exported, err := adapter.Export(request)
 		if err != nil {
 			return "", "", err
 		}
@@ -632,12 +705,70 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 			exported["skill"] = skill
 		}
 		value.Skills[name] = exported
+		if _, err := os.Stat(staged); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return "", "", err
+		}
+		if err := rejectIgnoredAt(dir, Originals+"/"+name, staged); err != nil {
+			return "", "", err
+		}
+		if !sameRegistration(exported, previous) {
+			skillDir := filepath.Join(target, name)
+			if command == "update" {
+				update, err := reconcile(dir, directory, name, skillDir, snapshotDir, staged, request, adapter)
+				if err != nil {
+					return "", "", err
+				}
+				updates = append(updates, update)
+			} else {
+				if err := os.RemoveAll(skillDir); err != nil {
+					return "", "", err
+				}
+				if err := copyTree(staged, skillDir); err != nil {
+					return "", "", err
+				}
+			}
+		}
+		if err := os.RemoveAll(snapshotDir); err != nil {
+			return "", "", err
+		}
+		if err := os.Rename(staged, snapshotDir); err != nil {
+			return "", "", err
+		}
 	}
 	lock = filepath.Join(directory, "upstream.json")
 	if err := value.writePrepared(directory, lock); err != nil {
 		return "", "", err
 	}
+	if err := writeUpdates(directory, updates); err != nil {
+		return "", "", err
+	}
 	return target, lock, nil
+}
+
+// refreshed reports the inputs of a merged skill whose originals changed.
+func refreshed(name string, previous, exported map[string]any) (Update, bool) {
+	update := Update{Name: name, Path: ".agents/skills/" + name, Layout: "merged", Status: StatusRefreshed}
+	prior, _ := sources(previous, name)
+	paths, err := SourcePaths(exported, name)
+	if err != nil {
+		return update, false
+	}
+	changed := false
+	for index, raw := range exported["sources"].([]any) {
+		entry := raw.(map[string]any)
+		same := false
+		for _, old := range prior {
+			if strings.EqualFold(field(old, "source"), field(entry, "source")) && field(old, "skill") == field(entry, "skill") {
+				same = field(old, "skillPath") == field(entry, "skillPath") && field(old, "skillFolderHash") == field(entry, "skillFolderHash") &&
+					field(old, "computedHash") == field(entry, "computedHash")
+			}
+		}
+		changed = changed || !same
+		update.Inputs = append(update.Inputs, InputUpdate{Skill: field(entry, "skill"), Path: update.Path + "/" + paths[index], Changed: !same})
+	}
+	return update, changed
 }
 
 // Result is one entry of the public skill index search.

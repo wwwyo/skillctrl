@@ -38,7 +38,7 @@ compatibility: "管理コマンドには Git と skillctrl CLI が必要。検�
 | skill を作る、指示を改善する | [作成ガイド](references/authoring.md)を読み、skill を作成・評価する。 |
 | 更新後もカスタマイズを維持する | intent を書き、skill を編集・検証してから、確認済みの内容の hash を記録する。 |
 | 導入済み skill を更新・削除する | 指定された名前を更新・削除し、結果を確認する。 |
-| 未記録の変更を説明する、手動編集の hash を記録する | `check` で hash の差分を調べ、skill ディレクトリ全体を確認してから記録する。 |
+| 未記録の変更を説明する、手動編集の hash を記録する | `check` で hash の差分を調べ、skill の差分を確認してから記録する。 |
 | PR のチェックや upstream の定期更新を設定する | [CI と定期更新](references/ci.md)を読み、別の agent workflow にする。 |
 
 依頼ですでに与えられた権限に従う。検索の依頼は候補の探索を認めるものであり、
@@ -93,7 +93,8 @@ worktree の作成や AI reviewer の起動は行わず、既存の agent やエ
 リポジトリの差分、新しいファイル、リンクを確認する。
 native 形式の root `skills-lock.json` と、`.agents/skillctrl/lock.json` にまとめた
 取得元の情報・記録済み hash も、ファイルがあれば確認する。
-実行可能な scripts と references を含め、skill ディレクトリ全体を見る。
+新しく追加した skill は、実行可能な scripts と references を含めディレクトリ全体を見る。
+更新では skill を読み直さず、`updates` の報告と skill の差分から確認を始める。
 ローカルのコマンドは commit・push・PR 作成を行わない。
 それらは、依頼済みか、ユーザーが認めたリポジトリの作業手順で必要な場合だけ行う。
 
@@ -101,6 +102,11 @@ native 形式の root `skills-lock.json` と、`.agents/skillctrl/lock.json` に
 
 - 名前なしの `update` は登録済み skill をすべて更新する。
   全 skill が依頼の対象である場合だけ使う。上流の原本が変わっていなければ更新を省略する。
+- 単一の原本が変わると、`.agents/skillctrl/originals/<name>/` に保存した前回の原本を base に、
+  手元の skill へ 3-way merge する。upstream が同じ行を変えない限りローカルの編集は残る。
+  変わった skill は JSON の `updates` に `merged`、`conflicted`（報告された diff3 の箇所を解消する）、
+  `replaced`（前回の原本がなかったため、intent に沿って一度だけ調整し直す）のいずれかで現れる。
+  保存した原本は skill と一緒に commit し、衝突マーカーが残った内容は記録しない。
 - `remove` は skill、対応する intent ファイル、登録を削除する。
 - `--dry-run` は基本的な引数を確認し、変更せずに操作の概要を表示する。
   取得元の fetch・内容の確認、指定 skill が上流にあるかの確認、未コミットの編集との
@@ -108,7 +114,7 @@ native 形式の root `skills-lock.json` と、`.agents/skillctrl/lock.json` に
 - symlink、submodule、Git の制御ファイル、ignore されたファイルが理由で取り込みを拒否したら、
   チェックを回避せず、取得元のどの内容が拒否されたかを説明する。
 - hash の不一致を消すためだけに、未解決のカスタマイズを記録しない。
-  intent と skill 全体を確認し、問題を解決してから確認済みの hash を記録する。
+  intent と変更内容を確認し、問題を解決してから確認済みの hash を記録する。
 
 ## 上流を追跡しながら統合する
 
