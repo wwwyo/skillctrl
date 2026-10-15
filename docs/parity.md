@@ -35,7 +35,7 @@ throwaway Git repositories and fake upstreams reached through Git's
 | `remove` deletes the skill, its intent, and registrations | `internal/install.Import` | `TestInstallerLifecycle/remove_deletes_the_selected_intent` |
 | The relative Claude link is created and maintained | `internal/install.Import` | `TestInstallerLifecycle/intent-free_import_needs_no_reviewer` |
 | `record` accepts a manual edit without a worktree or staging change | `internal/cli.runRecord` | `TestInstallerLifecycle/record_preserves_staging_in_the_main_checkout`, `TestWorkingTreePreserveStaging` |
-| A skill directory with unresolved conflict markers is refused, while a marker quoted inside a line is accepted | `internal/install.UnresolvedConflicts`, `internal/cli.runRecord` | `TestRecordRefusesUnresolvedConflictMarkers` |
+| A skill directory with unresolved conflict markers is refused, while a marker quoted inside a line or a rule of a different length is accepted | `internal/install.UnresolvedConflicts`, `internal/cli.runRecord` | `TestRecordRefusesUnresolvedConflictMarkers` |
 
 ## Multiple upstream inputs
 

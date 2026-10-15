@@ -106,10 +106,12 @@ func CheckSkills(path string) error {
 	return nil
 }
 
-// conflictMarkers are the line prefixes Git writes for an unresolved merge: the
-// local, base (diff3 only), and upstream markers. They count only at the start
-// of a line, so documentation may quote a marker without being rejected.
-var conflictMarkers = [][]byte{[]byte("<<<<<<< "), []byte("||||||| "), []byte(">>>>>>> ")}
+// conflictMarkers are the seven-character prefixes Git writes for an unresolved
+// merge: the local, base (diff3 only), separator, and upstream markers. As in
+// `git diff --check`, a marker counts only at the start of a line and only when
+// the seventh character ends the line or is whitespace. That rejects a
+// perpendicular run of a different length and a marker quoted inside a line.
+var conflictMarkers = [][]byte{[]byte("<<<<<<<"), []byte("|||||||"), []byte("======="), []byte(">>>>>>>")}
 
 // UnresolvedConflicts lists the repository-relative files that still contain
 // conflict markers inside the named skill directories. Recording such content
@@ -153,7 +155,11 @@ func UnresolvedConflicts(repo string, names []string) ([]string, error) {
 func hasConflictMarker(data []byte) bool {
 	for _, line := range bytes.Split(data, []byte("\n")) {
 		for _, marker := range conflictMarkers {
-			if bytes.HasPrefix(line, marker) {
+			if !bytes.HasPrefix(line, marker) {
+				continue
+			}
+			rest := line[len(marker):]
+			if len(rest) == 0 || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\r' {
 				return true
 			}
 		}
