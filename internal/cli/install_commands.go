@@ -295,6 +295,13 @@ func runRecord(repo string, values []string) error {
 	if len(unknown) > 0 {
 		return fail(repo, fmt.Errorf("skills require a registered upstream and saved intent: %s", strings.Join(unknown, ", ")))
 	}
+	conflicts, err := install.UnresolvedConflicts(repo, values)
+	if err != nil {
+		return fail(repo, err)
+	}
+	if len(conflicts) > 0 {
+		return fail(repo, fmt.Errorf("record refuses unresolved conflict markers: %s", strings.Join(conflicts, ", ")))
+	}
 	if _, err := lock.Record(repo, current, recorded, values, managed); err != nil {
 		return fail(repo, err)
 	}
@@ -307,7 +314,8 @@ func newRecordCommand() *cobra.Command {
 		Short: "Compute and write current skill-directory hashes to the lock",
 		Long: "Compute the current whole-directory hash for each named skill and create or\n" +
 			"replace its lock entry. Names select skills, not hashes. Registered upstreams\n" +
-			"and saved intent are required. Verify content first; no reviewer runs.\n" +
+			"and saved intent are required. Unresolved conflict markers are refused.\n" +
+			"Verify content first; no reviewer runs.\n" +
 			"With no names, only remove ineligible lock entries; eligible hashes stay unchanged.",
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {

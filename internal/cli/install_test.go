@@ -133,6 +133,32 @@ func TestRecordWithoutNamesOnlyPrunesIneligibleHashes(t *testing.T) {
 	}
 }
 
+func TestRecordRefusesUnresolvedConflictMarkers(t *testing.T) {
+	h := newHarness(t)
+	accepted := h.lockedSkills()["manual"]
+	blocks := map[string]string{
+		"complete diff3 block": "kept\n" + strings.Join([]string{
+			"<<<<<<< local", "mine",
+			"||||||| previous original", "base",
+			"=======", "theirs",
+			">>>>>>> new original",
+		}, "\n"),
+		"leftover separator": "kept\n=======",
+		"label-less marker":  "kept\n<<<<<<<",
+	}
+	for name, block := range blocks {
+		h.write(".agents/skills/manual/SKILL.md", manifest("manual", block+"\n"))
+		h.run(1, "record", "manual")
+		if h.lockedSkills()["manual"] != accepted {
+			t.Fatalf("%s: record accepted content with conflict markers", name)
+		}
+	}
+	// A marker quoted inside a line and a rule of a different length are not
+	// unresolved conflicts and must stay acceptable.
+	h.write(".agents/skills/manual/SKILL.md", manifest("manual", "quote ^<<<<<<< local and ======= in prose\n========\n"))
+	h.run(0, "record", "manual")
+}
+
 // TestInstallerLifecycle is the port of the original installer suite. It walks
 // the behaviors that make the tool safe to run on a real checkout: a dry run
 // writes nothing, an unchanged original is not re-imported, a changed original
