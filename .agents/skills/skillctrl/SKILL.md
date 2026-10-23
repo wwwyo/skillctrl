@@ -97,11 +97,12 @@ Important behavior:
 - `update` without names refreshes all registered skills; use it only when the
   requested scope is all skills. An unchanged upstream original is skipped.
 - A changed single-input original is three-way merged into the local skill,
-  using the previous original stored in `.agents/skillctrl/originals/<name>/`.
+  using the registered tree hash to recover the previous original from repository
+  Git objects or upstream history, for every adapter without a recorded commit.
   Local edits survive unless the upstream changed the same lines. Each changed
   skill appears in the JSON `updates` with `merged`, `conflicted` (resolve the
   reported diff3 regions), or `replaced` (no previous original was available:
-  re-adapt from the intent once). Commit the stored original with the skill;
+  re-adapt from the intent once). Legacy base snapshots are ignored;
   `record` refuses content that still has conflict markers.
 - `remove` deletes the skill, its saved intent document, and registrations.
 - `--dry-run` checks basic arguments and reports command metadata without making

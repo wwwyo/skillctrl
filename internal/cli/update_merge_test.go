@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -53,9 +54,10 @@ func TestUpdateMergesUpstreamChangesIntoLocalAdaptation(t *testing.T) {
 	h := newHarness(t)
 	h.publishDemo(t, demoV1, nil)
 	h.run(0, "add", "fixture/source:demo")
-	if string(h.read(originals+"/demo/SKILL.md")) != string(h.read(".agents/skills/demo/SKILL.md")) {
-		t.Fatal("add did not keep the imported original as the next update's base")
+	if _, err := os.Stat(filepath.Join(h.root, originals)); !os.IsNotExist(err) {
+		t.Fatal("add created a legacy base snapshot")
 	}
+	h.write(".agents/skills/demo/scripts/am.test.mjs", "local test\n")
 	h.adapt(t, "line two", "line two adapted locally")
 	h.commitAll()
 
@@ -64,8 +66,8 @@ func TestUpdateMergesUpstreamChangesIntoLocalAdaptation(t *testing.T) {
 	result := h.run(0, "update", "demo")
 
 	update := onlyUpdate(t, result)
-	if update["status"] != "merged" || update["base"] != "snapshot" || update["conflicts"] != nil {
-		t.Fatalf("non-conflicting update was not merged from the snapshot: %v", update)
+	if update["status"] != "merged" || update["base"] != "upstream-history" || update["conflicts"] != nil {
+		t.Fatalf("non-conflicting update was not merged from upstream history: %v", update)
 	}
 	body := string(h.read(".agents/skills/demo/SKILL.md"))
 	if !strings.Contains(body, "line two adapted locally") || !strings.Contains(body, "line five from upstream v2") {
@@ -98,9 +100,8 @@ func TestUpdateMergesUpstreamChangesIntoLocalAdaptation(t *testing.T) {
 	if strings.Contains(diff, "\n-line two adapted locally") || !strings.Contains(diff, "\n+line five from upstream v2") {
 		t.Fatalf("skill diff is not limited to the upstream change:\n%s", diff)
 	}
-	if !strings.Contains(string(h.read(originals+"/demo/SKILL.md")), "line five from upstream v2") ||
-		strings.Contains(string(h.read(originals+"/demo/SKILL.md")), "adapted") {
-		t.Fatal("the snapshot does not hold the new pristine original")
+	if string(h.read(".agents/skills/demo/scripts/am.test.mjs")) != "local test\n" {
+		t.Fatal("merge removed a local-only test file")
 	}
 	if h.log() != "" {
 		t.Fatal("update invoked a reviewer")
@@ -153,8 +154,11 @@ func TestUpdateReportsConflictsWithLocations(t *testing.T) {
 
 func TestUpdateFallsBackToReplacementWithoutAVerifiedOriginal(t *testing.T) {
 	h := newHarness(t)
-	// The fixture's manual skill predates base snapshots: its registration has no
-	// source commit, and its pristine tree was never committed locally.
+	// A registration whose tree is no longer reachable cannot supply a base.
+	registrations := h.upstreamSkills()
+	registrations["manual"].(map[string]any)["skillFolderHash"] = strings.Repeat("1", 40)
+	h.write("skills-lock.json", mustJSON(map[string]any{"version": 3, "skills": registrations}))
+	h.commitAll()
 	h.publishSecondVersion(t)
 	result := h.run(0, "update", "manual")
 
@@ -163,7 +167,7 @@ func TestUpdateFallsBackToReplacementWithoutAVerifiedOriginal(t *testing.T) {
 		t.Fatalf("missing base was not reported as a replacement: %v", update)
 	}
 	reason := str(update["reason"])
-	for _, part := range []string{"no verified snapshot", "not in the repository's Git objects", "no recorded source commit"} {
+	for _, part := range []string{"not in the repository's Git objects", "unavailable in upstream history", "no recorded source commit"} {
 		if !strings.Contains(reason, part) {
 			t.Fatalf("reason %q lacks %q", reason, part)
 		}
@@ -171,14 +175,14 @@ func TestUpdateFallsBackToReplacementWithoutAVerifiedOriginal(t *testing.T) {
 	if body := string(h.read(".agents/skills/manual/SKILL.md")); !strings.Contains(body, "upstream v2; generic browser") {
 		t.Fatalf("fallback did not install the new original:\n%s", body)
 	}
-	// The replacement leaves a verified base, so the next update merges.
+	// The replacement registers a reachable tree, so the next update merges.
 	h.write(".agents/skills/manual/SKILL.md", manifest("canonical-manual", "upstream v2; default browser"))
 	h.commitAll()
 	h.writeOrigin("skills/manual/notes.md", "upstream v3 notes\n")
 	h.originGit("add", "-A", "--", "skills")
 	h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "original v3")
 	update = onlyUpdate(t, h.run(0, "update", "manual"))
-	if update["status"] != "merged" || update["base"] != "snapshot" {
+	if update["status"] != "merged" || update["base"] != "upstream-history" {
 		t.Fatalf("update after the fallback did not merge: %v", update)
 	}
 	if body := string(h.read(".agents/skills/manual/SKILL.md")); !strings.Contains(body, "default browser") {
@@ -186,20 +190,24 @@ func TestUpdateFallsBackToReplacementWithoutAVerifiedOriginal(t *testing.T) {
 	}
 }
 
-func TestUpdateRecoversTheBaseWithoutASnapshot(t *testing.T) {
+func TestUpdateResolvesBaseFromGitObjectsAndHistory(t *testing.T) {
 	cases := []struct {
 		name string
 		// pristine commits the imported original before adapting it.
 		pristine bool
 		// rewrite removes the recorded source commit from the upstream history.
 		rewrite bool
+		retain  string
 		tamper  bool
 		base    string
 	}{
 		{name: "repository objects", pristine: true, base: "repository"},
-		{name: "recorded source commit", base: "upstream"},
-		{name: "tampered snapshot", tamper: true, base: "upstream"},
+		{name: "upstream history", base: "upstream-history"},
+		{name: "ignored legacy snapshot", tamper: true, base: "upstream-history"},
 		{name: "force-pushed upstream", rewrite: true},
+		{name: "tree retained on another branch", rewrite: true, retain: "branch", base: "upstream-history"},
+		{name: "tree retained by a tag", rewrite: true, retain: "tag", base: "upstream-history"},
+		{name: "recorded commit outside advertised histories", rewrite: true, retain: "custom", base: "upstream"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -211,14 +219,21 @@ func TestUpdateRecoversTheBaseWithoutASnapshot(t *testing.T) {
 			}
 			if test.tamper {
 				h.write(originals+"/demo/SKILL.md", manifest("demo", "tampered base"))
-			} else if err := os.RemoveAll(filepath.Join(h.root, originals)); err != nil {
-				t.Fatal(err)
 			}
 			h.adapt(t, "line two", "line two adapted locally")
 			h.commitAll()
 			if test.rewrite {
 				branch := h.originGit("rev-parse", "--abbrev-ref", "HEAD")
+				if test.retain == "custom" {
+					h.originGit("update-ref", "refs/keep/original", "HEAD")
+				} else if test.retain == "tag" {
+					h.originGit("-c", "tag.gpgsign=false", "tag", "retained-original")
+				} else if test.retain != "" {
+					h.originGit(test.retain, "retained-original")
+				}
 				h.originGit("checkout", "-q", "--orphan", "rewritten")
+				h.writeOrigin("skills/demo/SKILL.md", manifest("demo", "rewritten base"))
+				h.originGit("add", "-A", "--", "skills")
 				h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "rewritten history")
 				h.originGit("branch", "-D", branch)
 				h.originGit("branch", "-m", branch)
@@ -228,6 +243,9 @@ func TestUpdateRecoversTheBaseWithoutASnapshot(t *testing.T) {
 			h.publishDemo(t, strings.Replace(demoV1, "line five", "line five from upstream v2", 1), nil)
 			update := onlyUpdate(t, h.run(0, "update", "demo"))
 			body := string(h.read(".agents/skills/demo/SKILL.md"))
+			if test.tamper && string(h.read(originals+"/demo/SKILL.md")) != manifest("demo", "tampered base") {
+				t.Fatal("update modified a legacy snapshot")
+			}
 			if test.base == "" {
 				if update["status"] != "replaced" || !strings.Contains(str(update["reason"]), "unavailable upstream") {
 					t.Fatalf("lost source commit was not reported: %v", update)
@@ -271,7 +289,7 @@ func TestUpdateReportsRefreshedMergedInputs(t *testing.T) {
 	}
 }
 
-func TestCommandAdapterUpdatesMergeFromTheSnapshot(t *testing.T) {
+func TestCommandAdapterUpdatesMergeFromUpstreamHistory(t *testing.T) {
 	for _, backend := range []string{"skills", "gh"} {
 		t.Run(backend, func(t *testing.T) {
 			h := newHarness(t)
@@ -279,6 +297,9 @@ func TestCommandAdapterUpdatesMergeFromTheSnapshot(t *testing.T) {
 			serve := func(body string) {
 				t.Helper()
 				content := manifest("new-skill", body)
+				h.writeOrigin("skills/new-skill/SKILL.md", content)
+				h.originGit("add", "--", "skills/new-skill")
+				h.originGit("-c", "commit.gpgsign=false", "commit", "-qm", "served original")
 				h.writeFile(filepath.Join(served, "SKILL.md"), content)
 				h.writeFile(filepath.Join(h.base, "served-lock.json"), mustJSON(map[string]any{"version": 1, "skills": map[string]any{"new-skill": map[string]any{
 					"source": "fixture/source", "sourceType": "github", "skillPath": "skills/new-skill/SKILL.md",
@@ -304,12 +325,16 @@ func TestCommandAdapterUpdatesMergeFromTheSnapshot(t *testing.T) {
 			}
 			body := string(h.read(".agents/skills/new-skill/SKILL.md"))
 			h.write(".agents/skills/new-skill/SKILL.md", strings.Replace(body, "line two", "line two adapted locally", 1))
+			h.write(".agents/skills/new-skill/scripts/am.test.mjs", "local test\n")
 			h.commitAll()
 
 			serve(strings.Replace(demoV1, "line five", "line five from upstream v2", 1))
 			update := onlyUpdate(t, h.run(0, "--adapter", backend, "update", "new-skill"))
-			if update["status"] != "merged" || update["base"] != "snapshot" {
-				t.Fatalf("command adapter update did not merge from the snapshot: %v", update)
+			if update["status"] != "merged" || update["base"] != "upstream-history" {
+				t.Fatalf("command adapter update did not merge from upstream history: %v", update)
+			}
+			if string(h.read(".agents/skills/new-skill/scripts/am.test.mjs")) != "local test\n" {
+				t.Fatal("command adapter merge removed local-only files")
 			}
 			body = string(h.read(".agents/skills/new-skill/SKILL.md"))
 			if !strings.Contains(body, "line two adapted locally") || !strings.Contains(body, "line five from upstream v2") {
@@ -363,9 +388,7 @@ func TestUpdateReportsBinaryAndDeletionConflictsKeepingLocalFiles(t *testing.T) 
 	if _, err := os.Stat(filepath.Join(h.root, ".agents/skills/demo/keep.md")); !os.IsNotExist(err) {
 		t.Fatal("a locally deleted file was restored")
 	}
-	if string(h.read(originals+"/demo/keep.md")) != "keep v2\n" || string(h.read(originals+"/demo/asset.bin")) != "\x00upstream" {
-		t.Fatal("the new original is not available beside the kept local files")
-	}
+
 }
 
 func TestUpdateIgnoresMarkerShapedTextInCleanMerges(t *testing.T) {
@@ -386,5 +409,62 @@ func TestUpdateIgnoresMarkerShapedTextInCleanMerges(t *testing.T) {
 	body := string(h.read(".agents/skills/demo/SKILL.md"))
 	if !strings.Contains(body, "line one adapted locally") || !strings.Contains(body, ">>>>>>> new original") {
 		t.Fatalf("merge lost content:\n%s", body)
+	}
+}
+
+func TestLegacyBaseSnapshotsAreLeftUntouched(t *testing.T) {
+	h := newHarness(t)
+	h.publishDemo(t, demoV1, nil)
+	legacy := originals + "/demo/SKILL.md"
+	h.write(legacy, "legacy user-edited copy\n")
+	h.commitAll()
+	check := func() {
+		t.Helper()
+		if string(h.read(legacy)) != "legacy user-edited copy\n" {
+			t.Fatal("command changed a legacy base snapshot")
+		}
+	}
+	h.run(0, "add", "fixture/source:demo")
+	check()
+	h.adapt(t, "line two", "local adaptation")
+	h.commitAll()
+	h.publishDemo(t, strings.Replace(demoV1, "line five", "upstream change", 1), nil)
+	h.run(0, "update", "demo")
+	check()
+	h.commitAll()
+	h.run(0, "remove", "demo")
+	check()
+	h.commitAll()
+	h.run(0, "merge", "--name", "demo", "fixture/source:new-skill")
+	check()
+}
+
+func TestUpdateDoesNotReplaceSkillsWhenHistoryFetchFails(t *testing.T) {
+	h := newHarness(t)
+	h.publishDemo(t, demoV1, nil)
+	h.run(0, "add", "fixture/source:demo")
+	registrations := h.upstreamSkills()
+	delete(registrations["demo"].(map[string]any), "sourceCommit")
+	h.write("skills-lock.json", mustJSON(map[string]any{"version": 3, "skills": registrations}))
+	h.adapt(t, "line two", "local adaptation")
+	h.write(".agents/skills/demo/scripts/am.test.mjs", "local test\n")
+	h.commitAll()
+	before := h.git("status", "--porcelain")
+	h.publishDemo(t, strings.Replace(demoV1, "line five", "upstream change", 1), nil)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\ncase \"$*\" in *--filter=blob:none*) exit 44 ;; esac\nexec '" + realGit + "' \"$@\"\n"
+	h.writeFile(filepath.Join(h.binDir, "git"), script)
+	if err := os.Chmod(filepath.Join(h.binDir, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := h.try("update", "demo")
+	if code != 1 || !strings.Contains(stderr, "upstream history fetch failed") {
+		t.Fatalf("history failure: exit %d %s", code, stderr)
+	}
+	if h.git("status", "--porcelain") != before || string(h.read(".agents/skills/demo/scripts/am.test.mjs")) != "local test\n" {
+		t.Fatal("failed history fetch changed the repository")
 	}
 }

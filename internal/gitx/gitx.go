@@ -184,6 +184,11 @@ func SafeStdin(dir string, stdin []byte, args ...string) ([]byte, error) {
 	return run(dir, nil, stdin, true, args)
 }
 
+// SafeStdinEnv runs a hardened Git command with explicit stdin and environment.
+func SafeStdinEnv(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
+	return run(dir, env, stdin, true, args)
+}
+
 // Trimmed returns stdout without surrounding whitespace, matching the previous
 // text-mode subprocess calls.
 func Trimmed(out []byte) string { return strings.TrimSpace(string(out)) }

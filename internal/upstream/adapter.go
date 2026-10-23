@@ -26,10 +26,6 @@ type ExportRequest struct {
 	Target      string
 	Directory   string
 	Previous    map[string]any
-	// Always writes the original to Target even when it matches Previous, whose
-	// registration is then returned unchanged. Update uses it to restore a
-	// missing base snapshot without re-importing the skill.
-	Always bool
 }
 
 // Adapter prepares originals in isolation; import protection and intent review
@@ -70,7 +66,7 @@ func (adapter *gitAdapter) Export(request ExportRequest) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	return repository.export(request.Destination, request.Skill, request.Name, request.Target, request.Previous, request.Always)
+	return repository.export(request.Destination, request.Skill, request.Name, request.Target, request.Previous)
 }
 
 func (adapter *gitAdapter) repository(request ExportRequest) (*Repository, error) {
@@ -352,14 +348,11 @@ func (adapter *commandAdapter) Export(request ExportRequest) (map[string]any, er
 	unchanged := strings.EqualFold(priorSource, source) && (field(previous, "skillPath") == "" || field(previous, "skillPath") == field(result, "skillPath")) &&
 		((field(previous, "skillFolderHash") != "" && field(previous, "skillFolderHash") == field(result, "skillFolderHash")) ||
 			(field(previous, "skillFolderHash") == "" && field(previous, "computedHash") != "" && field(previous, "computedHash") == field(result, "computedHash")))
-	if unchanged && !request.Always {
+	if unchanged {
 		return previous, nil
 	}
 	if err := writeExport(target, files, contents); err != nil {
 		return nil, err
-	}
-	if unchanged {
-		return previous, nil
 	}
 	result["nativeExport"] = maps.Clone(metadata)
 	if installed != destinationName {

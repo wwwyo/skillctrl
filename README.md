@@ -10,7 +10,7 @@
 skillctrl lets you install agent skills and customize them for your project.
 Shorten instructions, add your own checks, or combine skills into one workflow.
 
-It keeps upstream originals and the intent behind your edits so your existing
+It tracks upstream originals and the intent behind your edits so your existing
 agent can preserve those customizations when adapting upstream updates.
 
 https://github.com/user-attachments/assets/48394b56-6be3-47a5-b21a-4e3b3c851d72
