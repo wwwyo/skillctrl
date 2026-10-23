@@ -137,6 +137,20 @@ PR のチェックが書き込める範囲は受理済み lock に限り、変�
 信頼できる repo のチェックで検証する。必須チェックは、未検証の新しい head ではなく、
 実際に確認した commit に対する結果として保存する。
 
+agent job から publish job へ AI の修正を渡すときは、許可された修正を stage し、
+`git diff --cached --binary` の出力を、上限付きのメモリ内 stdout バッファを
+経由させず patch ファイルへ直接書き出す。
+diff コマンドや patch の書き出しに失敗したら、その場で agent job を失敗にする。
+patch が空かどうかはファイルサイズで判定する。空でない patch を渡す前に、
+agent job 内で、publish job が適用先にするのと同じ基準状態に対して
+`git apply --check` を実行し、検証に失敗したら job を失敗にする。
+検証先は修正済みの checkout ではなく、その基準状態にする。
+
+`replaced` 後の初回適応や upstream の取り込み全体を戻す修正など、
+修正 patch が大きくなりうることを前提にする。agent の入力を差分に絞っても、
+出力サイズに上限はつかない。バイナリを含む skill にも publish job が修正を
+適用できるよう、バイナリの変更を保持する。
+
 `gh aw compile` で生成し、Markdown の原本と生成した `.lock.yml` の両方を commit する。
 編集は Markdown に対して行い、YAML を再生成する。運用前に Actions 上で、一致・適合する不一致・
 違反の疑い・判断不能・定期更新を確認する。compile だけでは認証や公開の動作は確認できない。

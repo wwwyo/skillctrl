@@ -75,6 +75,19 @@
         "Requires verification before named record and published final-commit checks before success.",
         "Addresses CI triggering for bot-written commits without assuming GITHUB_TOKEN pushes rerun checks."
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Our scheduled skill update agent finished a first-time adaptation after replaced, reverting an entire upstream import, including binary files. The harness captures git diff --cached with child-process stdout and writes it to repair.patch for a publish job. The patch may exceed 1 MiB even though the agent only read diffs. Explain the required patch handoff safeguards in a read-only plan; do not execute commands or edit files.",
+      "expected_output": "A patch handoff that writes binary-capable diffs directly to a file, fails on generation or capture errors, and validates the patch in the agent job against the publish base before publication.",
+      "files": [],
+      "expectations": [
+        "Reads references/ci.md for workflow configuration requirements.",
+        "Writes git diff --cached --binary output directly to a patch file without bounded in-memory stdout capture; increasing the buffer alone is insufficient.",
+        "Fails the agent job immediately on diff-command or patch-capture errors and uses file size to determine whether the patch is empty.",
+        "Runs git apply --check for a nonempty patch in the agent job against the same base state used by the publish job, rather than the already repaired checkout, and fails before handoff on validation errors.",
+        "Anticipates large output from replaced adaptation or reverting entire imports; restricting input to diffs does not bound repair output."
+      ]
     }
   ]
 }

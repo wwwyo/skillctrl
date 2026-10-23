@@ -75,6 +75,19 @@
         "検証後の対象を指定した record と、公開後の最終 commit のチェックを要求する。",
         "GITHUB_TOKEN の push でチェックが再実行されると仮定せず、bot の commit の CI 起動方法を扱う。"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "skill の定期更新 agent が、replaced 後の初回適応を終え、バイナリを含む upstream の取り込み全体を戻しました。harness は子プロセスの stdout で git diff --cached を捕捉し、publish job 用の repair.patch に書き出しています。agent は差分だけを読みましたが、patch は 1 MiB を超える可能性があります。コマンド実行や編集をせず、patch の引き渡しに必要な対策を説明してください。",
+      "expected_output": "バイナリを適用できる差分をファイルへ直接書き出し、生成・書き出しのエラーで失敗し、公開前に agent job 内で publish の基準状態に対して patch を検証する引き渡し手順。",
+      "files": [],
+      "expectations": [
+        "workflow の設定要件として references/ci.md を読む。",
+        "git diff --cached --binary の出力を、上限付きのメモリ内 stdout 捕捉を経由させず patch ファイルへ直接書き出す。バッファの拡大だけでは不十分とする。",
+        "diff コマンドや patch の書き出しのエラーで、その場で agent job を失敗にする。空判定にはファイルサイズを使う。",
+        "空でない patch に対し、agent job 内で、修正済みの checkout ではなく publish job と同じ基準状態に対して git apply --check を実行し、検証エラーなら引き渡す前に失敗にする。",
+        "replaced 後の適応や取り込み全体を戻す修正で出力が大きくなることを想定する。入力を差分に絞っても修正出力のサイズに上限はつかないと説明する。"
+      ]
     }
   ]
 }
