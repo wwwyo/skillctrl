@@ -137,8 +137,9 @@ PR のチェックが書き込める範囲は受理済み lock に限り、変�
 信頼できる repo のチェックで検証する。必須チェックは、未検証の新しい head ではなく、
 実際に確認した commit に対する結果として保存する。
 
-agent job から publish job へ AI の修正を渡すときは、`git diff --binary` の出力を、
-上限付きのメモリ内 stdout バッファを経由させず patch ファイルへ直接書き出す。
+agent job から publish job へ AI の修正を渡すときは、許可された修正を stage し、
+`git diff --cached --binary` の出力を、上限付きのメモリ内 stdout バッファを
+経由させず patch ファイルへ直接書き出す。
 diff コマンドや patch の書き出しに失敗したら、その場で agent job を失敗にする。
 patch が空かどうかはファイルサイズで判定する。空でない patch を渡す前に、
 agent job 内で、publish job が適用先にするのと同じ基準状態に対して
