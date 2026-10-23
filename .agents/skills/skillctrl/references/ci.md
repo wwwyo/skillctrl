@@ -148,6 +148,19 @@ repository checks for permitted paths and registered-original integrity. The
 required result must refer to the commit actually verified, rather than an
 unreviewed newer head.
 
+When passing AI repairs from the agent job to a publish job, write
+`git diff --binary` output directly to a patch file without a bounded in-memory
+stdout buffer. Fail the agent job immediately if the diff command or patch
+capture fails, and determine whether the patch is empty by its file size.
+Before handing off a nonempty patch, run `git apply --check` in the agent job
+against the same base state the publish job will apply it to; fail the job if
+validation fails. Validate against that base, not the already repaired checkout.
+
+Allow for large repair patches, including first-time adaptation after `replaced`
+and repairs that revert an entire upstream import. Restricting the agent's input
+to diffs does not bound its output size. Preserve binary changes so the publish
+job can apply repairs to skills containing binary files.
+
 Compile with `gh aw compile` and commit both the Markdown sources and generated
 `.lock.yml` workflows. Edit the Markdown sources and regenerate the YAML.
 Before relying on the workflows, exercise matching content, accepted drift,
