@@ -111,12 +111,14 @@ give it the whole patch of every skill:
 | `status` | Give the agent | Agent task |
 | --- | --- | --- |
 | `merged` | Intent and `git diff -- <path>` | Check the applied upstream change against the intent; edit only where it violates the intent |
-| `conflicted` | Intent, `conflicts`, and `git diff -- <path>` | Resolve each reported region following the intent; for binary or deleted-file conflicts, compare with the new original under `original` |
-| `replaced` | Intent and the whole skill directory | No previous original was available: adapt the new original from the intent once; later updates merge |
+| `conflicted` | Intent, `conflicts`, and `git diff -- <path>` | Resolve each reported region following the intent; for binary or deleted-file conflicts, inspect the new original at the registered upstream source and skill path |
+| `replaced` | Intent and the whole skill directory | Base recovery failed (see `reason`): inspect lost local-only files and adapt the replacement; later updates can merge if the tree remains reachable |
 | `refreshed` | Integration intent, root `SKILL.md`, and `git diff` of each changed input path | Check that routing still fits the refreshed originals |
 
-`path` is the skill directory and `original` its stored new original; the diff
-of `original` is the pure upstream difference when the merged diff is unclear.
+`path` is the skill directory; `changes` lists upstream file changes. Base trees
+come from repository objects, upstream history, or a recorded Git source commit.
+History recovery works with every adapter and needs no recorded commit.
+Updates require upstream access; PR `check` remains offline.
 Read beyond the diff only when needed: follow resources from changed text, and
 check whole-skill intent requirements with a search over the skill. Before
 recording, confirm that no conflict markers remain, for example with
@@ -126,8 +128,7 @@ intent-free skills. Run the hash gate and repository checks before publication.
 If adaptation is unresolved, report the problem and leave it unaccepted.
 
 When there are verified changes, open a draft PR containing the skill changes,
-stored originals under `.agents/skillctrl/originals/`, registrations, accepted
-hashes, and evidence. When there are no changes, finish without creating a PR.
+registrations, accepted hashes, and evidence. When there are no changes, finish without creating a PR.
 The PR uses the ordinary PR check above; a new upstream release alone never
 makes an unrelated PR fail.
 

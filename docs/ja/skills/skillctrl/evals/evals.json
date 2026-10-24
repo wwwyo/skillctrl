@@ -15,7 +15,7 @@
     },
     {
       "id": 2,
-      "prompt": "/tmp/project で skillctrl update browser を実行しました。成功し、{\"repo\":\"/tmp/project\",\"skills\":[\"browser\"],\"updates\":[{\"name\":\"browser\",\"path\":\".agents/skills/browser\",\"layout\":\"single\",\"status\":\"conflicted\",\"base\":\"snapshot\",\"original\":\".agents/skillctrl/originals/browser\",\"conflicts\":[{\"path\":\"SKILL.md\",\"kind\":\"content\",\"lines\":[[12,20]]}]}]} と報告されました。check は local.lock_changed=true を報告しています。次に何を確認し、何をすべきですか。これは読み取り専用の計画を立てる課題なので、コマンドを実行したりファイルを変更したりしないでください。",
+      "prompt": "/tmp/project で skillctrl update browser を実行しました。成功し、{\"repo\":\"/tmp/project\",\"skills\":[\"browser\"],\"updates\":[{\"name\":\"browser\",\"path\":\".agents/skills/browser\",\"layout\":\"single\",\"status\":\"conflicted\",\"base\":\"upstream-history\",\"conflicts\":[{\"path\":\"SKILL.md\",\"kind\":\"content\",\"lines\":[[12,20]]}]}]} と報告されました。check は local.lock_changed=true を報告しています。次に何を確認し、何をすべきですか。これは読み取り専用の計画を立てる課題なので、コマンドを実行したりファイルを変更したりしないでください。",
       "expected_output": "選んだリポジトリで update の報告・skill の差分・保存した intent から確認を始め、報告された衝突を直接編集して解消・検証する。内容が intent を満たしてから record を使う。",
       "files": [],
       "expectations": [

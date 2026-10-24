@@ -180,26 +180,22 @@ jq '.updates' update.json
 git diff -- .agents/skills/chosen-skill
 # Resolve conflicts and check the upstream change against the saved intent
 skillctrl record chosen-skill
-git diff -- .agents/skills/chosen-skill .agents/skillctrl/originals/chosen-skill .agents/skillctrl/lock.json
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
 A single-input update merges the changed original into the current skill, file
-by file. The base is the previous original, kept as a pristine snapshot in
-`.agents/skillctrl/originals/chosen-skill/`; `add` creates it and later updates
-refresh it. Files the upstream left alone keep their local content, so local
-adaptations survive unless the upstream changed the same lines. Because the
-merge applies only the upstream change, `git diff -- .agents/skills/chosen-skill`
-shows the upstream change (plus any conflict markers), not lost adaptations.
-`git diff -- .agents/skillctrl/originals/chosen-skill` shows the pure
-upstream-to-upstream difference. Commit the snapshot with the skill.
+by file. The base is recovered by its registered `skillFolderHash` from Git
+objects or upstream history. Files unchanged upstream and local-only files keep
+their local bytes and modes. Overlapping text edits produce diff3 markers.
+`git diff -- .agents/skills/chosen-skill` shows the applied upstream change and
+any conflicts; `updates[].changes` lists the upstream file changes.
 
 `update` reports each changed skill in `updates`:
 
 ```json
 {"repo": "/path/to/repo", "skills": ["chosen-skill"], "updates": [{
   "name": "chosen-skill", "path": ".agents/skills/chosen-skill", "layout": "single",
-  "status": "conflicted", "base": "snapshot",
-  "original": ".agents/skillctrl/originals/chosen-skill",
+  "status": "conflicted", "base": "upstream-history",
   "changes": [{"path": "SKILL.md", "upstream": "modified", "result": "conflict"},
               {"path": "references/new.md", "upstream": "added", "result": "applied"}],
   "conflicts": [{"path": "SKILL.md", "kind": "content", "lines": [[12, 20]]}]
@@ -209,20 +205,27 @@ upstream-to-upstream difference. Commit the snapshot with the skill.
 | `status` | Meaning |
 | --- | --- |
 | `merged` | Every upstream change applied; local edits are preserved. |
-| `conflicted` | Clean changes applied; listed files need resolution. Text conflicts carry diff3 markers labelled `local`, `previous original`, and `new original` at the reported 1-based, inclusive line ranges. Binary and modify/delete conflicts keep the local side; take the new original from the snapshot. |
+| `conflicted` | Clean changes applied; listed files need resolution. Text conflicts carry diff3 markers labelled `local`, `previous original`, and `new original` at the reported 1-based, inclusive line ranges. Binary and modify/delete conflicts keep the local side; inspect the new original at the registered upstream source and skill path. |
 | `replaced` | No verified previous original was available; the new original replaced the skill as in earlier releases. `reason` says why. |
 | `refreshed` | A merged skill's registered references were replaced; `inputs` lists which changed. Its routing body is preserved. |
 
-`base` names where the previous original came from: the verified `snapshot`, the
-repository's Git objects (`repository`), or, for the direct Git adapter, the
-recorded source commit fetched again (`upstream`). The snapshot is trusted only
-when it matches the registered original tree hash, so editing it does not
-change a merge. A replacement happens when none of them is available: for
-example, the first update of a skill imported before snapshots existed whose
-upstream has already changed, a command adapter (which records no source
-commit), or a source commit removed by a force push. The replacement stores a
-snapshot, so the next update merges. A conflicting update exits `0`; conflicts
-are results, like hash drift.
+`base` names the first verified source: the repository's Git objects
+(`repository`), upstream branch and tag history fetched with `blob:none`
+(`upstream-history`, for every adapter), or the recorded source commit fetched
+again by the direct Git adapter (`upstream`). Each recovered tree must match the
+registered tree hash. Source commits are optional for history recovery. History
+fetches have no shallow boundary; blobs are downloaded only when reading the
+required tree, if the server supports filtering. History is shared per source
+within an update and discarded afterward. Updates require upstream access;
+`check` stays offline. If recovery fails, for example after rewritten history
+removes the tree, `replaced` reports the reasons and replaces the whole skill,
+including local-only files. History fetch/read/verification failures abort the
+update unless recorded-commit recovery succeeds. A conflicting update exits `0`.
+
+Legacy `.agents/skillctrl/originals/` directories are ignored and left untouched.
+After upgrading all callers, inspect and remove that directory manually (for
+tracked copies, `git rm -r -- .agents/skillctrl/originals`) and commit the removal.
+No command creates or refreshes it. Merged skills retain registered `references/`.
 
 Edit the skill directly to resolve conflicts and keep its saved intent, verify
 the result, then run `record chosen-skill` to accept it. `record` refuses a

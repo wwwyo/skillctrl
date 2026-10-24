@@ -151,25 +151,22 @@ jq '.updates' update.json
 git diff -- .agents/skills/chosen-skill
 # Resolve conflicts and check the upstream change against the saved intent
 skillctrl record chosen-skill
-git diff -- .agents/skills/chosen-skill .agents/skillctrl/originals/chosen-skill .agents/skillctrl/lock.json
+git diff -- .agents/skills/chosen-skill .agents/skillctrl/lock.json
 ```
 
-単体 skill の原本が変わると、update は新しい原本を現在の skill へファイル単位で
-3-way merge します。base は前回取り込んだ原本で、`.agents/skillctrl/originals/chosen-skill/`
-に未編集の snapshot として残ります。snapshot は `add` が作り、以後の update が更新します。
-upstream が変えていないファイルは手元の内容をそのまま残すため、upstream が同じ行を
-変えない限りローカル調整は消えません。merge は upstream の変更だけを適用するので、
-`git diff -- .agents/skills/chosen-skill` に現れるのは upstream の変更（と衝突マーカー）
-であり、失われた調整ではありません。旧原本と新原本だけの差分は
-`git diff -- .agents/skillctrl/originals/chosen-skill` で確認できます。snapshot は skill と一緒に commit します。
+単体 skill の原本が変わると、update は現在の skill へファイル単位で 3-way merge します。
+base は登録済みの `skillFolderHash` で Git object または upstream の履歴から復元します。
+upstream が変えていないファイルとローカル専用ファイルは、手元の内容と実行権限を保持します。
+同じ箇所のテキスト編集は diff3 マーカーで示します。
+`git diff -- .agents/skills/chosen-skill` で適用した変更と衝突を確認し、
+`updates[].changes` で upstream のファイル変更を確認します。
 
 update は、変更のあった skill ごとの結果を `updates` に出力します。
 
 ```json
 {"repo": "/path/to/repo", "skills": ["chosen-skill"], "updates": [{
   "name": "chosen-skill", "path": ".agents/skills/chosen-skill", "layout": "single",
-  "status": "conflicted", "base": "snapshot",
-  "original": ".agents/skillctrl/originals/chosen-skill",
+  "status": "conflicted", "base": "upstream-history",
   "changes": [{"path": "SKILL.md", "upstream": "modified", "result": "conflict"},
               {"path": "references/new.md", "upstream": "added", "result": "applied"}],
   "conflicts": [{"path": "SKILL.md", "kind": "content", "lines": [[12, 20]]}]
@@ -179,18 +176,25 @@ update は、変更のあった skill ごとの結果を `updates` に出力し�
 | `status` | 意味 |
 | --- | --- |
 | `merged` | upstream の変更をすべて適用し、ローカルの編集も残っています。 |
-| `conflicted` | 衝突しない変更は適用済みで、列挙したファイルの解消が必要です。テキストの衝突には `local`・`previous original`・`new original` のラベルが付いた diff3 マーカーを、報告した行範囲（1 始まり、両端を含む）に書き込みます。バイナリと変更/削除の衝突はローカル側を残すので、新しい原本は snapshot から取得します。 |
+| `conflicted` | 衝突しない変更は適用済みで、列挙したファイルの解消が必要です。テキストの衝突には `local`・`previous original`・`new original` のラベルが付いた diff3 マーカーを、報告した行範囲（1 始まり、両端を含む）に書き込みます。バイナリと変更/削除の衝突はローカル側を残すので、新しい原本は登録済み upstream の source と skill path から確認します。 |
 | `replaced` | 検証できる旧原本がなく、従来どおり新しい原本で skill を置き換えました。理由は `reason` に出ます。 |
 | `refreshed` | merged skill の references を更新しました。変わった入力は `inputs` に出ます。ルート本文は保持します。 |
 
-`base` は旧原本の取得元です。検証済みの `snapshot`、repo の Git object（`repository`）、
-`git` adapter の場合は記録済みの source commit の再取得（`upstream`）の順に探します。
-snapshot は登録済みの原本 tree hash と一致するときだけ使うため、snapshot を編集しても
-merge の結果は変わりません。どれも使えないときは置き換えになります。たとえば、snapshot
-導入前に取り込み、すでに upstream が変わった skill の初回 update、source commit を
-記録しない command adapter、force push で消えた source commit などです。置き換え後は
-snapshot が残るので、次回の update から merge できます。衝突があっても exit 0 です。
-衝突は hash の差分と同じく結果として扱います。
+`base` は検証できた最初の取得元です。repo の Git object（`repository`）、
+`blob:none` で取得した upstream の全 branch・tag の履歴（`upstream-history`、全 adapter 共通）、
+従来の `git` adapter による記録済み source commit の再取得（`upstream`）の順に探します。
+取得した tree は登録済み tree hash と照合します。履歴からの復元に source commit は不要です。
+shallow な取得はせず、サーバーが filter に対応していれば必要な tree の blob だけを取得します。
+同一 update 内では source ごとに履歴を共有し、終了後に破棄します。update はネットワークを
+必要としますが、`check` は引き続きオフラインです。履歴の書き換えで tree が消えるなど、
+復元できない場合は `replaced` と理由を報告し、ローカル専用ファイルを含む skill 全体を
+置き換えます。履歴の通信・読み取り・検証に失敗した場合は、記録済み commit でも復元
+できなければ更新全体を中止します。衝突があっても exit 0 です。
+
+旧 `.agents/skillctrl/originals/` は参照も更新もせず、そのまま残します。
+すべての呼び出し元を更新した後、内容を確認して手動で削除してください。
+追跡済みなら `git rm -r -- .agents/skillctrl/originals` で削除し、commit します。
+新たな作成は行いません。merged skill の登録済み `references/` は従来どおりです。
 
 保存した intent に沿って skill を直接編集して衝突を解消し、確認後に
 `record chosen-skill` で明示的に受理します。`record` は衝突マーカーが残った skill ディレクトリを拒否するので、先に解消してください。
