@@ -64,12 +64,14 @@ func historyOriginal(request ExportRequest) (map[string]file, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	if err := gitx.SafeEnv(directory, gitx.Environment("GIT_NO_LAZY_FETCH=1"), "cat-file", "-e", tree+"^{tree}"); err != nil {
+	// Object reads stay local; only the explicit fetches above and below hit the network.
+	offline := removeEnv(gitx.Environment("GIT_NO_LAZY_FETCH=1"), "OPENCODE_API_KEY")
+	if err := gitx.SafeEnv(directory, offline, "cat-file", "-e", tree+"^{tree}"); err != nil {
 		return nil, fmt.Errorf("%w: registered original tree %s is unavailable in upstream history", errHistoryUnavailable, shortHash(tree))
 	}
 	// cat-file lazily fetches one missing blob at a time. Batch the missing
 	// objects of this tree first to avoid a network round trip per skill file.
-	missing, err := gitx.Safe(directory, "rev-list", "--objects", "--missing=print", tree)
+	missing, err := gitx.SafeStdinEnv(directory, offline, nil, "rev-list", "--objects", "--missing=print", tree)
 	if err != nil {
 		return nil, fmt.Errorf("cannot list registered original tree")
 	}
