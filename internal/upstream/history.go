@@ -83,7 +83,10 @@ func historyOriginal(request ExportRequest) (map[string]file, error) {
 	}
 	if wants.Len() > 0 {
 		env := removeEnv(gitx.Environment("GIT_TERMINAL_PROMPT=0"), "OPENCODE_API_KEY")
-		if _, err := gitx.SafeStdinEnv(directory, env, []byte(wants.String()), "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--filter=blob:none", "--stdin", "origin"); err != nil {
+		// Like Git's own promisor fetch, skip negotiation: advertising the fetched
+		// commits as haves lets GitHub omit blobs that are still reachable from them.
+		if _, err := gitx.SafeStdinEnv(directory, env, []byte(wants.String()), "-c", "fetch.negotiationAlgorithm=noop",
+			"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--filter=blob:none", "--stdin", "origin"); err != nil {
 			return nil, fmt.Errorf("cannot fetch registered original blobs from upstream history")
 		}
 	}
