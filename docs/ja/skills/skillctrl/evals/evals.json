@@ -88,6 +88,20 @@
         "空でない patch に対し、agent job 内で、修正済みの checkout ではなく publish job と同じ基準状態に対して git apply --check を実行し、検証エラーなら引き渡す前に失敗にする。",
         "replaced 後の適応や取り込み全体を戻す修正で出力が大きくなることを想定する。入力を差分に絞っても修正出力のサイズに上限はつかないと説明する。"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "gh-aw の定期更新では GITHUB_TOKEN で branch を push していますが、Actions に PR 作成が許可されておらず gh pr create が失敗します。repo 全体で Actions の PR 作成を有効にせず、draft PR の CI と review bot を自動起動したいです。コマンド実行や編集をせず、設定と token の使い分けを説明してください。",
+      "expected_output": "対象 repo に限定した専用 GitHub App token で draft PR を作り、branch の push は GITHUB_TOKEN を使う。PR の head で CI とレビューの起動を確認する。",
+      "files": [],
+      "expectations": [
+        "references/ci.md を読み、Actions の PR 作成設定は repo 単位であることと、GITHUB_TOKEN の PR イベントではチェックの自動起動が抑止されるか承認が必要になることを説明する。",
+        "Contents read と Pull requests write だけの App を推奨し、Webhook を無効にし、install を owner と対象 repo に限定する。",
+        "Client ID を repo variable、秘密鍵を repo secret に登録し、登録後はローカルの秘密鍵を削除して commit しない。",
+        "信頼できる公開処理の直前で、SHA pin した actions/create-github-app-token に client-id・private-key・strict mode 用の明示的な repositories: ${{ github.event.repository.name }}・permission-pull-requests: write を指定して token を発行する。",
+        "組み込みの create-pull-request handler は PR 用の資格情報を Git 操作にも使うため、token の使い分けには信頼できる custom publish job を使う。GH_TOKEN=\"$APP_TOKEN\" は gh pr create にだけ渡し、branch の push は contents: write の GITHUB_TOKEN のままにする。",
+        "App が作った draft PR で CI・レビューを確認し、この App に Contents write を与えず、その後の GITHUB_TOKEN commit のチェック起動方法も別途設定する。"
+      ]
     }
   ]
 }

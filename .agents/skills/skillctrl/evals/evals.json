@@ -88,6 +88,20 @@
         "Runs git apply --check for a nonempty patch in the agent job against the same base state used by the publish job, rather than the already repaired checkout, and fails before handoff on validation errors.",
         "Anticipates large output from replaced adaptation or reverting entire imports; restricting input to diffs does not bound repair output."
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "Our gh-aw scheduled update pushes its branch with GITHUB_TOKEN, but gh pr create fails because Actions cannot create pull requests. We want CI and review bots to run automatically on the draft PR without enabling repository-wide Actions PR creation. Explain the setup and token boundaries without executing commands or editing files.",
+      "expected_output": "A dedicated, repository-scoped GitHub App token creates the draft PR while GITHUB_TOKEN still pushes the branch; verify that CI and review run on the PR head.",
+      "files": [],
+      "expectations": [
+        "Reads references/ci.md and explains that the Actions PR creation setting is repository-wide, while GITHUB_TOKEN PR events can suppress automatic checks or require approval.",
+        "Recommends an App with only Contents read and Pull requests write, webhooks disabled, installation restricted to its owner and the selected repository.",
+        "Stores the Client ID in a repository variable and the private key in a repository secret; deletes the local key after registration and never commits it.",
+        "Mints the token immediately before trusted publication using SHA-pinned actions/create-github-app-token, client-id, private-key, explicit repositories: ${{ github.event.repository.name }} for strict mode, and permission-pull-requests: write.",
+        "Uses a custom trusted publish job for the token split, because the built-in create-pull-request handler uses its PR credential for Git operations too. Passes GH_TOKEN=\"$APP_TOKEN\" only to gh pr create; retains GITHUB_TOKEN with contents: write for branch pushes.",
+        "Verifies CI and review on the App-created draft PR and separately plans fresh checks for later GITHUB_TOKEN commits without granting this App Contents write."
+      ]
     }
   ]
 }
