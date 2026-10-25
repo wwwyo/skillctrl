@@ -99,7 +99,7 @@
         "Contents read と Pull requests write だけの App を推奨し、Webhook を無効にし、install を owner と対象 repo に限定する。",
         "Client ID を repo variable、秘密鍵を repo secret に登録し、登録後はローカルの秘密鍵を削除して commit しない。",
         "信頼できる公開処理の直前で、SHA pin した actions/create-github-app-token に client-id・private-key・strict mode 用の明示的な repositories: ${{ github.event.repository.name }}・permission-pull-requests: write を指定して token を発行する。",
-        "GH_TOKEN=\"$APP_TOKEN\" は gh pr create にだけ渡し、branch の push は contents: write の GITHUB_TOKEN のままにする。",
+        "組み込みの create-pull-request handler は PR 用の資格情報を Git 操作にも使うため、token の使い分けには信頼できる custom publish job を使う。GH_TOKEN=\"$APP_TOKEN\" は gh pr create にだけ渡し、branch の push は contents: write の GITHUB_TOKEN のままにする。",
         "App が作った draft PR で CI・レビューを確認し、この App に Contents write を与えず、その後の GITHUB_TOKEN commit のチェック起動方法も別途設定する。"
       ]
     }

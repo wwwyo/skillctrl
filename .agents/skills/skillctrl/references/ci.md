@@ -144,9 +144,11 @@ Keep credentials in the repository's secret management.
 Configure a fixed hash probe before agent execution so matching content never
 starts inference. Use [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/)
 for comments, accepted-lock publication to the PR branch, draft PR creation,
-and check results. For scheduled draft PRs, configure the PR creation token as
-described below, including in a custom safe-output publish job. Restrict PR-check
-writes to the accepted lock; use trusted repository checks for permitted paths and registered-original integrity. The
+and check results. For scheduled draft PRs with the token split below, use a
+custom trusted safe-output publish job: the built-in `create-pull-request`
+handler also uses its PR credential for Git operations, so a PR-only App token
+cannot publish its branch. Restrict PR-check writes to the accepted lock; use
+trusted repository checks for permitted paths and registered-original integrity. The
 required result must refer to the commit actually verified, rather than an
 unreviewed newer head.
 
@@ -191,7 +193,7 @@ Prefer a dedicated GitHub App installation token for PR creation:
    secret (for example, `SKILLCTRL_APP_PRIVATE_KEY`). Delete the local key file
    after registration; never commit it.
 3. Immediately before the trusted publish step, mint a token scoped to the
-   current repository. In the workflow's publish job, use:
+   current repository. In the custom trusted publish job, use:
 
    ```yaml
    - name: Mint the PR app token

@@ -134,8 +134,9 @@ upstream の新しい release だけを理由に、無関係な PR を失敗に�
 一致時に推論を起動しないよう、agent の実行前に固定の hash の事前判定を置く。
 コメント、PR ブランチへの lock の保存、draft PR の作成、チェック結果には
 [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/) を使う。
-定期更新の draft PR は、custom safe-output publish job を使う場合も含め、
-後述の PR 作成用 token を設定する。
+定期更新の draft PR で後述の token の使い分けを行うには、信頼できる custom
+safe-output publish job を使う。組み込みの `create-pull-request` handler は
+PR 用の資格情報を Git 操作にも使うため、PR 作成専用 App token では branch を公開できない。
 PR のチェックが書き込める範囲は受理済み lock に限り、変更可能なパスと登録済み原本の整合性は
 信頼できる repo のチェックで検証する。必須チェックは、未検証の新しい head ではなく、
 実際に確認した commit に対する結果として保存する。
@@ -177,7 +178,7 @@ PR の作成には、専用 GitHub App の installation token を推奨する。
    秘密鍵を repo の secret（例: `SKILLCTRL_APP_PRIVATE_KEY`）に登録する。
    登録後はローカルの秘密鍵ファイルを削除し、決して commit しない。
 3. 信頼できる publish step の直前で、現在の repo に限定した token を発行する。
-   workflow の publish job では次のように設定する。
+   信頼できる custom publish job では次のように設定する。
 
    ```yaml
    - name: Mint the PR app token

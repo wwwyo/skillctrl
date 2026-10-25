@@ -99,7 +99,7 @@
         "Recommends an App with only Contents read and Pull requests write, webhooks disabled, installation restricted to its owner and the selected repository.",
         "Stores the Client ID in a repository variable and the private key in a repository secret; deletes the local key after registration and never commits it.",
         "Mints the token immediately before trusted publication using SHA-pinned actions/create-github-app-token, client-id, private-key, explicit repositories: ${{ github.event.repository.name }} for strict mode, and permission-pull-requests: write.",
-        "Passes GH_TOKEN=\"$APP_TOKEN\" only to gh pr create; retains GITHUB_TOKEN with contents: write for branch pushes.",
+        "Uses a custom trusted publish job for the token split, because the built-in create-pull-request handler uses its PR credential for Git operations too. Passes GH_TOKEN=\"$APP_TOKEN\" only to gh pr create; retains GITHUB_TOKEN with contents: write for branch pushes.",
         "Verifies CI and review on the App-created draft PR and separately plans fresh checks for later GITHUB_TOKEN commits without granting this App Contents write."
       ]
     }
