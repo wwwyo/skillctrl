@@ -144,8 +144,9 @@ Keep credentials in the repository's secret management.
 Configure a fixed hash probe before agent execution so matching content never
 starts inference. Use [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/)
 for comments, accepted-lock publication to the PR branch, draft PR creation,
-and check results. Restrict PR-check writes to the accepted lock; use trusted
-repository checks for permitted paths and registered-original integrity. The
+and check results. For scheduled draft PRs, configure the PR creation token as
+described below, including in a custom safe-output publish job. Restrict PR-check
+writes to the accepted lock; use trusted repository checks for permitted paths and registered-original integrity. The
 required result must refer to the commit actually verified, rather than an
 unreviewed newer head.
 
@@ -169,8 +170,55 @@ Before relying on the workflows, exercise matching content, accepted drift,
 suspected violations, unknown decisions, and a scheduled update in Actions.
 Compilation alone does not establish that authentication or publication works.
 
-Plan how a bot-written commit gets checked: pushes made with `GITHUB_TOKEN`
-generally do not trigger another workflow run. Use an appropriate GitHub App
-token or an explicit supported dispatch route, and verify the resulting checks
-on the new commit. See [GitHub's trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
+### Use a dedicated App token to create scheduled draft PRs
+
+When **Allow GitHub Actions to create and approve pull requests** is disabled,
+`gh pr create` with `GITHUB_TOKEN` fails with
+`GitHub Actions is not permitted to create or approve pull requests (createPullRequest)`.
+Enabling that repository setting permits PR creation across workflows with
+sufficient token permissions; it cannot be limited to one workflow. It also does
+not ensure automatic CI and review: `GITHUB_TOKEN` events suppress follow-up runs
+or require manual approval for supported PR events.
+
+Prefer a dedicated GitHub App installation token for PR creation:
+
+1. Create an App with only **Contents: Read-only** and **Pull requests: Read and
+   write** repository permissions. Disable webhooks, allow installation only on
+   its owning account, and install it with **Only select repositories** for the
+   target repository.
+2. Store its Client ID in a repository variable (for example,
+   `SKILLCTRL_APP_CLIENT_ID`) and its generated `.pem` private key in a repository
+   secret (for example, `SKILLCTRL_APP_PRIVATE_KEY`). Delete the local key file
+   after registration; never commit it.
+3. Immediately before the trusted publish step, mint a token scoped to the
+   current repository. In the workflow's publish job, use:
+
+   ```yaml
+   - name: Mint the PR app token
+     id: app-token
+     uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+     with:
+       client-id: ${{ vars.SKILLCTRL_APP_CLIENT_ID }}
+       private-key: ${{ secrets.SKILLCTRL_APP_PRIVATE_KEY }}
+       repositories: ${{ github.event.repository.name }}
+       permission-pull-requests: write
+   - name: Publish the draft PR
+     env:
+       APP_TOKEN: ${{ steps.app-token.outputs.token }}
+     run: |
+       GH_TOKEN="$APP_TOKEN" gh pr create --draft --base "$DEFAULT_BRANCH" --head "$UPDATE_BRANCH" --title "chore(skills): update upstreams" --body-file "$REPORT_FILE"
+   ```
+
+   The publish job supplies `DEFAULT_BRANCH`, `UPDATE_BRANCH`, and `REPORT_FILE`
+   after verification and branch publication. Keep `repositories` explicit:
+   gh-aw strict mode rejects this action without that input. Pass `APP_TOKEN`
+   only to `gh pr create`; branch pushes can keep `GITHUB_TOKEN` with
+   `contents: write`, so the App needs no Contents write permission.
+
+Verify that opening the App-authored draft PR starts CI and review on its head.
+For later bot-written commits, `GITHUB_TOKEN` pushes generally do not start
+another workflow automatically. Use an appropriately permissioned App token or
+an explicit supported dispatch route when those commits need fresh checks;
+the PR-only App above cannot push. Verify checks on each new commit. See
+[GitHub's trigger rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 and [gh-aw CI triggering](https://github.github.com/gh-aw/reference/triggering-ci/).

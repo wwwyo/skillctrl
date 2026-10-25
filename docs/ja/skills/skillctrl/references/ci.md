@@ -134,6 +134,8 @@ upstream の新しい release だけを理由に、無関係な PR を失敗に�
 一致時に推論を起動しないよう、agent の実行前に固定の hash の事前判定を置く。
 コメント、PR ブランチへの lock の保存、draft PR の作成、チェック結果には
 [safe outputs](https://github.github.com/gh-aw/reference/safe-outputs/) を使う。
+定期更新の draft PR は、custom safe-output publish job を使う場合も含め、
+後述の PR 作成用 token を設定する。
 PR のチェックが書き込める範囲は受理済み lock に限り、変更可能なパスと登録済み原本の整合性は
 信頼できる repo のチェックで検証する。必須チェックは、未検証の新しい head ではなく、
 実際に確認した commit に対する結果として保存する。
@@ -156,8 +158,53 @@ agent job 内で、publish job が適用先にするのと同じ基準状態に�
 編集は Markdown に対して行い、YAML を再生成する。運用前に Actions 上で、一致・適合する不一致・
 違反の疑い・判断不能・定期更新を確認する。compile だけでは認証や公開の動作は確認できない。
 
-bot が書き戻した commit の検証方法も設定する。`GITHUB_TOKEN` による push では、
-通常は別の workflow が起動しない。適切な GitHub App token か、対応する明示的な dispatch を使い、
-新しい commit のチェックを確認する。
+### 定期更新の draft PR は専用 App の token で作る
+
+**Allow GitHub Actions to create and approve pull requests** が無効だと、
+`GITHUB_TOKEN` による `gh pr create` は
+`GitHub Actions is not permitted to create or approve pull requests (createPullRequest)`
+で失敗する。この repo 設定を有効にすると、十分な token 権限を持つ全 workflow で
+PR を作成できるようになり、一つの workflow には限定できない。また、有効にしても
+CI・レビューの自動起動は保証されない。`GITHUB_TOKEN` によるイベントは後続の実行を
+抑止するか、対応する PR イベントで手動承認を必要とする。
+
+PR の作成には、専用 GitHub App の installation token を推奨する。
+
+1. Repository permissions は **Contents: Read-only** と **Pull requests: Read and
+   write** だけにする。Webhook を無効にし、install できる account は App の owner
+   だけに限定する。**Only select repositories** で対象 repo だけに install する。
+2. Client ID を repo の variable（例: `SKILLCTRL_APP_CLIENT_ID`）、生成した `.pem`
+   秘密鍵を repo の secret（例: `SKILLCTRL_APP_PRIVATE_KEY`）に登録する。
+   登録後はローカルの秘密鍵ファイルを削除し、決して commit しない。
+3. 信頼できる publish step の直前で、現在の repo に限定した token を発行する。
+   workflow の publish job では次のように設定する。
+
+   ```yaml
+   - name: Mint the PR app token
+     id: app-token
+     uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+     with:
+       client-id: ${{ vars.SKILLCTRL_APP_CLIENT_ID }}
+       private-key: ${{ secrets.SKILLCTRL_APP_PRIVATE_KEY }}
+       repositories: ${{ github.event.repository.name }}
+       permission-pull-requests: write
+   - name: Publish the draft PR
+     env:
+       APP_TOKEN: ${{ steps.app-token.outputs.token }}
+     run: |
+       GH_TOKEN="$APP_TOKEN" gh pr create --draft --base "$DEFAULT_BRANCH" --head "$UPDATE_BRANCH" --title "chore(skills): update upstreams" --body-file "$REPORT_FILE"
+   ```
+
+   publish job は検証と branch の公開を済ませたうえで、`DEFAULT_BRANCH`・
+   `UPDATE_BRANCH`・`REPORT_FILE` を設定する。`repositories` は必ず明示する。
+   この入力がないと gh-aw の strict mode は compile を拒否する。
+   `APP_TOKEN` は `gh pr create` にだけ渡す。branch の push は `contents: write` の
+   `GITHUB_TOKEN` のままでよいため、App に Contents の write 権限は不要である。
+
+App が作成した draft PR の head に対して、CI・レビューが起動することを確認する。
+その後 bot が書き戻す commit では、`GITHUB_TOKEN` の push は通常、別の workflow を
+自動起動しない。新たなチェックが必要なら、適切な権限を持つ App token か、対応する
+明示的な dispatch を使う。上記の PR 作成専用 App では push できない。
+新しい commit ごとにチェックを確認する。
 [GitHub の起動規則](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow)
 と [gh-aw の CI 起動](https://github.github.com/gh-aw/reference/triggering-ci/)を参照する。
