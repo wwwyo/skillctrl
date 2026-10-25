@@ -15,7 +15,7 @@
     },
     {
       "id": 2,
-      "prompt": "I ran skillctrl update browser from /tmp/project. It succeeded and reported {\"repo\":\"/tmp/project\",\"skills\":[\"browser\"],\"updates\":[{\"name\":\"browser\",\"path\":\".agents/skills/browser\",\"layout\":\"single\",\"status\":\"conflicted\",\"base\":\"snapshot\",\"original\":\".agents/skillctrl/originals/browser\",\"conflicts\":[{\"path\":\"SKILL.md\",\"kind\":\"content\",\"lines\":[[12,20]]}]}]}. check reports local.lock_changed=true. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
+      "prompt": "I ran skillctrl update browser from /tmp/project. It succeeded and reported {\"repo\":\"/tmp/project\",\"skills\":[\"browser\"],\"updates\":[{\"name\":\"browser\",\"path\":\".agents/skills/browser\",\"layout\":\"single\",\"status\":\"conflicted\",\"base\":\"upstream-history\",\"conflicts\":[{\"path\":\"SKILL.md\",\"kind\":\"content\",\"lines\":[[12,20]]}]}]}. check reports local.lock_changed=true. What should I inspect and do next? This is a read-only planning exercise; do not execute commands or change files.",
       "expected_output": "Starts from the update report, the skill diff and the saved intent in the selected repository, resolves the reported conflict by direct verified editing, and uses record only after the content meets the intent.",
       "files": [],
       "expectations": [

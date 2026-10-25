@@ -1,5 +1,8 @@
 # Merge upstream changes into adapted skills with a stored base
 
+Status: superseded for base storage and resolution by [2026-10-23: Recover three-way bases from upstream tree history](2026-10-23-base-from-upstream-tree.md). The snapshot procedures below are historical, not current instructions.
+
+
 - Status: Accepted
 - Date: 2026-10-15
 

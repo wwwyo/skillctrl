@@ -18,15 +18,6 @@ import (
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
 )
 
-// Originals is the repository-relative directory holding the most recently
-// imported original of each single-input skill. It is the base of the next
-// update's three-way merge and is verified against the registered tree hash
-// before use, so a locally edited snapshot is never trusted as a base.
-const Originals = ".agents/skillctrl/originals"
-
-// PreparedOriginals is the staged copy of Originals beside import results.
-const PreparedOriginals = "originals"
-
 // PreparedUpdates is the staged reconciliation report beside import results.
 const PreparedUpdates = "updates.json"
 
@@ -38,7 +29,6 @@ type Update struct {
 	Status    string        `json:"status"`
 	Base      string        `json:"base,omitempty"`
 	Reason    string        `json:"reason,omitempty"`
-	Original  string        `json:"original,omitempty"`
 	Changes   []Change      `json:"changes,omitempty"`
 	Conflicts []Conflict    `json:"conflicts,omitempty"`
 	Inputs    []InputUpdate `json:"inputs,omitempty"`
@@ -209,7 +199,7 @@ func objectTree(repository, tree string) (map[string]file, error) {
 
 // treeHash computes the SHA-1 Git tree identifier of files, the identity
 // recorded as skillFolderHash. Computing it in-process avoids staging the
-// snapshot through an index that the caller's Git configuration could filter.
+// original through an index that the caller's Git configuration could filter.
 func treeHash(files map[string]file) string {
 	type node struct {
 		blobs map[string]file
@@ -261,65 +251,44 @@ func treeHash(files map[string]file) string {
 	return hex.EncodeToString(hashNode(root))
 }
 
-// matchesRegistration reports whether files are exactly the registered original.
-func matchesRegistration(files map[string]file, registration map[string]any) bool {
-	if len(files) == 0 {
-		return false
-	}
-	if recorded := field(registration, "skillFolderHash"); recorded != "" {
-		return treeHash(files) == recorded
-	}
-	recorded := field(registration, "computedHash")
-	if recorded == "" {
-		return false
-	}
-	entries := map[string]treeFile{}
-	contents := map[string][]byte{}
-	for name, entry := range files {
-		entries[name] = treeFile{oid: name}
-		contents[name] = entry.data
-	}
-	return contentHash(entries, contents) == recorded
-}
-
-// snapshot returns the stored original when it still matches the registration.
-func snapshot(directory string, registration map[string]any) (map[string]file, bool) {
-	files, err := readTree(directory)
-	if err != nil || !matchesRegistration(files, registration) {
-		return nil, false
-	}
-	return files, true
-}
-
 // previousOriginal finds the base of a three-way update. Every source is
 // verified against the registered identity; a missing base is reported with
 // the reasons each source failed instead of guessing.
-func previousOriginal(dir, snapshotDir string, request ExportRequest, adapter Adapter) (map[string]file, string, string) {
+func previousOriginal(dir string, request ExportRequest, adapter Adapter) (map[string]file, string, string, error) {
 	previous := request.Previous
-	if files, ok := snapshot(snapshotDir, previous); ok {
-		return files, "snapshot", ""
-	}
-	reasons := []string{"no verified snapshot in " + Originals}
-	if tree := field(previous, "skillFolderHash"); tree != "" {
+	var reasons []string
+	if tree := field(previous, "skillFolderHash"); commitPattern.MatchString(tree) {
 		if gitx.SafeRun(dir, "cat-file", "-e", tree+"^{tree}") == nil {
 			if files, err := objectTree(dir, tree); err == nil && treeHash(files) == tree {
-				return files, "repository", ""
+				return files, "repository", "", nil
 			}
 		}
 		reasons = append(reasons, "original tree is not in the repository's Git objects")
 	} else {
 		reasons = append(reasons, "registration has no original tree hash")
 	}
+	files, historyErr := historyOriginal(request)
+	if historyErr == nil {
+		return files, "upstream-history", "", nil
+	}
+	reasons = append(reasons, historyErr.Error())
 	if source, ok := adapter.(originalSource); ok {
 		files, err := source.Original(request)
-		if err == nil {
-			return files, "upstream", ""
+		if err == nil && treeHash(files) == field(previous, "skillFolderHash") {
+			return files, "upstream", "", nil
 		}
-		reasons = append(reasons, err.Error())
+		if err != nil {
+			reasons = append(reasons, err.Error())
+		} else {
+			reasons = append(reasons, "recorded source original does not match the registered tree hash")
+		}
 	} else {
 		reasons = append(reasons, "the acquisition adapter cannot fetch a recorded original")
 	}
-	return nil, "", strings.Join(reasons, "; ")
+	if !errors.Is(historyErr, errHistoryUnavailable) {
+		return nil, "", "", fmt.Errorf("cannot recover previous original: %s", strings.Join(reasons, "; "))
+	}
+	return nil, "", strings.Join(reasons, "; "), nil
 }
 
 // originalSource is implemented by adapters able to fetch a previously
@@ -392,7 +361,7 @@ func threeWay(scratch string, base, ours, theirs map[string]file) (map[string]fi
 				merged.data = t.data
 			case binary(o.data) || binary(t.data) || binary(b.data):
 				// A binary file cannot carry conflict markers. Keep the local
-				// bytes; the new original remains available in the snapshot.
+				// bytes; resolve these conflicts against the upstream source.
 				merged.data = o.data
 				change.Result = "conflict"
 				conflicts = append(conflicts, Conflict{Path: name, Kind: conflictBinary})
@@ -485,8 +454,8 @@ func conflictLines(data []byte) [][2]int {
 // reconcile merges a changed original into the prepared skill directory and
 // describes the result. Without a verified base, the new original replaces
 // the skill as before three-way updates existed, and the report says why.
-func reconcile(dir, directory, name, skillDir, snapshotDir, staged string, request ExportRequest, adapter Adapter) (Update, error) {
-	update := Update{Name: name, Path: ".agents/skills/" + name, Layout: "single", Original: Originals + "/" + name}
+func reconcile(dir, directory, name, skillDir, staged string, request ExportRequest, adapter Adapter) (Update, error) {
+	update := Update{Name: name, Path: ".agents/skills/" + name, Layout: "single"}
 	theirs, err := readTree(staged)
 	if err != nil {
 		return update, err
@@ -502,7 +471,10 @@ func reconcile(dir, directory, name, skillDir, snapshotDir, staged string, reque
 	if err != nil {
 		return update, err
 	}
-	base, source, reason := previousOriginal(dir, snapshotDir, request, adapter)
+	base, source, reason, err := previousOriginal(dir, request, adapter)
+	if err != nil {
+		return update, err
+	}
 	if base == nil {
 		update.Status, update.Reason = StatusReplaced, reason
 		return update, writeTree(skillDir, theirs)

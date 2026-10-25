@@ -104,12 +104,14 @@ jq -e '.updates | type == "array"' skillctrl-update.json
 | `status` | agent に渡すもの | agent の作業 |
 | --- | --- | --- |
 | `merged` | intent と `git diff -- <path>` | 適用された upstream の変更を intent と照合し、intent に反する箇所だけ編集する |
-| `conflicted` | intent・`conflicts`・`git diff -- <path>` | 報告された箇所を intent に沿って解消する。バイナリや削除の衝突は `original` の新しい原本と比べる |
-| `replaced` | intent と skill のディレクトリ全体 | 旧原本がなかったため、新しい原本を intent に沿って一度だけ調整する。次回以降は merge される |
+| `conflicted` | intent・`conflicts`・`git diff -- <path>` | 報告された箇所を intent に沿って解消する。バイナリや削除の衝突では、登録済み upstream の source と skill path で新しい原本を確認する |
+| `replaced` | intent と skill のディレクトリ全体 | `reason` で復元失敗を確認し、消えたローカル専用ファイルと置き換え後の内容を見直す。tree が到達可能なら次回以降は merge できる |
 | `refreshed` | 統合の intent・ルートの `SKILL.md`・変わった入力パスの `git diff` | 更新された原本に routing が合っているか確認する |
 
-`path` は skill のディレクトリ、`original` は保存した新しい原本である。merge 後の差分が
-分かりにくいときは、`original` の差分で upstream だけの変更を確認できる。差分以外は
+`path` は skill のディレクトリ、`changes` は upstream のファイル変更を示す。
+base は repo の Git object、upstream 履歴、記録済み Git source commit から探す。
+履歴からの復元は全 adapter に対応し、commit の記録は不要である。
+update はネットワークを必要とするが、PR の `check` はオフラインのままである。差分以外は
 必要なときだけ読む。変更箇所が参照する resource をたどり、skill 全体に関わる intent の要件は
 skill 内の検索で確認する。record の前に、
 `git grep -n -e '^<<<<<<< local' -- .agents/skills/chosen-skill` などで衝突マーカーが
@@ -117,8 +119,7 @@ skill 内の検索で確認する。record の前に、
 intent がない skill は記録しない。公開前に hash の判定と repo のチェックを実行し、
 調整が未解決なら問題を報告して受理しない。
 
-確認済みの変更があれば、skill の変更・`.agents/skillctrl/originals/` に保存した原本・
-登録・受理済み hash・根拠を含む draft PR を作る。
+確認済みの変更があれば、skill の変更・登録・受理済み hash・根拠を含む draft PR を作る。
 変更がなければ PR を作らず終了する。その PR は通常の変更チェックを通す。
 upstream の新しい release だけを理由に、無関係な PR を失敗にしない。
 
