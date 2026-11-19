@@ -35,7 +35,7 @@ Code explains how; tests specify observable behavior; commit messages explain wh
 
 ## Agent integrations
 
-Pullfrog's repository configuration is recorded in `.github/pullfrog.config.sh`. The workflow is managed by Pullfrog; keep it unchanged. Initial and subsequent commit reviews are enabled, with manual requests through `@pullfrog`. Repository instructions override the organization's Japanese output default with English and retain the P0–P3 severity labels.
+Pullfrog's repository configuration is recorded in `.github/pullfrog.config.sh`. The workflow is managed by Pullfrog; keep it unchanged. Initial reviews run automatically; re-reviews of subsequent commits are disabled. Request additional reviews with `@pullfrog` when needed. Repository instructions override the organization's Japanese output default with English and retain the P0–P3 severity labels.
 
 Dependabot checks Go modules and GitHub Actions weekly with a seven-day cooldown in `.github/dependabot.yml`. Pullfrog's managed action is excluded from those version updates.
 
