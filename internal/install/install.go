@@ -71,6 +71,12 @@ func Names(values []string) ([]string, error) {
 	return slices.Compact(ordered), nil
 }
 
+// Hidden reports whether a skills directory entry belongs to tooling rather
+// than to a skill. Plugin packagers such as Codex keep a manifest directory
+// like .codex-plugin next to the skills; skill names never start with a dot, so
+// these entries are left in place instead of being imported or rejected.
+func Hidden(name string) bool { return strings.HasPrefix(name, ".") }
+
 // CheckSkills rejects symlinks before the importer can write through them or
 // import escapes. A symlink inside a skill directory would let a later write
 // land anywhere on the caller's filesystem.
@@ -80,6 +86,9 @@ func CheckSkills(path string) error {
 		return err
 	}
 	for _, entry := range entries {
+		if Hidden(entry.Name()) {
+			continue
+		}
 		if _, err := Names([]string{entry.Name()}); err != nil {
 			return err
 		}
@@ -263,10 +272,16 @@ func Import(repo, target, upstreamLock string) error {
 	}
 	names := map[string]bool{}
 	for _, entry := range before {
+		if Hidden(entry.Name()) {
+			continue
+		}
 		names[entry.Name()] = true
 	}
 	afterSet := map[string]bool{}
 	for _, entry := range after {
+		if Hidden(entry.Name()) {
+			continue
+		}
 		afterSet[entry.Name()] = true
 		names[entry.Name()] = true
 	}

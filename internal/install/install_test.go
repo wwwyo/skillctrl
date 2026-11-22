@@ -132,6 +132,22 @@ func TestNamesRejectsEscapes(t *testing.T) {
 	}
 }
 
+// TestCheckSkillsIgnoresHiddenEntries covers plugin manifests such as
+// .codex-plugin that packagers keep beside the skills.
+func TestCheckSkillsIgnoresHiddenEntries(t *testing.T) {
+	dir := newRepo(t)
+	manifest := filepath.Join(dir, ".agents/skills/.codex-plugin")
+	if err := os.MkdirAll(manifest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(manifest, "plugin.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := install.CheckSkills(filepath.Join(dir, ".agents/skills")); err != nil {
+		t.Fatalf("a hidden manifest directory was refused: %v", err)
+	}
+}
+
 // TestCheckSkillsRefusesSymlinks covers the isolation requirement: a symlink
 // inside a skill directory would let a later write land anywhere on disk.
 func TestCheckSkillsRefusesSymlinks(t *testing.T) {
