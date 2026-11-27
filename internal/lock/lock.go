@@ -213,6 +213,8 @@ func Select(current, recorded Entry, intents map[string]bool, registered map[str
 // WorkingTree hashes selected working files through a private index so that the
 // caller's staging area and commits are never touched. Reading uncommitted state
 // is required for `check` and `record` in a main checkout with pending edits.
+// Files the repository's ignore rules exclude, such as dependencies a skill's
+// scripts install into its own directory, never enter the hash.
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
 		paths = []string{Skills}

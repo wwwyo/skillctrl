@@ -419,3 +419,38 @@ func mustStateJSON(t *testing.T, hashes map[string]string) string {
 	}
 	return string(data)
 }
+
+// TestWorkingTreeExcludesIgnoredFiles keeps tool output that a skill writes into
+// its own directory, such as node_modules from a bundled script, out of the
+// accepted hash. Import already refuses destination-ignored content, so the
+// hash covers exactly what the repository would track.
+func TestWorkingTreeExcludesIgnoredFiles(t *testing.T) {
+	f := newFixture(t)
+	f.write(".gitignore", "node_modules/\n")
+	f.write(".agents/skills/a/SKILL.md", "original")
+	f.write(".agents/skills/a/scripts/package.json", "{}")
+	f.write(upstream.Lock, `{"version":3,"skills":{"a":{"source":"fixture/source","sourceType":"github"}}}`)
+	f.commit()
+
+	hash := func() string {
+		t.Helper()
+		tree, err := lock.WorkingTree(f.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		current, err := lock.Snapshot(f.dir, tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return current.Skills["a"]
+	}
+	before := hash()
+	f.write(".agents/skills/a/scripts/node_modules/dep/index.js", "module.exports = 1")
+	if after := hash(); after != before {
+		t.Fatalf("ignored files changed the skill hash: %s -> %s", before, after)
+	}
+	f.write(".agents/skills/a/scripts/extra.ts", "tracked")
+	if after := hash(); after == before {
+		t.Fatal("an untracked, unignored file must change the skill hash")
+	}
+}
