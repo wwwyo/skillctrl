@@ -10,6 +10,7 @@ import (
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/install"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/layout"
 	"github.com/wwwyo/skillctrl/internal/lock"
 	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
@@ -97,6 +98,7 @@ func newAddCommand() *cobra.Command {
 	}
 	command.Flags().String("name", "", "local directory name; requires exactly one selected skill")
 	command.Flags().StringSlice("skill", nil, "skill to import from the positional source; repeatable")
+	addRootFlag(command)
 	return command
 }
 
@@ -133,6 +135,7 @@ func newMergeCommand() *cobra.Command {
 	}
 	command.Flags().String("name", "", "local routing skill name")
 	_ = command.MarkFlagRequired("name")
+	addRootFlag(command)
 	return command
 }
 
@@ -148,15 +151,33 @@ func newRemoveCommand() *cobra.Command {
 	}
 }
 
+// addRootFlag selects the skill root for skills that do not exist yet.
+func addRootFlag(command *cobra.Command) {
+	command.Flags().String("root", "", "skill root for new skills, as named in "+layout.Config+"; existing skills stay where they are")
+}
+
 // runInstall performs the shared add, merge, update, remove, and record flow.
 func runInstall(command *cobra.Command, kind, source string, requested []string, inputs ...upstream.Input) error {
 	repo, err := repository()
 	if err != nil {
 		return fail("", err)
 	}
-	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
-		if (kind != "add" && kind != "merge") || !os.IsNotExist(err) {
-			return fail(repo, fmt.Errorf("the current repository must contain %s", install.SkillsDir))
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return fail(repo, err)
+	}
+	rootName := ""
+	if kind == "add" || kind == "merge" {
+		rootName, _ = command.Flags().GetString("root")
+		if rootName != "" {
+			if _, err := configured.Root(rootName); err != nil {
+				return fail(repo, err)
+			}
+		}
+	}
+	if !anyRoot(repo, configured) {
+		if kind != "add" && kind != "merge" {
+			return fail(repo, fmt.Errorf("the current repository must contain %s", strings.Join(rootPaths(configured), " or ")))
 		}
 		// repository falls back to the working directory for local inspection.
 		// First imports must not create skill directories outside Git.
@@ -197,6 +218,9 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		if outputName != "" {
 			result["name"] = outputName
 		}
+		if rootName != "" {
+			result["root"] = rootName
+		}
 		return emit(result)
 	}
 	if kind == "record" {
@@ -214,7 +238,7 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if err := install.PrepareSkills(repo); err != nil {
 		return fail(repo, err)
 	}
-	if err := install.CheckSkills(filepath.Join(repo, filepath.FromSlash(install.SkillsDir))); err != nil {
+	if err := install.CheckRoots(repo); err != nil {
 		return fail(repo, err)
 	}
 	var target, upstreamLock string
@@ -236,7 +260,7 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 	if err := install.CheckSkills(target); err != nil {
 		return fail(repo, err)
 	}
-	if err := install.Import(repo, target, upstreamLock); err != nil {
+	if err := install.ImportInto(repo, target, upstreamLock, rootName); err != nil {
 		return fail(repo, err)
 	}
 	if kind == "remove" {
@@ -253,6 +277,25 @@ func runInstall(command *cobra.Command, kind, source string, requested []string,
 		result["updates"] = updates
 	}
 	return emit(result)
+}
+
+// anyRoot reports whether the checkout contains at least one skill root. A
+// configured root without skills yet may be absent; first imports create it.
+func anyRoot(repo string, configured layout.Layout) bool {
+	for _, root := range configured.Roots {
+		if info, err := os.Stat(filepath.Join(repo, filepath.FromSlash(root.Path))); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func rootPaths(configured layout.Layout) []string {
+	paths := make([]string, 0, len(configured.Roots))
+	for _, root := range configured.Roots {
+		paths = append(paths, root.Path)
+	}
+	return paths
 }
 
 // runRecord accepts deliberate manual edits in place. It must not create a

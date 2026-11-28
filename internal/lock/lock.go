@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
+	"github.com/wwwyo/skillctrl/internal/layout"
 	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
@@ -24,7 +25,8 @@ import (
 // Repository-relative locations. These are part of the on-disk contract and are
 // shared with the installer, so they are constants rather than flags.
 const (
-	Skills  = ".agents/skills/"
+	// Skills is the default skill root; layout.Config may declare others.
+	Skills  = layout.DefaultRoot + "/"
 	Intents = ".agents/skillctrl/intents/"
 	Lock    = skillstate.Lock
 	Version = 2
@@ -83,22 +85,37 @@ func entries(dir, ref, path string, recursive bool) (map[string]entry, error) {
 	return result, nil
 }
 
-// Snapshot hashes complete skill directories using Git tree objects.
+// Snapshot hashes complete skill directories using Git tree objects. Every
+// skill root of the working copy's layout contributes; skill names are unique
+// across roots, so the result stays keyed by bare name.
 func Snapshot(dir, ref string) (Entry, error) {
-	files, err := entries(dir, ref, Skills, true)
-	if err != nil {
-		return Entry{}, err
-	}
-	skills, err := entries(dir, ref, Skills, false)
+	configured, err := layout.Load(dir)
 	if err != nil {
 		return Entry{}, err
 	}
 	result := Empty()
-	for path, item := range skills {
-		if item.kind == "tree" {
-			if _, ok := files[path+"/SKILL.md"]; ok {
-				result.Skills[strings.TrimPrefix(path, Skills)] = item.oid
+	for _, root := range configured.Roots {
+		prefix := root.Path + "/"
+		files, err := entries(dir, ref, prefix, true)
+		if err != nil {
+			return Entry{}, err
+		}
+		skills, err := entries(dir, ref, prefix, false)
+		if err != nil {
+			return Entry{}, err
+		}
+		for path, item := range skills {
+			if item.kind != "tree" {
+				continue
 			}
+			if _, ok := files[path+"/SKILL.md"]; !ok {
+				continue
+			}
+			name := strings.TrimPrefix(path, prefix)
+			if _, duplicate := result.Skills[name]; duplicate {
+				return Entry{}, fmt.Errorf("skill %s exists in more than one skill root", name)
+			}
+			result.Skills[name] = item.oid
 		}
 	}
 	return result, nil
@@ -217,8 +234,21 @@ func Select(current, recorded Entry, intents map[string]bool, registered map[str
 // scripts install into its own directory, never enter the hash.
 func WorkingTree(dir string, paths ...string) (string, error) {
 	if len(paths) == 0 {
-		paths = []string{Skills}
-		for _, relative := range []string{upstream.Lock, upstream.LegacyLock, skillstate.Lock, skillstate.LegacyUpstreams, skillstate.LegacyAccepted} {
+		configured, err := layout.Load(dir)
+		if err != nil {
+			return "", err
+		}
+		candidates := []string{}
+		if configured.Configured() {
+			// Configured roots may not exist yet; stage only those present.
+			for _, root := range configured.Roots {
+				candidates = append(candidates, root.Path)
+			}
+		} else {
+			paths = append(paths, Skills)
+		}
+		candidates = append(candidates, upstream.Lock, upstream.LegacyLock, skillstate.Lock, skillstate.LegacyUpstreams, skillstate.LegacyAccepted, layout.Config)
+		for _, relative := range candidates {
 			registered, err := entries(dir, "HEAD", relative, false)
 			if err != nil {
 				return "", err

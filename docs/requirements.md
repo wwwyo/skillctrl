@@ -67,6 +67,14 @@ Do not modify or replace dotfiles' deployed implementation in this task. The sou
 
 Report public repo/release/tap links, tested install commands and their observed versions, validation evidence, any real blocker or unverified live integration, and the wiki project record. Setup or prompt dispatch alone is not the implementation result.
 
+## Skill roots
+
+User request (2026-11-28): a repository distributing skills as several plugins must be able to keep each plugin's skills in its own directory instead of mixing them in `.agents/skills`.
+
+- Read optional `.agents/skillctrl/config.json` (`{"version":1,"skillRoots":{"<name>":"<path>"}}`). Without it the only root is `.agents/skills` and behavior is unchanged. Reject unknown versions, empty maps, malformed names, absolute, unclean, escaping, `.git`, and overlapping paths.
+- Keep skill names unique across roots; refuse a name present in two roots in every command that reads skills. Registrations, intents, accepted hashes, and Claude links stay keyed by bare name, so existing locks remain valid and moving a skill between roots keeps its hash.
+- add and merge take `--root NAME` for skills that do not exist yet; it is required when several roots exist and a new skill is imported, and rejected without configuration. Existing skills are updated, removed, recorded, and checked in their current root. Claude links point to the skill's actual root. Destination ignore rules are checked against the current root, or every root for a new skill.
+
 ## Named imports
 
 - Add and merge share positional owner/repo:skill inputs; --from is rejected. Merge requires --name for its output and does not accept a positional output name. Add imports separate skills from one or more repositories, preparing every input before importing any result; merge combines them. Reject duplicate inputs and case-insensitive skill-name collisions before acquisition, including dry runs. Preserve add source --skill names for acquisition CLI parity; reject mixing --skill with qualified owner/repo:skill inputs or multiple repository sources.

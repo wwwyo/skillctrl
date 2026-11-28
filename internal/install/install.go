@@ -14,15 +14,17 @@ import (
 	"strings"
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
+	"github.com/wwwyo/skillctrl/internal/layout"
 	"github.com/wwwyo/skillctrl/internal/lock"
 	"github.com/wwwyo/skillctrl/internal/skillstate"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
-// Paths define the repository-local installation layout.
+// Paths define the repository-local installation layout. SkillsDir is the
+// default skill root; repositories may declare others in layout.Config.
 const (
-	SkillsDir    = ".agents/skills"
-	ClaudeDir    = ".claude/skills"
+	SkillsDir    = layout.DefaultRoot
+	ClaudeDir    = layout.ClaudeLinks
 	UpstreamLock = upstream.Lock
 )
 
@@ -39,7 +41,11 @@ func ValidateSkillsDirectories(repo string) error {
 }
 
 func prepareSkills(repo string, create bool) error {
-	for _, relative := range []string{".agents", SkillsDir} {
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return err
+	}
+	for _, relative := range ancestors(configured) {
 		path := filepath.Join(repo, filepath.FromSlash(relative))
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
@@ -52,6 +58,46 @@ func prepareSkills(repo string, create bool) error {
 			return err
 		} else if !info.IsDir() {
 			return fmt.Errorf("skills require a real directory: %s", relative)
+		}
+	}
+	return nil
+}
+
+// ancestors lists every directory from the repository root down to each skill
+// root, so a symlinked parent is refused as well as a symlinked root.
+func ancestors(configured layout.Layout) []string {
+	seen := map[string]bool{}
+	result := []string{}
+	for _, root := range configured.Roots {
+		parts := strings.Split(root.Path, "/")
+		for index := range parts {
+			relative := strings.Join(parts[:index+1], "/")
+			if !seen[relative] {
+				seen[relative] = true
+				result = append(result, relative)
+			}
+		}
+	}
+	return result
+}
+
+// CheckRoots applies CheckSkills to every existing skill root and refuses a
+// skill name that appears in two roots.
+func CheckRoots(repo string) error {
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return err
+	}
+	if _, err := configured.Locations(repo); err != nil {
+		return err
+	}
+	for _, root := range configured.Roots {
+		path := filepath.Join(repo, filepath.FromSlash(root.Path))
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+		if err := CheckSkills(path); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -75,7 +121,7 @@ func Names(values []string) ([]string, error) {
 // than to a skill. Plugin packagers such as Codex keep a manifest directory
 // like .codex-plugin next to the skills; skill names never start with a dot, so
 // these entries are left in place instead of being imported or rejected.
-func Hidden(name string) bool { return strings.HasPrefix(name, ".") }
+func Hidden(name string) bool { return layout.Hidden(name) }
 
 // CheckSkills rejects symlinks before the importer can write through them or
 // import escapes. A symlink inside a skill directory would let a later write
@@ -127,9 +173,21 @@ var conflictMarkers = [][]byte{[]byte("<<<<<<<"), []byte("|||||||"), []byte("===
 // would make the markers part of the accepted hash and distribute a broken
 // skill, so record refuses it rather than trusting the caller to check first.
 func UnresolvedConflicts(repo string, names []string) ([]string, error) {
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return nil, err
+	}
+	locations, err := configured.Locations(repo)
+	if err != nil {
+		return nil, err
+	}
 	var found []string
 	for _, name := range names {
-		root := filepath.Join(repo, filepath.FromSlash(SkillsDir), name)
+		located, ok := locations[name]
+		if !ok {
+			continue
+		}
+		root := filepath.Join(repo, filepath.FromSlash(located.Path), name)
 		err := filepath.WalkDir(root, func(current string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -230,6 +288,13 @@ func sameFingerprint(a, b map[string][2]any) bool {
 // reconciles the relative Claude links. Any real directory occupying a Claude
 // link path is refused rather than replaced.
 func Import(repo, target, upstreamLock string) error {
+	return ImportInto(repo, target, upstreamLock, "")
+}
+
+// ImportInto is Import with the named skill root for skills that do not exist
+// yet. Existing skills stay in their current root. An empty root name selects
+// the only root and fails when a new skill would need a choice among several.
+func ImportInto(repo, target, upstreamLock, rootName string) error {
 	prepared := filepath.Join(filepath.Dir(upstreamLock), upstream.PreparedNative)
 	if _, err := os.Stat(prepared); err == nil {
 		upstreamLock = prepared
@@ -261,8 +326,11 @@ func Import(repo, target, upstreamLock string) error {
 		}
 		private.AcceptedHashes = latest.AcceptedHashes
 	}
-	existing := filepath.Join(repo, filepath.FromSlash(SkillsDir))
-	before, err := os.ReadDir(existing)
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return err
+	}
+	locations, err := configured.Locations(repo)
 	if err != nil {
 		return err
 	}
@@ -271,11 +339,8 @@ func Import(repo, target, upstreamLock string) error {
 		return err
 	}
 	names := map[string]bool{}
-	for _, entry := range before {
-		if Hidden(entry.Name()) {
-			continue
-		}
-		names[entry.Name()] = true
+	for name := range locations {
+		names[name] = true
 	}
 	afterSet := map[string]bool{}
 	for _, entry := range after {
@@ -285,7 +350,24 @@ func Import(repo, target, upstreamLock string) error {
 		afterSet[entry.Name()] = true
 		names[entry.Name()] = true
 	}
-	replacements, err := protectPendingSkills(repo, target, names)
+	var fallback layout.Root
+	for name := range afterSet {
+		if _, ok := locations[name]; ok {
+			continue
+		}
+		if fallback, err = configured.Root(rootName); err != nil {
+			return err
+		}
+		break
+	}
+	if rootName != "" && fallback.Path == "" {
+		// Validate an explicit choice even when every skill already exists.
+		if fallback, err = configured.Root(rootName); err != nil {
+			return err
+		}
+	}
+	dirOf := func(name string) string { return configured.Dir(locations, name, fallback) }
+	replacements, err := protectPendingSkills(repo, target, names, dirOf)
 	if err != nil {
 		return err
 	}
@@ -333,7 +415,7 @@ func Import(repo, target, upstreamLock string) error {
 		}
 	}
 	for _, name := range ordered {
-		destination := filepath.Join(existing, name)
+		destination := filepath.Join(repo, filepath.FromSlash(dirOf(name)))
 		source := filepath.Join(target, name)
 		if replacements[name] {
 			if _, err := os.Stat(destination); err == nil {
@@ -348,7 +430,7 @@ func Import(repo, target, upstreamLock string) error {
 			}
 		}
 		link := filepath.Join(claude, name)
-		expected := filepath.Join("..", "..", filepath.FromSlash(SkillsDir), name)
+		expected := filepath.Join("..", "..", filepath.FromSlash(dirOf(name)))
 		if afterSet[name] {
 			if target, err := os.Readlink(link); err == nil && target == expected {
 				continue
@@ -404,10 +486,10 @@ func Import(repo, target, upstreamLock string) error {
 
 // protectPendingSkills allows unrelated edits and unchanged originals, but a
 // directory replacement must not silently discard an uncommitted customization.
-func protectPendingSkills(repo, target string, names map[string]bool) (map[string]bool, error) {
+func protectPendingSkills(repo, target string, names map[string]bool, dirOf func(string) string) (map[string]bool, error) {
 	replacements := map[string]bool{}
 	for _, name := range slices.Sorted(maps.Keys(names)) {
-		current, err := fingerprint(filepath.Join(repo, filepath.FromSlash(SkillsDir), name))
+		current, err := fingerprint(filepath.Join(repo, filepath.FromSlash(dirOf(name))))
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +503,7 @@ func protectPendingSkills(repo, target string, names map[string]bool) (map[strin
 		// A Git tree alone misses staged-only changes and ignored local files.
 		// Disable optional index writes so the status check preserves caller staging.
 		status, err := gitx.OutputEnv(repo, gitx.Environment("GIT_OPTIONAL_LOCKS=0"),
-			"status", "--porcelain", "-z", "--ignored", "--untracked-files=all", "--", SkillsDir+"/"+name+"/")
+			"status", "--porcelain", "-z", "--ignored", "--untracked-files=all", "--", dirOf(name)+"/")
 		if err != nil {
 			return nil, err
 		}

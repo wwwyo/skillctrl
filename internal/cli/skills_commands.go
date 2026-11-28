@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/wwwyo/skillctrl/internal/install"
+	"github.com/wwwyo/skillctrl/internal/layout"
 	"github.com/wwwyo/skillctrl/internal/upstream"
 )
 
@@ -26,21 +28,31 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return fail(repo, err)
 			}
-			directory := filepath.Join(repo, install.SkillsDir)
-			entries, err := os.ReadDir(directory)
-			if err != nil && !os.IsNotExist(err) {
+			configured, err := layout.Load(repo)
+			if err != nil {
+				return fail(repo, err)
+			}
+			locations, err := configured.Locations(repo)
+			if err != nil {
 				return fail(repo, err)
 			}
 			names := []string{}
-			for _, entry := range entries {
-				if !entry.IsDir() || !upstream.Name(entry.Name()) {
+			roots := map[string]string{}
+			for _, name := range slices.Sorted(maps.Keys(locations)) {
+				if !upstream.Name(name) {
 					continue
 				}
-				if info, err := os.Lstat(filepath.Join(directory, entry.Name(), "SKILL.md")); err == nil && info.Mode().IsRegular() {
-					names = append(names, entry.Name())
+				directory := filepath.Join(repo, filepath.FromSlash(locations[name].Path))
+				if info, err := os.Lstat(filepath.Join(directory, name, "SKILL.md")); err == nil && info.Mode().IsRegular() {
+					names = append(names, name)
+					roots[name] = locations[name].Name
 				}
 			}
-			return emit(map[string]any{"repo": repo, "skills": names})
+			result := map[string]any{"repo": repo, "skills": names}
+			if configured.Configured() {
+				result["roots"] = roots
+			}
+			return emit(result)
 		},
 	}
 }

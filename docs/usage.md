@@ -291,6 +291,42 @@ when importing several separate skills. The acquisition-compatible
 combine its `--skill` with qualified owner/repo:skill inputs. Positional inputs must have distinct skill names, including across repositories.
 
 
+## Keep skills in several roots
+
+A repository that publishes skills as several packages, such as one plugin per
+directory, can declare named skill roots in `.agents/skillctrl/config.json`.
+Without this file every skill lives in `.agents/skills`.
+
+```json
+{
+  "version": 1,
+  "skillRoots": {
+    "core": "plugins/core/skills",
+    "local": "plugins/local/skills"
+  }
+}
+```
+
+Paths are repository-relative and must not overlap. Skill names stay unique
+across all roots, so registrations, intents, and accepted hashes keep using the
+bare name and existing locks stay valid. A name present in two roots is an
+error.
+
+```sh
+# a new skill needs a root when several exist
+skillctrl add --root local owner/repo:skill
+skillctrl merge --root core --name combined owner/first:a owner/second:b
+
+# update, remove, record, and check find the skill in whichever root holds it
+skillctrl update skill
+skillctrl list   # adds a "roots" map from skill name to root name
+```
+
+Existing skills stay where they are; `--root` applies only to skills that do
+not exist yet. To move a skill between roots, move its directory with Git and
+point its `.claude/skills/<name>` link, if any, at the new directory; its
+accepted hash does not change because the tree is the same.
+
 ## What it will and will not do
 
 - **Originals are prepared in isolation.** The selected adapter runs outside

@@ -455,7 +455,7 @@ func conflictLines(data []byte) [][2]int {
 // describes the result. Without a verified base, the new original replaces
 // the skill as before three-way updates existed, and the report says why.
 func reconcile(dir, directory, name, skillDir, staged string, request ExportRequest, adapter Adapter) (Update, error) {
-	update := Update{Name: name, Path: ".agents/skills/" + name, Layout: "single"}
+	update := Update{Name: name, Path: skillPath(dir, name), Layout: "single"}
 	theirs, err := readTree(staged)
 	if err != nil {
 		return update, err
