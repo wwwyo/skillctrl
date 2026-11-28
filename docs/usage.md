@@ -323,7 +323,8 @@ skillctrl list   # adds a "roots" map from skill name to root name
 ```
 
 Existing skills stay where they are; `--root` applies only to skills that do
-not exist yet. To move a skill between roots, move its directory with Git; its
+not exist yet. To move a skill between roots, move its directory with Git and
+point its `.claude/skills/<name>` link, if any, at the new directory; its
 accepted hash does not change because the tree is the same.
 
 ## What it will and will not do

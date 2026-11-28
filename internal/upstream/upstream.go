@@ -542,7 +542,10 @@ func destinationDirs(repo, name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if root, ok := locations[name]; ok {
+	// Merged inputs arrive as nested names such as bundle/references/input; the
+	// owning skill's root decides where they land.
+	owner, _, _ := strings.Cut(name, "/")
+	if root, ok := locations[owner]; ok {
 		return []string{root.Path + "/" + name}, nil
 	}
 	dirs := make([]string, 0, len(configured.Roots))

@@ -23,6 +23,8 @@ import (
 const (
 	Config      = ".agents/skillctrl/config.json"
 	DefaultRoot = ".agents/skills"
+	// ClaudeLinks holds the relative links that expose skills to Claude Code.
+	ClaudeLinks = ".claude/skills"
 	Version     = 1
 )
 
@@ -77,6 +79,11 @@ func Parse(data []byte) (Layout, error) {
 		if raw == "" || path.IsAbs(raw) || strings.Contains(raw, `\`) || cleaned != raw || cleaned == "." ||
 			cleaned == ".." || strings.HasPrefix(cleaned, "../") || cleaned == ".git" || strings.HasPrefix(cleaned, ".git/") {
 			return Layout{}, fmt.Errorf("skill root %s must be a clean repository-relative path: %q", name, raw)
+		}
+		// ImportInto replaces .claude/skills/<name> with a link, so a root there
+		// would have its new skills overwritten by their own links.
+		if cleaned == ClaudeLinks || strings.HasPrefix(cleaned, ClaudeLinks+"/") || strings.HasPrefix(ClaudeLinks, cleaned+"/") {
+			return Layout{}, fmt.Errorf("skill root %s must not overlap %s, where Claude links are kept: %q", name, ClaudeLinks, raw)
 		}
 		roots = append(roots, Root{Name: name, Path: cleaned})
 	}

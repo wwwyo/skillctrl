@@ -278,7 +278,7 @@ skillctrl update skill
 skillctrl list   # skill 名から root 名への "roots" も返す
 ```
 
-既存の skill は今の場所に残り、`--root` はまだ無い skill にだけ効きます。skill を別の root へ移すときは、Git で dir を動かします。tree が同じなので受理 hash は変わりません。
+既存の skill は今の場所に残り、`--root` はまだ無い skill にだけ効きます。skill を別の root へ移すときは、Git で dir を動かし、`.claude/skills/<name>` の link があれば新しい dir へ張り直します。tree が同じなので受理 hash は変わりません。
 
 ## 安全の根拠
 

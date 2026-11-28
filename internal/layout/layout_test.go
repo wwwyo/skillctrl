@@ -52,6 +52,9 @@ func TestParseRejectsUnsafeRoots(t *testing.T) {
 		`{"version":1,"skillRoots":{"../x":"a"}}`,
 		`{"version":1,"skillRoots":{"core":"plugins","local":"plugins/local"}}`,
 		`{"version":1,"skillRoots":{"core":"same","local":"same"}}`,
+		`{"version":1,"skillRoots":{"claude":".claude/skills"}}`,
+		`{"version":1,"skillRoots":{"claude":".claude"}}`,
+		`{"version":1,"skillRoots":{"claude":".claude/skills/x"}}`,
 	} {
 		if _, err := layout.Parse([]byte(document)); err == nil {
 			t.Errorf("accepted %s", document)

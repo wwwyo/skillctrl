@@ -24,7 +24,7 @@ import (
 // default skill root; repositories may declare others in layout.Config.
 const (
 	SkillsDir    = layout.DefaultRoot
-	ClaudeDir    = ".claude/skills"
+	ClaudeDir    = layout.ClaudeLinks
 	UpstreamLock = upstream.Lock
 )
 
