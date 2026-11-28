@@ -252,6 +252,34 @@ skillctrl record combined
 複数の入力は異なる skill 名を指定します。
 
 
+## skill を複数の root に分けて置く
+
+skill を複数の package（plugin ごとの dir など）として配る repo では、`.agents/skillctrl/config.json` に名前付きの skill root を書けます。このファイルが無ければ、skill はすべて `.agents/skills` に置かれます。
+
+```json
+{
+  "version": 1,
+  "skillRoots": {
+    "core": "plugins/core/skills",
+    "local": "plugins/local/skills"
+  }
+}
+```
+
+path は repo からの相対で、互いに重なってはいけません。skill 名は全 root を通して一意にします。登録・intent・受理 hash は今までどおり名前だけで引くので、既存の lock はそのまま使えます。同じ名前が 2 つの root にあるとエラーになります。
+
+```sh
+# root が複数あるとき、新しい skill には root の指定が要る
+skillctrl add --root local owner/repo:skill
+skillctrl merge --root core --name combined owner/first:a owner/second:b
+
+# update・remove・record・check は、skill がある root を自分で見つける
+skillctrl update skill
+skillctrl list   # skill 名から root 名への "roots" も返す
+```
+
+既存の skill は今の場所に残り、`--root` はまだ無い skill にだけ効きます。skill を別の root へ移すときは、Git で dir を動かします。tree が同じなので受理 hash は変わりません。
+
 ## 安全の根拠
 
 意図の再適応は、外部からの入力に対してモデルがコードを書き換える処理です。

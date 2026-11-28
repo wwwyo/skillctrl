@@ -27,6 +27,7 @@ import (
 
 	"github.com/wwwyo/skillctrl/internal/gitx"
 	"github.com/wwwyo/skillctrl/internal/jsonfmt"
+	"github.com/wwwyo/skillctrl/internal/layout"
 	"github.com/wwwyo/skillctrl/internal/skillstate"
 )
 
@@ -518,7 +519,68 @@ func rejectIgnored(destination, name string, files map[string]treeFile) error {
 	for path := range files {
 		paths = append(paths, path)
 	}
-	return rejectIgnoredPaths(destination, ".agents/skills/"+name, name, paths)
+	prefixes, err := destinationDirs(destination, name)
+	if err != nil {
+		return err
+	}
+	for _, prefix := range prefixes {
+		if err := rejectIgnoredPaths(destination, prefix, name, paths); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// destinationDirs lists where a skill may land: its current directory, or every
+// configured root when it is new, because the root is chosen only at import.
+func destinationDirs(repo, name string) ([]string, error) {
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return nil, err
+	}
+	locations, err := configured.Locations(repo)
+	if err != nil {
+		return nil, err
+	}
+	if root, ok := locations[name]; ok {
+		return []string{root.Path + "/" + name}, nil
+	}
+	dirs := make([]string, 0, len(configured.Roots))
+	for _, root := range configured.Roots {
+		dirs = append(dirs, root.Path+"/"+name)
+	}
+	return dirs, nil
+}
+
+// skillPath names the repository directory of an existing skill for reports.
+func skillPath(repo, name string) string {
+	if dirs, err := destinationDirs(repo, name); err == nil && len(dirs) == 1 {
+		return dirs[0]
+	}
+	return layout.DefaultRoot + "/" + name
+}
+
+// stageSkills flattens every skill root into one staging directory keyed by
+// skill name, so preparation works the same with one root or several.
+func stageSkills(repo, target string) error {
+	configured, err := layout.Load(repo)
+	if err != nil {
+		return err
+	}
+	locations, err := configured.Locations(repo)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(locations)) {
+		source := filepath.Join(repo, filepath.FromSlash(locations[name].Path), name)
+		if err := copyTree(source, filepath.Join(target, name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func rejectIgnoredPaths(destination, prefix, name string, paths []string) error {
@@ -565,7 +627,7 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 		return "", "", err
 	}
 	target = filepath.Join(directory, "skills")
-	if err := copyTree(filepath.Join(dir, filepath.FromSlash(".agents/skills")), target); err != nil {
+	if err := stageSkills(dir, target); err != nil {
 		return "", "", err
 	}
 	updates := []Update{}
@@ -594,7 +656,7 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 				return "", "", mergeErr
 			}
 			if command == "update" {
-				if update, changed := refreshed(name, previous, exported); changed {
+				if update, changed := refreshed(dir, name, previous, exported); changed {
 					updates = append(updates, update)
 				}
 			}
@@ -686,8 +748,8 @@ func install(dir, directory string, request importRequest, adapter Adapter) (tar
 }
 
 // refreshed reports the inputs of a merged skill whose originals changed.
-func refreshed(name string, previous, exported map[string]any) (Update, bool) {
-	update := Update{Name: name, Path: ".agents/skills/" + name, Layout: "merged", Status: StatusRefreshed}
+func refreshed(dir, name string, previous, exported map[string]any) (Update, bool) {
+	update := Update{Name: name, Path: skillPath(dir, name), Layout: "merged", Status: StatusRefreshed}
 	prior, _ := sources(previous, name)
 	paths, err := SourcePaths(exported, name)
 	if err != nil {
